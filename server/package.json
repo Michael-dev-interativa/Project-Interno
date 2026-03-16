@@ -1,0 +1,25 @@
+{
+  "name": "project-oficial-server",
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "migrate": "node db/init.js",
+    "import:comerciais": "node scripts/import_comerciais_csv.js",
+    "import:documentos": "node scripts/import_documentos_csv.js",
+    "import:empreendimentos": "node scripts/import_empreendimentos_csv.js",
+    "import:atividades": "node scripts/import_atividades_csv.js",
+    "import:atas": "node scripts/import_atas_csv.js",
+    "import:execucoes": "node scripts/import_execucoes_csv.js",
+    "link:documentos-empreendimentos": "node scripts/link_documentos_empreendimentos.js"
+  },
+  "dependencies": {
+    "csv-parse": "^5.5.6",
+    "express": "^4.18.2",
+    "pg": "^8.11.0",
+    "dotenv": "^16.0.3"
+  }
+}

@@ -1,0 +1,2 @@
+﻿numero;data_solicitacao;cliente;empreendimento;tipo_empreendimento;parceiros;disciplinas;codisciplinas;pavimentos;area;valor_bim;valor_cad;status;email
+CSV-IMPORT-TEST-20260306;06/03/2026;Cliente CSV;Empreendimento CSV;Comercial;Arquitetura|Estrutural;Eletrica|Hidraulica;Automacao;Terreo|Superior;120,50;1000,00;500,00;solicitado;csv@teste.local

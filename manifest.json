@@ -1,0 +1,9 @@
+{
+  "name": "Project Oficial",
+  "short_name": "Project",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "description": "Aplicação de gerenciamento",
+  "icons": []
+}
