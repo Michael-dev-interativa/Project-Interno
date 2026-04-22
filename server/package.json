@@ -6,6 +6,7 @@
   },
   "main": "server.js",
   "scripts": {
+    "build": "echo 'No build step required'",
     "start": "node server.js",
     "migrate": "node db/init.js",
     "import:comerciais": "node scripts/import_comerciais_csv.js",
