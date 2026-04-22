@@ -1,14 +1,20 @@
 const { pool } = require('../db/pool');
 
 const JSON_COLUMNS = new Set(['periodos']);
+const DATE_COLUMNS = new Set(['data_entrega', 'periodo_inicio', 'periodo_termino']);
 const ALLOWED_COLUMNS = new Set([
   'tipo',
   'cliente',
   'numero_os',
   'tecnico_responsavel',
   'data_entrega',
+  'periodo_inicio',
+  'periodo_termino',
   'periodos',
   'status',
+  'etapa',
+  'referencia',
+  'observacoes',
   'empreendimento_id'
 ]);
 
@@ -38,7 +44,7 @@ function sanitizeChecklistPayload(payload = {}) {
       }
     }
 
-    if (key === 'data_entrega' && value) {
+    if (DATE_COLUMNS.has(key) && value) {
       value = new Date(value).toISOString().split('T')[0];
     }
 

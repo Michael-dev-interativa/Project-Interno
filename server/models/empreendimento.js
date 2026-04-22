@@ -2,6 +2,53 @@ const { pool } = require('../db/pool');
 
 let empreendimentoColumnsCache = null;
 
+function splitEtapasText(text) {
+  return String(text || '')
+    .split(/[\n,;|]+/)
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeEtapasInput(value) {
+  if (value === undefined || value === null) return null;
+
+  if (Array.isArray(value)) {
+    const normalized = value.flatMap(item => {
+      if (item === undefined || item === null) return [];
+      if (typeof item === 'string') return splitEtapasText(item);
+      return [String(item).trim()].filter(Boolean);
+    });
+    return normalized.length ? normalized : null;
+  }
+
+  if (typeof value === 'string') {
+    const raw = value.trim();
+    if (!raw) return null;
+
+    try {
+      const parsed = JSON.parse(raw);
+      return normalizeEtapasInput(parsed);
+    } catch (e) {
+      const split = splitEtapasText(raw);
+      return split.length ? split : [raw];
+    }
+  }
+
+  try {
+    return normalizeEtapasInput(JSON.stringify(value));
+  } catch (e) {
+    return null;
+  }
+}
+
+function normalizeEmpreendimentoRow(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    etapas: normalizeEtapasInput(row.etapas) || []
+  };
+}
+
 async function ensureEmpreendimentoColumns() {
   await pool.query(`
     ALTER TABLE empreendimentos
@@ -47,7 +94,7 @@ async function createEmpreendimento(fields = {}) {
     num_proposta: num_proposta || null,
     status: status || null,
     foto_url: foto_url || null,
-    etapas: jsonStringOrNull(etapas),
+    etapas: jsonStringOrNull(normalizeEtapasInput(etapas)),
   };
 
   const entries = Object.entries(payload).filter(([key]) => dbColumns.has(key));
@@ -67,17 +114,17 @@ async function createEmpreendimento(fields = {}) {
 
   const sql = `INSERT INTO empreendimentos (${cols.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`;
   const res = await pool.query(sql, values);
-  return res.rows[0];
+  return normalizeEmpreendimentoRow(res.rows[0]);
 }
 
 async function listEmpreendimentos(limit = 50) {
   const res = await pool.query('SELECT * FROM empreendimentos ORDER BY id DESC LIMIT $1', [limit]);
-  return res.rows;
+  return res.rows.map(normalizeEmpreendimentoRow);
 }
 
 async function getEmpreendimentoById(id) {
   const res = await pool.query('SELECT * FROM empreendimentos WHERE id = $1', [id]);
-  return res.rows[0] || null;
+  return normalizeEmpreendimentoRow(res.rows[0] || null);
 }
 
 function jsonStringOrNull(v) {
@@ -105,7 +152,9 @@ async function updateEmpreendimento(id, fields = {}) {
   for (const [key, rawValue] of entries) {
     let value = rawValue;
     if (jsonColumns.has(key)) {
-      value = jsonStringOrNull(rawValue);
+      value = key === 'etapas'
+        ? jsonStringOrNull(normalizeEtapasInput(rawValue))
+        : jsonStringOrNull(rawValue);
       sets.push(`${key} = $${idx}::jsonb`);
     } else {
       sets.push(`${key} = $${idx}`);
@@ -116,7 +165,7 @@ async function updateEmpreendimento(id, fields = {}) {
 
   const q = `UPDATE empreendimentos SET ${sets.join(', ')}, updated_at = now() WHERE id = $${idx} RETURNING *`;
   const res = await pool.query(q, [...values, id]);
-  return res.rows[0] || null;
+  return normalizeEmpreendimentoRow(res.rows[0] || null);
 }
 
 async function deleteEmpreendimento(id) {

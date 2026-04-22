@@ -132,6 +132,59 @@ function normalizeDocumentoResponse(doc) {
   };
 }
 
+async function ensureChecklistSection(checklistId, titulo) {
+  if (!checklistId || !titulo) return null;
+  const trimmed = String(titulo).trim();
+  if (!trimmed) return null;
+  try {
+    const normalizedTitle = trimmed.toLowerCase();
+    const existing = await pool.query(
+      'SELECT id FROM checklist_sections WHERE checklist_id = $1 AND LOWER(titulo) = $2 LIMIT 1',
+      [checklistId, normalizedTitle]
+    );
+    if (existing.rows.length) {
+      return existing.rows[0].id;
+    }
+    const inserted = await pool.query(
+      'INSERT INTO checklist_sections (checklist_id, titulo) VALUES ($1, $2) RETURNING id',
+      [checklistId, trimmed]
+    );
+    return inserted.rows[0] ? inserted.rows[0].id : null;
+  } catch (err) {
+    console.warn('Erro ao garantir seção do checklist:', err.message || err);
+    return null;
+  }
+}
+
+async function resolveResponsavelId(value) {
+  if (!value) return null;
+  const candidate = String(value).trim();
+  if (!candidate) return null;
+  try {
+    const lower = candidate.toLowerCase();
+    if (candidate.includes('@')) {
+      const emailMatch = await pool.query(
+        'SELECT id FROM users WHERE LOWER(email) = $1 LIMIT 1',
+        [lower]
+      );
+      if (emailMatch.rows.length) return emailMatch.rows[0].id;
+    }
+    const exactMatch = await pool.query(
+      'SELECT id FROM users WHERE LOWER(name) = $1 LIMIT 1',
+      [lower]
+    );
+    if (exactMatch.rows.length) return exactMatch.rows[0].id;
+    const partialMatch = await pool.query(
+      'SELECT id FROM users WHERE LOWER(name) LIKE $1 LIMIT 1',
+      [`%${lower}%`]
+    );
+    if (partialMatch.rows.length) return partialMatch.rows[0].id;
+  } catch (err) {
+    console.warn('Erro ao buscar responsável por nome:', err.message || err);
+  }
+  return null;
+}
+
 // Allow local frontend dev servers to call this API directly.
 app.use((req, res, next) => {
   const origin = req.headers.origin;
@@ -311,8 +364,14 @@ app.get('/api/users', async (req, res) => {
       return res.json(out);
     }
     // fallback: return basic list from DB
-    const result = await pool.query('SELECT id, email, name, role, created_at FROM users ORDER BY id DESC LIMIT 200');
-    const rows = result.rows.map(r => ({ ...r, nome: r.name, perfil: r.role }));
+    const result = await pool.query('SELECT id, email, name, role, datas_indisponiveis, usuarios_permitidos_visualizar, created_at, updated_at FROM users ORDER BY id DESC LIMIT 200');
+    const rows = result.rows.map(r => ({
+      ...r,
+      nome: r.name,
+      perfil: r.role,
+      datas_indisponiveis: Array.isArray(r.datas_indisponiveis) ? r.datas_indisponiveis : [],
+      usuarios_permitidos_visualizar: Array.isArray(r.usuarios_permitidos_visualizar) ? r.usuarios_permitidos_visualizar : [],
+    }));
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -631,7 +690,14 @@ app.get('/api/checklist_items', async (req, res) => {
 
 app.post('/api/checklist_items', async (req, res) => {
   try {
-    const item = await checklistItemsModel.createItem(req.body || {});
+    const payload = { ...(req.body || {}) };
+    if (!payload.section_id && payload.checklist_id && payload.secao) {
+      payload.section_id = await ensureChecklistSection(payload.checklist_id, payload.secao);
+    }
+    if (!payload.responsavel_id && payload.responsavel_nome) {
+      payload.responsavel_id = await resolveResponsavelId(payload.responsavel_nome);
+    }
+    const item = await checklistItemsModel.createItem(payload);
     res.json(item);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -640,7 +706,19 @@ app.post('/api/checklist_items', async (req, res) => {
 
 app.patch('/api/checklist_items/:id', async (req, res) => {
   try {
-    const updated = await checklistItemsModel.updateItem(req.params.id, req.body || {});
+    const payload = { ...(req.body || {}) };
+    let checklistId = payload.checklist_id;
+    if (!checklistId) {
+      const existingItem = await pool.query('SELECT checklist_id FROM checklist_items WHERE id = $1', [req.params.id]);
+      checklistId = existingItem.rows[0]?.checklist_id;
+    }
+    if (!payload.section_id && checklistId && payload.secao) {
+      payload.section_id = await ensureChecklistSection(checklistId, payload.secao);
+    }
+    if (!payload.responsavel_id && payload.responsavel_nome) {
+      payload.responsavel_id = await resolveResponsavelId(payload.responsavel_nome);
+    }
+    const updated = await checklistItemsModel.updateItem(req.params.id, payload);
     if (!updated) return res.status(404).json({ error: 'Not found' });
     res.json(updated);
   } catch (err) {
@@ -781,7 +859,15 @@ app.get('/api/planejamentos', async (req, res) => {
     };
 
     addNumericFilter('id', req.query.id);
-    addNumericFilter('empreendimento_id', req.query.empreendimento_id);
+    // empreendimento_id: match directly OR via atividade join (for legacy records with NULL empreendimento_id)
+    const rawEmpId = req.query.empreendimento_id;
+    if (rawEmpId !== undefined) {
+      const empId = Number(rawEmpId);
+      if (Number.isFinite(empId)) {
+        values.push(empId);
+        where.push(`(pa.empreendimento_id = $${values.length} OR (pa.empreendimento_id IS NULL AND EXISTS (SELECT 1 FROM atividades a WHERE a.id = pa.atividade_id AND a.empreendimento_id = $${values.length})))`);
+      }
+    }
     addNumericFilter('atividade_id', req.query.atividade_id);
     addNumericFilter('executor_id', req.query.executor_id);
     addTextFilter('executor_principal', req.query.executor_principal);
@@ -790,22 +876,23 @@ app.get('/api/planejamentos', async (req, res) => {
     const executorInList = String(req.query.executor || req.query.usuario || '').trim();
     if (executorInList) {
       values.push(executorInList);
-      where.push(`COALESCE(executores, '[]'::jsonb) ? $${values.length}`);
+      where.push(`COALESCE(pa.executores, '[]'::jsonb) ? $${values.length}`);
     }
 
-    const limit = Number.parseInt(req.query.limit || '500', 10);
-    const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 2000) : 500;
+    const limit = Number.parseInt(req.query.limit || '5000', 10);
+    const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 10000) : 5000;
 
     const sql = `
-      SELECT *
-      FROM planejamento_atividades
+      SELECT pa.*, COALESCE(pa.empreendimento_id, a.empreendimento_id) AS empreendimento_id
+      FROM planejamento_atividades pa
+      LEFT JOIN atividades a ON a.id = pa.atividade_id
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-      ORDER BY id DESC
+      ORDER BY pa.id DESC
       LIMIT $${values.length + 1}
     `;
 
     const result = await pool.query(sql, [...values, safeLimit]);
-    const rows = result.rows;
+    const rows = result.rows.map(r => ({ ...r, descritivo: r.descritivo || r.titulo }));
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -930,11 +1017,17 @@ app.get('/api/planejamento_documentos', async (req, res) => {
       }
     };
 
-    addNumericFilter('id', req.query.id);
-    addNumericFilter('planejamento_atividade_id', req.query.planejamento_atividade_id);
-    addNumericFilter('documento_id', req.query.documento_id);
-    addTextFilter('executor_principal', req.query.executor_principal);
-    addTextFilter('status', req.query.status);
+    addNumericFilter('pd.id', req.query.id);
+    addNumericFilter('pd.planejamento_atividade_id', req.query.planejamento_atividade_id);
+    addNumericFilter('pd.documento_id', req.query.documento_id);
+    if (req.query.executor_principal !== undefined) {
+      const text = String(req.query.executor_principal || '').trim();
+      if (text) { values.push(text); where.push(`pd.executor_principal = $${values.length}`); }
+    }
+    if (req.query.status !== undefined) {
+      const text = String(req.query.status || '').trim();
+      if (text) { values.push(text); where.push(`pd.status = $${values.length}`); }
+    }
 
     const executorInList = String(req.query.executor || req.query.usuario || '').trim();
     if (executorInList) {
@@ -953,12 +1046,13 @@ app.get('/api/planejamento_documentos', async (req, res) => {
       )`);
     }
 
-    const limit = Number.parseInt(req.query.limit || '500', 10);
-    const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 2000) : 500;
+    const limit = Number.parseInt(req.query.limit || '5000', 10);
+    const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 10000) : 5000;
 
     const sql = `
-      SELECT pd.*
+      SELECT pd.*, d.empreendimento_id
       FROM planejamento_documentos pd
+      LEFT JOIN documentos d ON d.id = pd.documento_id
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
       ORDER BY pd.id DESC
       LIMIT $${values.length + 1}
@@ -1124,6 +1218,16 @@ app.patch('/api/pavimentos/:id', async (req, res) => {
   }
 });
 
+// Delete pavimento
+app.delete('/api/pavimentos/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM pavimentos WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const handleCreateAta = async (req, res) => {
   try {
     const ata = await atasModel.createAta(req.body || {});
@@ -1234,11 +1338,59 @@ app.get('/api/atividade-funcoes', async (req, res) => {
   }
 });
 
-// Sobras
+// Sobras (full CRUD for the SobraUsuario entity used by the frontend)
+app.get('/api/sobras', async (req, res) => {
+  try {
+    const { empreendimento_id, usuario } = req.query;
+    const conditions = [];
+    const values = [];
+    if (empreendimento_id) { conditions.push(`empreendimento_id = $${values.length + 1}`); values.push(empreendimento_id); }
+    if (usuario) { conditions.push(`usuario = $${values.length + 1}`); values.push(usuario); }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const result = await pool.query(`SELECT * FROM sobras ${where} ORDER BY id DESC`, values);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/sobras', async (req, res) => {
   try {
-    const s = await sobraModel.createSobra(req.body);
-    res.json(s);
+    const { usuario, empreendimento_id, horas_sobra } = req.body || {};
+    const result = await pool.query(
+      `INSERT INTO sobras (usuario, empreendimento_id, horas_sobra) VALUES ($1, $2, $3) RETURNING *`,
+      [usuario, empreendimento_id || null, horas_sobra || 0]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/sobras/:id', async (req, res) => {
+  try {
+    const fields = req.body || {};
+    const keys = Object.keys(fields);
+    if (!keys.length) {
+      const row = (await pool.query('SELECT * FROM sobras WHERE id = $1', [req.params.id])).rows[0];
+      return res.json(row || null);
+    }
+    const sets = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
+    const values = [...keys.map(k => fields[k]), req.params.id];
+    const result = await pool.query(
+      `UPDATE sobras SET ${sets}, updated_at = now() WHERE id = $${values.length} RETURNING *`,
+      values
+    );
+    res.json(result.rows[0] || null);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/sobras/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM sobras WHERE id = $1', [req.params.id]);
+    res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1380,7 +1532,7 @@ app.get('/api/users/me', async (req, res) => {
 // Data cadastro (persistent CRUD for CadastroTab)
 app.get('/api/data_cadastro', async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit || '200', 10);
+    const limit = parseInt(req.query.limit || '5000', 10);
     const filter = {};
     if (req.query.empreendimento_id) filter.empreendimento_id = req.query.empreendimento_id;
     if (req.query.documento_id) filter.documento_id = req.query.documento_id;
@@ -1617,6 +1769,34 @@ app.get('/api/atividades', async (req, res) => {
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/atividades/:id', async (req, res) => {
+  try {
+    const atividade = await atividadesModel.getAtividadeById(req.params.id);
+
+    if (!atividade) {
+      return res.status(404).json({ error: 'Atividade não encontrada.' });
+    }
+
+    const disciplinaNome = atividade.disciplina_id
+      ? await pool.query('SELECT nome FROM disciplinas WHERE id = $1 LIMIT 1', [atividade.disciplina_id])
+      : { rows: [] };
+
+    return res.json({
+      ...atividade,
+      atividade: atividade.titulo || atividade.atividade || '',
+      descricao: atividade.descricao || '',
+      disciplina: disciplinaNome.rows[0]?.nome || null,
+      funcao: atividade.funcao || null,
+      predecessora: atividade.predecessora || null,
+      subdisciplina: atividade.subdisciplina || null,
+      tempo: atividade.tempo || null,
+      id_atividade: atividade.id_atividade || null
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -1859,7 +2039,7 @@ app.delete('/api/atividades/:id', async (req, res) => {
 // Execuções - support list and optional filters
 app.get('/api/execucoes', async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit || '200', 10);
+    const limit = parseInt(req.query.limit || '5000', 10);
     const where = [];
     const params = [];
 
@@ -2293,18 +2473,34 @@ app.get('/api/pages', (req, res) => {
 });
 
 const PORT = Number(process.env.PORT || 4000);
-const server = app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
-});
 
-server.on('error', (err) => {
-  if (err && err.code === 'EADDRINUSE') {
-    console.warn(`Port ${PORT} is already in use. Another backend instance is likely running.`);
-    console.warn('Reuse the existing instance or stop it before starting a new one.');
-    process.exit(0);
-    return;
+async function startServer() {
+  try {
+    await runMigrations();
+    console.log('Database migrations applied successfully.');
+  } catch (err) {
+    console.warn('Warning: failed to apply migrations on startup:', err.message || err);
+    console.warn('The server will continue starting, but database schema may be outdated.');
   }
-  console.error('Server startup error:', err);
+
+  const server = app.listen(PORT, () => {
+    console.log(`Server listening on port ${PORT}`);
+  });
+
+  server.on('error', (err) => {
+    if (err && err.code === 'EADDRINUSE') {
+      console.warn(`Port ${PORT} is already in use. Another backend instance is likely running.`);
+      console.warn('Reuse the existing instance or stop it before starting a new one.');
+      process.exit(0);
+      return;
+    }
+    console.error('Server startup error:', err);
+    process.exit(1);
+  });
+}
+
+startServer().catch((err) => {
+  console.error('Failed to start server:', err);
   process.exit(1);
 });
 
@@ -2561,15 +2757,20 @@ server.on('error', (err) => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS checklists (
         id SERIAL PRIMARY KEY,
-        tipo VARCHAR(100),
-        cliente VARCHAR(255),
-        numero_os VARCHAR(100),
-        tecnico_responsavel VARCHAR(255),
-        data_entrega DATE,
-        periodos JSONB DEFAULT '[]'::jsonb,
-        status VARCHAR(50) DEFAULT 'em_andamento',
-        empreendimento_id INTEGER REFERENCES empreendimentos(id) ON DELETE CASCADE,
-        created_at TIMESTAMPTZ DEFAULT now()
+      tipo VARCHAR(100),
+      cliente VARCHAR(255),
+      numero_os VARCHAR(100),
+      tecnico_responsavel VARCHAR(255),
+      data_entrega DATE,
+      periodo_inicio DATE,
+      periodo_termino DATE,
+      periodos JSONB DEFAULT '[]'::jsonb,
+      status VARCHAR(50) DEFAULT 'em_andamento',
+      observacoes TEXT,
+      etapa VARCHAR(255),
+      referencia VARCHAR(255),
+      empreendimento_id INTEGER REFERENCES empreendimentos(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ DEFAULT now()
       );
     `);
 
@@ -2579,8 +2780,13 @@ server.on('error', (err) => {
       'numero_os VARCHAR(100)',
       'tecnico_responsavel VARCHAR(255)',
       'data_entrega DATE',
+      'periodo_inicio DATE',
+      'periodo_termino DATE',
       "periodos JSONB DEFAULT '[]'::jsonb",
       "status VARCHAR(50) DEFAULT 'em_andamento'",
+      "observacoes TEXT",
+      "etapa VARCHAR(255)",
+      "referencia VARCHAR(255)",
       'empreendimento_id INTEGER REFERENCES empreendimentos(id) ON DELETE CASCADE',
       'created_at TIMESTAMPTZ DEFAULT now()'
     ];
@@ -2616,6 +2822,9 @@ server.on('error', (err) => {
       'contribuicao VARCHAR(255)',
       'tempo VARCHAR(100)',
       'observacoes TEXT',
+      'conclusao VARCHAR(25)',
+      'status VARCHAR(50) DEFAULT \'pendente\'',
+      'folhas JSONB DEFAULT \'[]\'::jsonb',
       'ordem INTEGER DEFAULT 0',
       "status_por_periodo JSONB DEFAULT '{}'::jsonb",
       'section_id INTEGER REFERENCES checklist_sections(id) ON DELETE CASCADE',

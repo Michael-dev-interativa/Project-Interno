@@ -2,8 +2,9 @@ const { pool } = require('../db/pool');
 
 async function createItem(data) {
   const q = `INSERT INTO itempre (
-    empreendimento_id, item, data, de, descritiva, localizacao, assunto, comentario, disciplina, status, resposta, imagens
-  ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`;
+    empreendimento_id, item, data, de, descritiva, localizacao, assunto, comentario, disciplina, status, resposta, imagens,
+    tempo_atendimento, planejamento_executor, planejamento_executor_nome
+  ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`;
 
   let imagensVal = null;
   if (data.imagens !== undefined && data.imagens !== null) {
@@ -26,7 +27,10 @@ async function createItem(data) {
     data.disciplina || null,
     data.status || 'Em andamento',
     data.resposta || null,
-    imagensVal
+    imagensVal,
+    data.tempo_atendimento ?? null,
+    data.planejamento_executor || null,
+    data.planejamento_executor_nome || null,
   ];
 
   const res = await pool.query(q, vals);

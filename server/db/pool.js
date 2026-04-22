@@ -1,6 +1,6 @@
 const { Pool } = require('pg');
 
-let connectionString = process.env.DATABASE_URL || process.env.PG_CONNECTION || 'postgresql://postgres:postgres@localhost:5432/project_oficial';
+let connectionString = process.env.DATABASE_URL || process.env.PG_CONNECTION || 'postgresql://postgres:postgres@localhost:5432/project';
 
 if (typeof connectionString !== 'string') {
   try { connectionString = String(connectionString); } catch (e) { /* ignore */ }

@@ -1,6 +1,6 @@
 const { pool } = require('../db/pool');
 
-const JSON_COLUMNS = new Set(['status_por_periodo']);
+const JSON_COLUMNS = new Set(['status_por_periodo', 'folhas']);
 const INTEGER_COLUMNS = new Set(['checklist_id', 'section_id', 'ordem', 'responsavel_id']);
 const ALLOWED_COLUMNS = new Set([
   'checklist_id',
@@ -10,6 +10,9 @@ const ALLOWED_COLUMNS = new Set([
   'contribuicao',
   'tempo',
   'observacoes',
+  'conclusao',
+  'status',
+  'folhas',
   'ordem',
   'status_por_periodo',
   'section_id',
@@ -18,23 +21,18 @@ const ALLOWED_COLUMNS = new Set([
   'responsavel_id'
 ]);
 
-function ensureStatusObject(value) {
-  if (!value) return {};
+function normalizeJsonColumn(value) {
+  if (value === undefined || value === null) return [];
   if (typeof value === 'string') {
     try {
-      const parsed = JSON.parse(value);
-      if (typeof parsed === 'object' && parsed !== null) {
-        return parsed;
-      }
-      return {};
-    } catch (err) {
-      return {};
+      return JSON.parse(value);
+    } catch {
+      return [];
     }
   }
-  if (typeof value === 'object') {
-    return value;
-  }
-  return {};
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'object') return value;
+  return [];
 }
 
 function sanitizeItemPayload(payload = {}) {
@@ -43,7 +41,7 @@ function sanitizeItemPayload(payload = {}) {
     if (!ALLOWED_COLUMNS.has(key)) continue;
     let normalized = value;
     if (JSON_COLUMNS.has(key)) {
-      normalized = ensureStatusObject(value);
+      normalized = normalizeJsonColumn(value);
     }
     if (INTEGER_COLUMNS.has(key) && normalized !== null && normalized !== undefined) {
       const parsed = Number(normalized);
@@ -57,10 +55,10 @@ function sanitizeItemPayload(payload = {}) {
 function encodeJsonValue(column, value) {
   if (!JSON_COLUMNS.has(column)) return value;
   try {
-    return JSON.stringify(value || {});
+    return JSON.stringify(value || []);
   } catch (err) {
     console.error('Invalid JSON value for checklist item column', column, err);
-    return '{}';
+    return '[]';
   }
 }
 

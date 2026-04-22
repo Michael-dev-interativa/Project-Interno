@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS users (
   name VARCHAR(255),
   password_hash VARCHAR(255),
   role VARCHAR(50) DEFAULT 'user',
+  datas_indisponiveis JSONB DEFAULT '[]'::jsonb,
+  usuarios_permitidos_visualizar JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -60,7 +62,7 @@ CREATE TABLE IF NOT EXISTS atividades (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-"C"REATE TABLE IF NOT EXISTS checklists (
+CREATE TABLE IF NOT EXISTS checklists (
   id SERIAL PRIMARY KEY,
   tipo VARCHAR(100) NOT NULL,
   cliente VARCHAR(255),
@@ -308,7 +310,7 @@ CREATE TABLE IF NOT EXISTS atividade_funcoes (
   descricao TEXT
 );
 
--- Sobras por usuário (ajustes/horas sobrando)
+-- Sobras por usuário (ajustes/horas sobrando) - legacy table
 CREATE TABLE IF NOT EXISTS sobras_usuario (
   id SERIAL PRIMARY KEY,
   usuario_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -316,6 +318,19 @@ CREATE TABLE IF NOT EXISTS sobras_usuario (
   motivo TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Sobras table used by the SobraUsuario frontend entity
+CREATE TABLE IF NOT EXISTS sobras (
+  id SERIAL PRIMARY KEY,
+  usuario VARCHAR(255) NOT NULL,
+  empreendimento_id INTEGER REFERENCES empreendimentos(id) ON DELETE CASCADE,
+  horas_sobra NUMERIC(10,2) DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS sobras_empreendimento_idx ON sobras(empreendimento_id);
+CREATE INDEX IF NOT EXISTS sobras_usuario_idx ON sobras(usuario);
 
 -- Alterações de etapa (histórico)
 CREATE TABLE IF NOT EXISTS alteracoes_etapa (
@@ -428,9 +443,16 @@ CREATE TABLE IF NOT EXISTS itempre (
   status VARCHAR(50) DEFAULT 'Em andamento',
   resposta TEXT,
   imagens JSONB,
+  tempo_atendimento NUMERIC(8,2),
+  planejamento_executor VARCHAR(255),
+  planejamento_executor_nome VARCHAR(255),
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE itempre ADD COLUMN IF NOT EXISTS tempo_atendimento NUMERIC(8,2);
+ALTER TABLE itempre ADD COLUMN IF NOT EXISTS planejamento_executor VARCHAR(255);
+ALTER TABLE itempre ADD COLUMN IF NOT EXISTS planejamento_executor_nome VARCHAR(255);
 
 CREATE INDEX IF NOT EXISTS itempre_empreendimento_idx ON itempre(empreendimento_id);
 
@@ -466,6 +488,19 @@ CREATE TABLE IF NOT EXISTS controle_os (
 );
 
 CREATE INDEX IF NOT EXISTS controle_os_empreendimento_idx ON controle_os(empreendimento_id);
+
+-- Performance indexes on the most frequently queried foreign-key columns
+CREATE INDEX IF NOT EXISTS documentos_empreendimento_idx ON documentos(empreendimento_id);
+CREATE INDEX IF NOT EXISTS atividades_empreendimento_idx ON atividades(empreendimento_id);
+CREATE INDEX IF NOT EXISTS planejamento_atividades_empreendimento_idx ON planejamento_atividades(empreendimento_id);
+CREATE INDEX IF NOT EXISTS planejamento_atividades_executor_id_idx ON planejamento_atividades(executor_id);
+CREATE INDEX IF NOT EXISTS execucoes_empreendimento_idx ON execucoes(empreendimento_id);
+CREATE INDEX IF NOT EXISTS execucoes_planejamento_atividade_id_idx ON execucoes(planejamento_atividade_id);
+CREATE INDEX IF NOT EXISTS execucoes_usuario_id_idx ON execucoes(usuario_id);
+CREATE INDEX IF NOT EXISTS checklists_empreendimento_idx ON checklists(empreendimento_id);
+CREATE INDEX IF NOT EXISTS atividades_empreendimento_emp_idx ON atividades_empreendimento(empreendimento_id);
+CREATE INDEX IF NOT EXISTS planejamento_documentos_documento_id_idx ON planejamento_documentos(documento_id);
+CREATE INDEX IF NOT EXISTS planejamento_documentos_planejamento_id_idx ON planejamento_documentos(planejamento_atividade_id);
 
 -- Data Cadastro: datas por documento/etapa/revisao para a aba Cadastro
 CREATE TABLE IF NOT EXISTS data_cadastro (
