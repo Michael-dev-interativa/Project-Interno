@@ -1,3 +1,7 @@
+// Rota amigável para a raiz da API
+app.get('/', (req, res) => {
+  res.send('API online! Use os endpoints da aplicação.');
+});
 require('dotenv').config();
 
 // --- AJUSTE: Usar variáveis padrão do Render ---
