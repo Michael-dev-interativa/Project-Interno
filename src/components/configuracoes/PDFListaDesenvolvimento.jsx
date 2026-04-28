@@ -32,8 +32,6 @@ export default function PDFListaDesenvolvimento({ empreendimentoId = null }) {
         Documento.filter({ empreendimento_id: empreendimentoId })
       ]);
       
-      console.log(`📋 Encontradas ${atividadesEmpreendimento.length} atividades específicas do empreendimento`);
-      console.log(`📋 Encontradas ${documentos.length} documentos/folhas`);
       
       // Mapear atividades genéricas
       const atividadesGenericasMap = new Map(
@@ -124,7 +122,6 @@ export default function PDFListaDesenvolvimento({ empreendimentoId = null }) {
         });
       });
 
-      console.log('📊 Atividades agrupadas:', Object.keys(atividadesPorNome).length);
       
       // Reorganizar atividades por etapa
       const atividadesPorEtapa = {};
@@ -196,7 +193,6 @@ export default function PDFListaDesenvolvimento({ empreendimentoId = null }) {
         pdf.addImage(img, 'PNG', (pageWidth - logoWidth) / 2, yPos, logoWidth, logoHeight);
         yPos += logoHeight + 10;
       } catch (error) {
-        console.warn("Erro ao carregar logo, continuando sem ela:", error);
         yPos += 10;
       }
 

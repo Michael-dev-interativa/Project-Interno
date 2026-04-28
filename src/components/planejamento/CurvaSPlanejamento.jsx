@@ -20,19 +20,17 @@ export default function CurvaSPlanejamento({ planejamentos, empreendimentoId }) 
     }
 
     try {
-      console.log('Processando dados da Curva S...', planejamentos.length, 'planejamentos');
       
       // Filtrar apenas planejamentos válidos com datas
       const planejamentosValidos = planejamentos.filter(p => {
         // Verificar se as datas existem e não são null
         const temInicio = p.inicio_planejado && typeof p.inicio_planejado === 'string';
         const temTermino = p.termino_planejado && typeof p.termino_planejado === 'string';
-        const temHoras = typeof p.tempo_planejado === 'number' && p.tempo_planejado > 0;
+        const temHoras = Number(p.tempo_planejado) > 0;
         
         return temInicio && temTermino && temHoras;
       });
 
-      console.log('Planejamentos válidos para gráfico:', planejamentosValidos.length);
 
       if (planejamentosValidos.length === 0) {
         return [];
@@ -59,12 +57,10 @@ export default function CurvaSPlanejamento({ planejamentos, empreendimentoId }) 
             }
           }
         } catch (error) {
-          console.warn('Erro ao processar datas do planejamento:', p.id, error);
         }
       });
 
       if (!dataMinima || !dataMaxima) {
-        console.warn('Não foi possível determinar intervalo de datas válido');
         return [];
       }
 
@@ -74,7 +70,6 @@ export default function CurvaSPlanejamento({ planejamentos, empreendimentoId }) 
         end: endOfWeek(dataMaxima, { weekStartsOn: 1 })
       }, { weekStartsOn: 1 });
 
-      console.log('Processando', semanas.length, 'semanas de', format(semanas[0], 'dd/MM/yyyy'), 'até', format(semanas[semanas.length - 1], 'dd/MM/yyyy'));
 
       let horasAcumuladasPlanejadas = 0;
       let horasAcumuladasReais = 0;
@@ -101,7 +96,7 @@ export default function CurvaSPlanejamento({ planejamentos, empreendimentoId }) 
               const diasSobreposicao = Math.ceil((fimSobreposicao - inicioSobreposicao) / (1000 * 60 * 60 * 24)) + 1;
               
               const proporcao = Math.min(1, diasSobreposicao / duracaoAtividade);
-              const horasProporcionais = (p.tempo_planejado || 0) * proporcao;
+              const horasProporcionais = (Number(p.tempo_planejado) || 0) * proporcao;
               
               horasSemanaPlanejas += horasProporcionais;
               
@@ -110,7 +105,6 @@ export default function CurvaSPlanejamento({ planejamentos, empreendimentoId }) 
               horasSemanareais += horasReaisAtividade * proporcao;
             }
           } catch (error) {
-            console.warn('Erro ao processar planejamento na semana:', p.id, error);
           }
         });
 
@@ -128,8 +122,8 @@ export default function CurvaSPlanejamento({ planejamentos, empreendimentoId }) 
       });
 
       // Calcular resumo
-      const totalPlanejado = planejamentosValidos.reduce((sum, p) => sum + (p.tempo_planejado || 0), 0);
-      const totalExecutado = planejamentosValidos.reduce((sum, p) => sum + (p.tempo_real_executado || 0), 0);
+      const totalPlanejado = planejamentosValidos.reduce((sum, p) => sum + (Number(p.tempo_planejado) || 0), 0);
+      const totalExecutado = planejamentosValidos.reduce((sum, p) => sum + (Number(p.tempo_real_executado) || 0), 0);
       
       setResumo({
         totalPlanejado: Math.round(totalPlanejado * 10) / 10,
@@ -138,7 +132,6 @@ export default function CurvaSPlanejamento({ planejamentos, empreendimentoId }) 
         semanasComAtraso: dadosSemanas.filter(s => s.horasPlanejadasAcumuladas > s.horasReaisAcumuladas).length
       });
 
-      console.log('Dados processados com sucesso:', dadosSemanas.length, 'semanas');
       return dadosSemanas;
       
     } catch (error) {

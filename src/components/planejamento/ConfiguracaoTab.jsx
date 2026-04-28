@@ -51,7 +51,6 @@ export default function ConfiguracaoTab({ empreendimentoId }) { // Prop simplifi
     try {
       // Aqui você salvaria as configurações no banco de dados, associadas ao empreendimentoId
       // Por exemplo, em uma entidade ConfiguracaoPlanejamento
-      console.log("Salvando configurações para empreendimento:", empreendimentoId, config);
       
       // Simular delay de salvamento
       await new Promise(resolve => setTimeout(resolve, 1000));

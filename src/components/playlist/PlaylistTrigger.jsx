@@ -46,7 +46,6 @@ export default function PlaylistTrigger() {
       }
 
       try {
-        console.log(`📋 [Playlist] Carregando ${playlist.length} atividade(s)...`);
         
         const loadedData = await Promise.all(
           playlist.map(async (id) => {
@@ -80,7 +79,6 @@ export default function PlaylistTrigger() {
         );
         
         const validData = loadedData.filter(Boolean);
-        console.log(`✅ [Playlist] ${validData.length} atividade(s) carregadas`);
         setPlaylistData(validData);
         
       } catch (error) {

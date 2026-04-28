@@ -83,7 +83,6 @@ export default function PrevisaoEntregaModal({ isOpen, onClose, planejamentos, e
         
         // Se após 2 anos ainda não encontrou data, define como null para indicar erro
         if (!previsaoTermino) {
-          console.warn(`Não foi possível calcular previsão para a atividade: ${plano.id || plano.nome}. Tempo restante: ${tempoRestante}`);
         }
 
       } else {

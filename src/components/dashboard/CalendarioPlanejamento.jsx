@@ -1,10 +1,10 @@
+// @ts-nocheck
 import React, { useState, useMemo, useEffect, useContext, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Calendar, Clock, User, Building2, Filter, Trash2, CalendarDays, View, Play, RefreshCw, LineChart, Users, PlusCircle, ListMusic, Loader2, Edit2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, Clock, User, Filter, Trash2, CalendarDays, Play, RefreshCw, LineChart, Users, Loader2, Edit2 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
   format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
@@ -65,6 +65,9 @@ const parseLocalDate = (dateString) => {
 
 const normalizeActivityId = (value) => String(value ?? '');
 
+// Format hours: always 1 decimal place
+const formatHours = (h) => Number(h).toFixed(1);
+
 // Função para verificar se uma atividade está atrasada (agora usando a compartilhada)
 const isActivityOverdue = (plano) => {
   // Legacy executions (isLegacyExecution) are not overdue in the traditional sense
@@ -100,7 +103,6 @@ const calculateActivityStatus = (plano, allPlanejamentos = []) => {
         foiReplanejadaParaIniciarMaisTarde = true;
       }
     } catch (e) {
-      console.warn("Erro ao parsear datas de início para status de replanejamento:", plano.inicio_ajustado, plano.inicio_planejado, e);
     }
   }
 
@@ -127,7 +129,6 @@ const calculateActivityStatus = (plano, allPlanejamentos = []) => {
         wasReplannedLaterTermino = true;
       }
     } catch (e) {
-      console.warn("Erro ao parsear datas de término para status de replanejamento:", plano.termino_ajustado, plano.termino_planejado, e);
     }
   }
 
@@ -158,16 +159,6 @@ const CalendarFilters = ({
   currentUserEmail,
   viewType
 }) => {
-  // Debug log
-  console.log('🔍 CalendarFilters Debug:', {
-    podeVerOutros,
-    usuariosPermitidos: usuariosPermitidos?.length || 0,
-    isColaborador,
-    isGestao,
-    isApoio,
-    currentUserEmail
-  });
-
   // **MODIFICADO**: Filtrar e ordenar apenas usuários com nome cadastrado
   const usersOrdenados = useMemo(() => {
     return [...users]
@@ -182,7 +173,6 @@ const CalendarFilters = ({
   // **MODIFICADO**: Dropdown bloqueado para colaboradores, gestão e APOIO (sem permissão especial)
   const isDropdownDisabled = (isColaborador || isGestao || isApoio) && !podeVerOutros;
 
-  console.log('🔒 Dropdown disabled?', isDropdownDisabled);
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 p-4 border-b border-gray-100 bg-gray-50/50">
@@ -308,16 +298,20 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
   // **MODIFICADO**: Melhorar exibição do nome para documentos
   const displayName = useMemo(() => {
     if (plano.tipo_planejamento === 'documento') {
-      // Para planejamentos de documento, extrair número da folha do descritivo ou documento
-      const numeroFolha = plano.documento?.numero ||
-        (plano.descritivo && plano.descritivo.includes(' - ') ? plano.descritivo.split(' - ')[0] : null) ||
-        'Número';
-      const nomeArquivo = plano.documento?.arquivo ||
-        (plano.descritivo && plano.descritivo.includes(' - ') ? plano.descritivo.split(' - ')[1] : null) ||
-        'Documento';
       const etapa = plano.etapa || 'Sem Etapa';
-
-      return `${numeroFolha} - ${nomeArquivo} - ${etapa}`;
+      const numero = plano.documento?.numero;
+      const arquivo = plano.documento?.arquivo;
+      // Se documento enriquecido tem número ou arquivo, montar nome completo
+      if (numero || arquivo) {
+        return [numero, arquivo, etapa].filter(Boolean).join(' - ');
+      }
+      // Fallback: descritivo salvo ("001 - arquivo - etapa")
+      // Usar apenas se não for simplesmente a etapa repetida
+      const desc = plano.descritivo?.trim();
+      if (desc && desc !== etapa) {
+        return desc;
+      }
+      return etapa;
     }
     return plano.atividade?.atividade || plano.descritivo || 'Atividade não identificada';
   }, [plano]);
@@ -394,17 +388,11 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
     try {
       if (plano.isLegacyExecution) { // Legacy virtual activities (Execucao)
         const execId = plano.id.split('-')[1]; // Extract original execution ID from virtual ID
-        console.log(`🗑️ Excluindo execução ${execId} (atividade rápida antiga)...`);
         await retryWithBackoff(() => Execucao.delete(execId), 3, 1000, 'deleteExecution');
-        console.log(`✅ Execução ${execId} excluída com sucesso`);
       } else if (plano.tipo_planejamento === 'documento') { // PlanejamentoDocumento
-        console.log(`🗑️ Excluindo planejamento de documento ${plano.id}...`);
         await retryWithBackoff(() => PlanejamentoDocumento.delete(plano.id), 3, 1000, 'deleteDocumentPlanning');
-        console.log(`✅ Planejamento de documento ${plano.id} excluído com sucesso`);
       } else { // PlanejamentoAtividade
-        console.log(`🗑️ Excluindo atividade ${plano.id} do PlanejamentoAtividade...`);
         await retryWithBackoff(() => PlanejamentoAtividade.delete(plano.id), 3, 1000, 'deleteActivity');
-        console.log(`✅ Atividade ${plano.id} excluída com sucesso do banco de dados`);
       }
 
       // Changed from onDelete to triggerUpdate for a more granular refresh
@@ -417,7 +405,6 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
       const is404 = error.message?.includes("404") || (error.response && error.response.status === 404);
 
       if (is404) {
-        console.warn("⚠️ Atividade já foi excluída do banco. Atualizando a interface.");
         // Changed from onDelete to triggerUpdate
         if (onDelete) { // Chamada ao onDelete do componente pai para recarregar os dados do calendário
           onDelete();
@@ -526,15 +513,13 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
       await retryWithBackoff(
         () => entityToUpdate.update(plano.id, {
           tempo_executado: timeValue,
-          tempo_planejado: timeValue,
-          horas_por_dia: novasHorasPorDia,
+          horas_executadas_por_dia: novasHorasPorDia,
           status: 'concluido',
           termino_real: format(new Date(), 'yyyy-MM-dd')
         }),
         3, 1000, 'adjustTime'
       );
 
-      console.log(`Tempo da atividade ${plano.id} ajustado para ${timeValue}h e marcada como concluída`);
       setShowTimeAdjustModal(false);
       setAdjustedTime('');
 
@@ -813,13 +798,13 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
                 title="Clique para ajustar o tempo (Coordenador ou superior)"
               >
                 <span className="font-semibold text-sm">
-                  {Math.ceil(horasAlocadasDia * 10) / 10}/{Math.ceil(horasExecutadasNoDia * 10) / 10}h{(plano.horas_por_dia && Object.keys(plano.horas_por_dia).length > 1 && Object.keys(plano.horas_por_dia).sort().indexOf(dayKey) < Object.keys(plano.horas_por_dia).length - 1) ? ' ...' : ''}
+                  {formatHours(horasAlocadasDia)}/{formatHours(horasExecutadasNoDia)}h{(plano.horas_por_dia && Object.keys(plano.horas_por_dia).length > 1 && Object.keys(plano.horas_por_dia).sort().indexOf(dayKey) < Object.keys(plano.horas_por_dia).length - 1) ? ' ...' : ''}
                 </span>
               </button>
             ) : (
               <div className="font-mono text-blue-600">
                 <span className="font-semibold text-sm" title={horasAlocadasDia > 0 && Object.keys(plano.horas_por_dia || {}).length > 1 ? "Planejado / Executado (continua em outros dias)" : "Planejado / Executado"}>
-                  {Math.ceil(horasAlocadasDia * 10) / 10}/{Math.ceil(horasExecutadasNoDia * 10) / 10}h{(plano.horas_por_dia && Object.keys(plano.horas_por_dia).length > 1 && Object.keys(plano.horas_por_dia).sort().indexOf(dayKey) < Object.keys(plano.horas_por_dia).length - 1) ? ' ...' : ''}
+                  {formatHours(horasAlocadasDia)}/{formatHours(horasExecutadasNoDia)}h{(plano.horas_por_dia && Object.keys(plano.horas_por_dia).length > 1 && Object.keys(plano.horas_por_dia).sort().indexOf(dayKey) < Object.keys(plano.horas_por_dia).length - 1) ? ' ...' : ''}
                 </span>
               </div>
             )}
@@ -902,7 +887,6 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
 const DailyActivityGroup = ({ empreendimento, executor, atividades, isExpanded, onToggle, disciplinas, dayKey, onActivityDelete, onShowPrevisao, executorMap, allPlanejamentos, isReprogramando, canReprogram, selectedActivities, onToggleSelect, hasSelections, groupKey, provided, isDragging }) => {
   const totalHoras = useMemo(() => {
     if (!dayKey) {
-      console.log(`⚠️ [GRUPO] dayKey é null/undefined`);
       return 0;
     }
 
@@ -943,7 +927,7 @@ const DailyActivityGroup = ({ empreendimento, executor, atividades, isExpanded, 
       soma += horasDoDia;
     });
 
-    return Math.ceil(soma * 10) / 10;
+    return soma;
   }, [atividades, dayKey]);
 
   const statusCounts = atividades.reduce((acc, atividade) => {
@@ -1082,7 +1066,7 @@ const DailyActivityGroup = ({ empreendimento, executor, atividades, isExpanded, 
                 className="px-1.5 py-0.5 rounded text-xs font-bold text-white"
                 style={{ backgroundColor: statusColor }}
               >
-                {totalHoras > 0 ? `${Math.ceil(totalHoras * 10) / 10}h` : '0h'}
+                {totalHoras > 0 ? `${formatHours(totalHoras)}h` : '0h'}
               </div>
               <p className="text-xs text-gray-500 mt-0.5">{atividades.length} ativ.</p>
             </div>
@@ -1203,9 +1187,9 @@ const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKe
       // Para legado, considerar o tempo executado total
       if (atividade.isLegacyExecution) return tempoExecutado >= 0.05;
 
-      // Para atividades rápidas, verificar execução OU alocação
+      // Para atividades rápidas, verificar execução OU alocação OU se está concluída (mesmo com 0h)
       if (atividade.isQuickActivity || atividade.is_quick_activity) {
-        return horasExecutadas >= 0.05 || horasAlocadas >= 0.05;
+        return horasExecutadas >= 0.05 || horasAlocadas >= 0.05 || atividade.status === 'concluido' || atividade.status === 'em_andamento';
       }
 
       // Para atividades normais, verificar se tem horas significativas
@@ -1252,7 +1236,7 @@ const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKe
 
       if (atividade.isLegacyExecution) return tempoExecutado >= 0.05;
       if (atividade.isQuickActivity || atividade.is_quick_activity) {
-        return horasExecutadas >= 0.05 || horasAlocadas >= 0.05;
+        return horasExecutadas >= 0.05 || horasAlocadas >= 0.05 || atividade.status === 'concluido' || atividade.status === 'em_andamento';
       }
       return horasAlocadas >= 0.05 || horasExecutadas >= 0.05;
     });
@@ -1269,7 +1253,7 @@ const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKe
 
           if (atividade.isLegacyExecution) return tempoExecutado >= 0.05;
           if (atividade.isQuickActivity || atividade.is_quick_activity) {
-            return horasExecutadas >= 0.05 || horasAlocadas >= 0.05;
+            return horasExecutadas >= 0.05 || horasAlocadas >= 0.05 || atividade.status === 'concluido' || atividade.status === 'em_andamento';
           }
           return horasAlocadas >= 0.05 || horasExecutadas >= 0.05;
         });
@@ -1591,7 +1575,7 @@ const WeekView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShow
 
                             total += horasDia;
                           });
-                          return `${Math.ceil(total * 10) / 10}h`;
+                          return `${formatHours(total)}h`;
                         })()}
                       </span>
                     </div>
@@ -1688,24 +1672,6 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
   const usuariosPermitidos = userProfile?.usuarios_permitidos_visualizar || [];
   const podeVisualizarOutros = Array.isArray(usuariosPermitidos) && usuariosPermitidos.length > 0;
 
-  // Debug log do userProfile
-  console.log('👤 UserProfile no CalendarioPlanejamento:', {
-    user: user?.email,
-    userProfile,
-    usuarios_permitidos_visualizar: userProfile?.usuarios_permitidos_visualizar,
-    usuariosPermitidos,
-    podeVisualizarOutros,
-    perfilAtual,
-    isColaborador,
-    isGestao,
-    isApoio,
-    updateKey
-  });
-
-  // **CRÍTICO**: Se userProfile é null mas temos um usuário logado, alertar
-  if (!userProfile && user?.email) {
-    console.warn('⚠️ ATENÇÃO: userProfile está null, mas temos usuário logado. Isso pode indicar que o usuário não tem registro na entidade Usuario.');
-  }
 
   // **MODIFICADO**: Se for gestão OU apoio (sem permissão especial), já inicia com o próprio email selecionado
   const [filters, setFilters] = useState({
@@ -1713,9 +1679,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
     discipline: 'all'
   });
 
-  // NOVO: Estados locais para dados do calendário e loading
-  const [planejamentos, setPlanejamentos] = useState([]);
-  const [execucoes, setExecucoes] = useState([]);
+  // Estados locais para dados do calendário e loading
   const [isCalendarLoading, setIsCalendarLoading] = useState(false);
   const [enrichedData, setEnrichedData] = useState([]);
 
@@ -1730,7 +1694,6 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
   // Auto-selecionar o próprio usuário no primeiro acesso
   useEffect(() => {
     if (user?.email && !filters.user) {
-      console.log(`🔄 Auto-selecionando usuário: ${user.email}`);
       setFilters(prev => ({ ...prev, user: user.email }));
     }
   }, [user?.email, filters.user]);
@@ -1745,152 +1708,91 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
   // **NOVO**: Estado para seleção múltipla
   const [selectedActivities, setSelectedActivities] = useState(new Set());
 
-  // NOVO: Função para carregar dados do calendário sob demanda
+  // Carrega e enriquece dados do calendário em uma única passagem com requisições paralelas
   const loadCalendarData = useCallback(async (userFilter) => {
     if (!userFilter) {
-      setPlanejamentos([]);
-      setExecucoes([]);
-      setEnrichedData([]); // Clear enriched data as well
+      setEnrichedData([]);
       return;
     }
 
     setIsCalendarLoading(true);
     try {
-      console.log(`📅 Carregando dados do calendário para: ${userFilter}`);
-
-      // Buscar atividades do usuário selecionado apenas como executor principal
-      let planosAtividade = [];
-      let planosDocumento = [];
-
-      if (userFilter !== 'all') {
-        // Buscar como executor principal
-        const planosExecPrincipal = await retryWithBackoff(() => PlanejamentoAtividade.filter({ executor_principal: userFilter }), 3, 1500, 'calendar.loadPlansAtividade.principal');
-        const planosDocExecPrincipal = await retryWithBackoff(() => PlanejamentoDocumento.filter({ executor_principal: userFilter }), 3, 1500, 'calendar.loadPlansDocumento.principal');
-
-        console.log(`📊 Executor principal: ${planosExecPrincipal.length} atividades, ${planosDocExecPrincipal.length} documentos`);
-        planosAtividade = planosExecPrincipal;
-        planosDocumento = planosDocExecPrincipal;
-      } else {
-        planosAtividade = await retryWithBackoff(() => PlanejamentoAtividade.list(), 3, 1500, 'calendar.loadPlansAtividade');
-        planosDocumento = await retryWithBackoff(() => PlanejamentoDocumento.list(), 3, 1500, 'calendar.loadPlansDocumento');
-      }
-
       const execFilter = userFilter !== 'all' ? { usuario: userFilter } : {};
-      const execs = await retryWithBackoff(() => Execucao.filter(execFilter), 3, 1500, 'calendar.loadExecs');
 
-      console.log(`📦 Execuções carregadas para ${userFilter}: ${execs?.length || 0} total`);
+      // Etapa 1: todas as requisições iniciais em paralelo
+      const [planosAtividade, planosDocumento, execs] = await Promise.all([
+        userFilter !== 'all'
+          ? retryWithBackoff(() => PlanejamentoAtividade.filter({ executor_principal: userFilter }), 3, 1500, 'calendar.loadPlansAtividade.principal')
+          : retryWithBackoff(() => PlanejamentoAtividade.list(), 3, 1500, 'calendar.loadPlansAtividade'),
+        userFilter !== 'all'
+          ? retryWithBackoff(() => PlanejamentoDocumento.filter({ executor_principal: userFilter }), 3, 1500, 'calendar.loadPlansDocumento.principal')
+          : retryWithBackoff(() => PlanejamentoDocumento.list(), 3, 1500, 'calendar.loadPlansDocumento'),
+        retryWithBackoff(() => Execucao.filter(execFilter), 3, 1500, 'calendar.loadExecs'),
+      ]);
 
       const planosAtividadeComTipo = (planosAtividade || []).map(p => ({ ...p, tipo_planejamento: 'atividade' }));
       const planosDocumentoComTipo = (planosDocumento || []).map(p => ({ ...p, tipo_planejamento: 'documento' }));
       const todosPlanejamentos = [...planosAtividadeComTipo, ...planosDocumentoComTipo];
 
-      console.log(`✅ Dados carregados: ${todosPlanejamentos.length} planejamentos (${planosAtividade.length} atividades + ${planosDocumento.length} documentos), ${execs?.length || 0} execuções`);
+      // Etapa 2: enriquecimento em paralelo (sem estado intermediário)
+      const empreendimentoIds = [...new Set(todosPlanejamentos.map(p => p.empreendimento_id).filter(Boolean))];
+      const atividadeIds = [...new Set(todosPlanejamentos.map(p => p.atividade_id).filter(Boolean))];
+      const documentoIdsArray = [...new Set(todosPlanejamentos.map(p => p.documento_id).filter(Boolean).map(String))];
 
-      setPlanejamentos(todosPlanejamentos);
-      setExecucoes(execs || []);
+      // Buscar documentos individualmente por ID para garantir que nenhum planejamento fique sem nome
+      const [empreendimentosData, atividadesData, documentosData] = await Promise.all([
+        empreendimentoIds.length > 0 ? retryWithBackoff(() => Empreendimento.filter({ id: { $in: empreendimentoIds } }), 3, 1000, 'enrich.empreendimentos') : Promise.resolve([]),
+        atividadeIds.length > 0 ? retryWithBackoff(() => Atividade.filter({ id: { $in: atividadeIds } }), 3, 1000, 'enrich.atividades') : Promise.resolve([]),
+        documentoIdsArray.length > 0
+          ? Promise.all(documentoIdsArray.map(docId =>
+              retryWithBackoff(() => Documento.get(docId), 3, 1000, `enrich.documento.${docId}`).catch(() => null)
+            )).then(results => results.filter(Boolean))
+          : Promise.resolve([]),
+      ]);
 
-    } catch (error) {
-      console.error("❌ Erro ao carregar dados do calendário:", error);
-      setPlanejamentos([]);
-      setExecucoes([]);
-      setEnrichedData([]); // Clear enriched data on error
-      alert("Erro ao carregar as atividades do calendário. Tente atualizar a página.");
-    } finally {
-      setIsCalendarLoading(false); // Ensure loading state is reset
-    }
-  }, []);
+      const empreendimentosMap = new Map((empreendimentosData || []).map(item => [String(item.id), item]));
+      const atividadesMap = new Map((atividadesData || []).map(item => [String(item.id), item]));
+      const documentosMap = new Map((documentosData || []).map(item => [String(item.id), item]));
 
-  // NOVO: useEffect para disparar o carregamento de dados quando o filtro de usuário mudar OU quando updateKey mudar
-  useEffect(() => {
-    if (hasSelectedUser) {
-      console.log(`🔄 Filtro de usuário mudou para: ${filters.user} ou updateKey: ${updateKey}`);
-      loadCalendarData(filters.user);
-    } else {
-      console.log(`⚪ Nenhum usuário selecionado - limpando dados do calendário`);
-      setPlanejamentos([]);
-      setExecucoes([]);
-      setEnrichedData([]); // Clear enriched data when no user is selected
-      setIsCalendarLoading(false);
-    }
-  }, [filters.user, hasSelectedUser, loadCalendarData, updateKey]);
+      // Agregar horas executadas por planejamento sem estado intermediário
+      const horasExecutadasPorPlanejamento = {};
+      (execs || []).forEach(exec => {
+        if (!exec.planejamento_id || !exec.inicio) return;
+        const diaExec = format(parseLocalDate(exec.inicio), 'yyyy-MM-dd');
+        const tempoExec = Number(exec.tempo_total) || 0;
+        if (!horasExecutadasPorPlanejamento[exec.planejamento_id]) {
+          horasExecutadasPorPlanejamento[exec.planejamento_id] = {};
+        }
+        horasExecutadasPorPlanejamento[exec.planejamento_id][diaExec] =
+          (horasExecutadasPorPlanejamento[exec.planejamento_id][diaExec] || 0) + tempoExec;
+      });
 
-  // NOVO: useEffect para enriquecer os dados quando eles são carregados
-  useEffect(() => {
-    const enrichData = async () => {
-      if (!planejamentos) {
-        setEnrichedData([]);
-        return;
-      }
+      // --- NOVO: incluir execuções sem planejamento_id como "atividades rápidas" ---
+      const execucoesSemPlanejamento = (execs || []).filter(exec => !exec.planejamento_id);
+      const atividadesVirtuais = execucoesSemPlanejamento.map(exec => {
+        const diaExec = exec.inicio ? format(parseLocalDate(exec.inicio), 'yyyy-MM-dd') : null;
+        return {
+          id: `exec-${exec.id}`,
+          isLegacyExecution: true,
+          isQuickActivity: true,
+          tipo_planejamento: 'atividade',
+          descritivo: exec.descritivo || 'Execução Rápida',
+          tempo_executado: Number(exec.tempo_total) || 0,
+          executor_principal: exec.usuario,
+          status: 'concluido',
+          horas_executadas_por_dia: diaExec ? { [diaExec]: Number(exec.tempo_total) || 0 } : {},
+          empreendimento: null,
+          atividade: null,
+          documento: null,
+          os: exec.os || null,
+          observacao: exec.observacao || null,
+        };
+      });
 
-      if (planejamentos.length === 0 && execucoes.length === 0 && !isCalendarLoading) { // Only clear if not currently loading fresh data
-        setEnrichedData([]);
-        return;
-      }
-
-      try {
-        const empreendimentoIds = [...new Set(planejamentos.map(p => p.empreendimento_id).filter(Boolean))];
-        const atividadeIds = [...new Set(planejamentos.map(p => p.atividade_id).filter(Boolean))];
-        const documentoIds = [...new Set(planejamentos.map(p => p.documento_id).filter(Boolean))];
-
-        const [empreendimentosData, atividadesData, documentosData] = await Promise.all([
-          empreendimentoIds.length > 0 ? retryWithBackoff(() => Empreendimento.filter({ id: { $in: empreendimentoIds } }), 3, 1000, 'enrich.empreendimentos') : Promise.resolve([]),
-          atividadeIds.length > 0 ? retryWithBackoff(() => Atividade.filter({ id: { $in: atividadeIds } }), 3, 1000, 'enrich.atividades') : Promise.resolve([]),
-          documentoIds.length > 0 ? retryWithBackoff(() => Documento.filter({ id: { $in: documentoIds } }), 3, 1000, 'enrich.documentos') : Promise.resolve([]),
-        ]);
-
-        const empreendimentosMap = new Map((empreendimentosData || []).map(item => [item.id, item]));
-        const atividadesMap = new Map((atividadesData || []).map(item => [item.id, item]));
-        const documentosMap = new Map((documentosData || []).map(item => [item.id, item]));
-
-        // Calcular horas executadas por dia para cada planejamento
-        console.log(`🔍 Enriquecendo dados - Total execuções: ${execucoes?.length || 0}`);
-        console.log(`📋 Amostra de execuções:`, execucoes?.slice(0, 3).map(e => ({
-          id: e.id,
-          planejamento_id: e.planejamento_id,
-          inicio: e.inicio,
-          tempo_total: e.tempo_total,
-          descritivo: e.descritivo
-        })));
-
-        const horasExecutadasPorPlanejamento = {};
-        (execucoes || []).forEach(exec => {
-          if (!exec.planejamento_id) {
-            console.log(`⚠️ Execução ${exec.id} sem planejamento_id`);
-            return;
-          }
-
-          if (!exec.inicio) {
-            console.log(`⚠️ Execução ${exec.id} sem data de inicio`);
-            return;
-          }
-
-          // Usar a data de início da execução
-          const diaExec = format(parseLocalDate(exec.inicio), 'yyyy-MM-dd');
-          const tempoExec = Number(exec.tempo_total) || 0;
-
-          console.log(`✅ Exec ${exec.id} -> Plan ${exec.planejamento_id}: ${tempoExec}h no dia ${diaExec}`);
-
-          if (!horasExecutadasPorPlanejamento[exec.planejamento_id]) {
-            horasExecutadasPorPlanejamento[exec.planejamento_id] = {};
-          }
-
-          horasExecutadasPorPlanejamento[exec.planejamento_id][diaExec] =
-            (horasExecutadasPorPlanejamento[exec.planejamento_id][diaExec] || 0) + tempoExec;
-        });
-
-        console.log(`📊 Total de planejamentos com execuções mapeadas: ${Object.keys(horasExecutadasPorPlanejamento).length}`);
-        console.log(`📊 Amostra do mapa:`, Object.entries(horasExecutadasPorPlanejamento).slice(0, 3));
-
-        const finalData = planejamentos.map(plano => {
+      const finalData = [
+        ...todosPlanejamentos.map(plano => {
           const horasExec = horasExecutadasPorPlanejamento[plano.id] || {};
-          console.log(`📝 Planejamento ${plano.id} (${plano.descritivo || 'sem nome'}):`, {
-            tempo_executado: plano.tempo_executado,
-            horas_executadas_por_dia: horasExec,
-            total_dias_com_exec: Object.keys(horasExec).length
-          });
-
-          const doc = documentosMap.get(plano.documento_id) || null;
-          // Garantir que exista um campo `numero_completo` usado pela UI como identificador
+          const doc = documentosMap.get(String(plano.documento_id)) || null;
           let documentoEnriquecido = null;
           if (doc) {
             documentoEnriquecido = { ...doc };
@@ -1902,33 +1804,44 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
             documentoEnriquecido.numero_completo = parts.length ? parts.join(' - ') : (doc.titulo || doc.arquivo || null);
           }
 
+          // Merge exec records (from execucoes table) with manually adjusted hours (stored on planejamento).
+          // Exec records take precedence per day; stored field fills days not covered by any execution.
+          const storedHoras = (typeof plano.horas_executadas_por_dia === 'object' && plano.horas_executadas_por_dia)
+            ? plano.horas_executadas_por_dia
+            : {};
+          const mergedHorasExec = Object.assign({}, storedHoras, horasExec);
+
           return {
             ...plano,
-            empreendimento: empreendimentosMap.get(plano.empreendimento_id) || null,
-            atividade: atividadesMap.get(plano.atividade_id) || null,
+            empreendimento: empreendimentosMap.get(String(plano.empreendimento_id)) || null,
+            atividade: atividadesMap.get(String(plano.atividade_id)) || null,
             documento: documentoEnriquecido,
-            horas_executadas_por_dia: horasExec,
+            horas_executadas_por_dia: mergedHorasExec,
           };
-        });
+        }),
+        ...atividadesVirtuais
+      ];
 
-        console.log(`✅ Enriquecimento concluído: ${finalData.length} planejamentos`);
-        // DIAGNÓSTICO: listar resumo dos planejamentos carregados
-        finalData.forEach(p => {
-          console.log(`   Plano ID:${p.id} tipo:${p.tipo_planejamento} exec:${p.executor_principal} doc:${p.documento_id} inicio:${p.inicio_planejado} termino:${p.termino_planejado} tempo:${p.tempo_planejado}`);
-          if (p.horas_por_dia && typeof p.horas_por_dia === 'object') {
-            console.log(`      Horas por dia keys: ${Object.keys(p.horas_por_dia).slice(0, 10).join(', ')}`);
-          }
-        });
-        setEnrichedData(finalData);
+      setEnrichedData(finalData);
 
-      } catch (error) {
-        console.error("❌ Erro ao enriquecer dados do calendário:", error);
-        setEnrichedData(planejamentos);
-      }
-    };
+    } catch (error) {
+      console.error("❌ Erro ao carregar dados do calendário:", error);
+      setEnrichedData([]);
+      alert("Erro ao carregar as atividades do calendário. Tente atualizar a página.");
+    } finally {
+      setIsCalendarLoading(false);
+    }
+  }, []);
 
-    enrichData();
-  }, [planejamentos, execucoes, isCalendarLoading]); // Usa execucoes do state que já foram filtradas
+  // Disparar carregamento quando o filtro de usuário mudar ou quando updateKey mudar
+  useEffect(() => {
+    if (filters.user) {
+      loadCalendarData(filters.user);
+    } else {
+      setEnrichedData([]);
+      setIsCalendarLoading(false);
+    }
+  }, [filters.user, updateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleActivityDelete = useCallback(() => {
     if (hasSelectedUser) {
@@ -2018,7 +1931,6 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       // 6. Atualizar a atividade no banco de dados, usando a entidade correta
       await retryWithBackoff(() => entidadePlanejamento.update(atividadeParaMover.id, dadosUpdate), 3, 1500, `updateReprogrammedPlan`);
 
-      console.log(`Atividade "${atividadeParaMover.atividade?.atividade || atividadeParaMover.descritivo || atividadeParaMover.documento?.numero_completo}" reprogramada com sucesso!`);
 
       // 7. Disparar refresh para buscar os dados mais recentes
       if (hasSelectedUser) {
@@ -2050,7 +1962,6 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
     }
 
     if (destination.droppableId === source.droppableId) {
-      console.log(`Item ${draggableId} movido dentro do mesmo dia. Nenhuma ação de reprogramação.`);
       return;
     }
 
@@ -2062,17 +1973,13 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       const sourceDayKey = draggableId.replace('day-', '');
       const dayActivities = activitiesByDay[sourceDayKey] || [];
 
-      console.log(`📅 [DIA COMPLETO] Iniciando movimentação do dia ${sourceDayKey} para ${destination.droppableId}`);
-      console.log(`📦 Total de atividades no dia: ${dayActivities.length}`);
 
       // Filtrar apenas atividades que podem ser movidas
       const movableActivities = dayActivities.filter(a => {
         const canMove = !a.isLegacyExecution && a.status !== 'concluido';
-        console.log(`   - ${a.descritivo || a.atividade?.atividade || 'Sem nome'}: ${canMove ? '✅ PODE MOVER' : '❌ NÃO PODE'} (isLegacy: ${a.isLegacyExecution}, status: ${a.status})`);
         return canMove;
       });
 
-      console.log(`✅ Atividades que PODEM ser movidas: ${movableActivities.length}`);
 
       if (movableActivities.length === 0) {
         alert("Nenhuma atividade deste dia pode ser movida (todas estão concluídas ou são execuções antigas).");
@@ -2085,19 +1992,16 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       );
 
       if (!confirmed) {
-        console.log('❌ Usuário cancelou a operação');
         return;
       }
 
       // **CORRIGIDO**: Mover atividades em SEQUÊNCIA (não paralelo) para evitar rate limit
       const moveDayActivities = async () => {
-        console.log(`🚀 Iniciando movimentação de ${movableActivities.length} atividades...`);
         let successCount = 0;
         let errorCount = 0;
 
         for (let i = 0; i < movableActivities.length; i++) {
           const atividade = movableActivities[i];
-          console.log(`\n📍 [${i + 1}/${movableActivities.length}] Movendo: ${atividade.descritivo || atividade.atividade?.atividade || 'Sem nome'}`);
 
           try {
             await handleReprogramarAtividade(
@@ -2106,7 +2010,6 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
               atividade.executor_principal
             );
             successCount++;
-            console.log(`   ✅ Movida com sucesso!`);
 
             // Pequeno delay entre atividades para evitar rate limit (500ms)
             if (i < movableActivities.length - 1) {
@@ -2118,9 +2021,6 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
           }
         }
 
-        console.log(`\n📊 RESULTADO FINAL:`);
-        console.log(`   ✅ Sucesso: ${successCount}`);
-        console.log(`   ❌ Erros: ${errorCount}`);
 
         if (successCount > 0) {
           alert(`✅ ${successCount} atividade(s) do dia foram reprogramadas com sucesso!${errorCount > 0 ? `\n⚠️ ${errorCount} falharam (veja o console)` : ''}`);
@@ -2161,7 +2061,6 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
         );
       }
 
-      console.log(`➡️ Movendo grupo com ${groupActivities.length} atividade(s) de ${source.droppableId} para ${destination.droppableId}`);
 
       const invalidActivities = groupActivities.filter(a =>
         a.isLegacyExecution || a.status === 'concluido'
@@ -2204,7 +2103,6 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       ? Array.from(selectedActivities)
       : [draggableId];
 
-    console.log(`➡️ Movendo ${activitiesToMove.length} atividade(s) de ${source.droppableId} para ${destination.droppableId}`);
 
     const invalidActivities = activitiesToMove.filter(id => {
       const atividade = (enrichedData || []).find(p => normalizeActivityId(p.id) === normalizeActivityId(id));
@@ -2223,7 +2121,6 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       for (const activityId of activitiesToMove) {
         const atividadeMovida = (enrichedData || []).find(p => normalizeActivityId(p.id) === normalizeActivityId(activityId));
         if (!atividadeMovida) {
-          console.warn(`Atividade ${activityId} não encontrada para mover.`);
           continue;
         }
 
@@ -2275,6 +2172,70 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
     return basePlanejamentos;
   }, [enrichedData, filters.discipline, hasSelectedUser]);
 
+  // Pré-calcula o status de cada atividade com um Map para predecessor lookup O(1)
+  const activityStatusMap = useMemo(() => {
+    const statusMap = new Map();
+    const planMap = new Map(filteredPlanejamentos.map(p => [normalizeActivityId(p.id), p]));
+
+    filteredPlanejamentos.forEach(plano => {
+      if (plano.isLegacyExecution) {
+        statusMap.set(normalizeActivityId(plano.id), plano.status);
+        return;
+      }
+      if (plano.status === 'concluido') {
+        statusMap.set(normalizeActivityId(plano.id), 'concluido');
+        return;
+      }
+      const overdue = isActivityOverdue(plano);
+      if (plano.status === 'atrasado' || overdue) {
+        statusMap.set(normalizeActivityId(plano.id), 'atrasado');
+        return;
+      }
+
+      let foiReplanejadaParaIniciarMaisTarde = false;
+      if (plano.inicio_ajustado && plano.inicio_planejado) {
+        try {
+          const ajustado = startOfDay(parseISO(plano.inicio_ajustado));
+          const planejado = startOfDay(parseISO(plano.inicio_planejado));
+          if (isValid(ajustado) && isValid(planejado) && isAfter(ajustado, planejado)) {
+            foiReplanejadaParaIniciarMaisTarde = true;
+          }
+        } catch (_) {}
+      }
+
+      let predecessoraAtrasada = false;
+      if (plano.predecessora_id) {
+        const pred = planMap.get(normalizeActivityId(plano.predecessora_id));
+        if (pred && isActivityOverdue(pred)) predecessoraAtrasada = true;
+      }
+
+      if (foiReplanejadaParaIniciarMaisTarde || predecessoraAtrasada) {
+        statusMap.set(normalizeActivityId(plano.id), 'impactado_por_atraso');
+        return;
+      }
+
+      let wasReplannedLaterTermino = false;
+      if (plano.termino_ajustado && plano.termino_planejado) {
+        try {
+          const ajustado = startOfDay(parseISO(plano.termino_ajustado));
+          const planejado = startOfDay(parseISO(plano.termino_planejado));
+          if (isValid(ajustado) && isValid(planejado) && isAfter(ajustado, planejado)) {
+            wasReplannedLaterTermino = true;
+          }
+        } catch (_) {}
+      }
+
+      if (wasReplannedLaterTermino) {
+        statusMap.set(normalizeActivityId(plano.id), 'replanejado_atrasado');
+        return;
+      }
+
+      statusMap.set(normalizeActivityId(plano.id), plano.status || 'nao_iniciado');
+    });
+
+    return statusMap;
+  }, [filteredPlanejamentos]);
+
   const activitiesByDay = useMemo(() => {
     if (!hasSelectedUser) return {};
 
@@ -2296,20 +2257,26 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       // Para atividades rápidas (concluídas ou não), usar APENAS horas_executadas_por_dia
       // Atividades rápidas não têm planejamento de dias - aparecem onde foram executadas
       if (isQuickActivity) {
+        let hasSignificantExecutionHours = false;
         if (plano.horas_executadas_por_dia && typeof plano.horas_executadas_por_dia === 'object') {
           Object.keys(plano.horas_executadas_por_dia).forEach(dayKey => {
             const horasExec = Number(plano.horas_executadas_por_dia[dayKey]) || 0;
             // Só mostrar no dia se houver horas significativas (> 0.01h = 36 segundos)
-            // Isso evita mostrar atividades em dias onde só houve execuções muito curtas
             if (horasExec > 0.01) {
               diasParaExibir.add(dayKey);
+              hasSignificantExecutionHours = true;
             }
           });
+        }
+        // Fallback: se não há horas executadas significativas, usar o dia planejado
+        // Garante que atividades muito breves (início e fim imediato) ainda apareçam no calendário
+        if (!hasSignificantExecutionHours && plano.inicio_planejado) {
+          diasParaExibir.add(plano.inicio_planejado);
         }
         // NÃO usar horas_por_dia para atividades rápidas - esse campo pode conter dados incorretos
       } else {
         // Para atividades normais (não rápidas)
-        const realStatus = calculateActivityStatus(plano, filteredPlanejamentos);
+        const realStatus = activityStatusMap.get(normalizeActivityId(plano.id)) || plano.status || 'nao_iniciado';
         const foiExecutada = plano.horas_executadas_por_dia &&
           typeof plano.horas_executadas_por_dia === 'object' &&
           Object.keys(plano.horas_executadas_por_dia).length > 0;
@@ -2385,8 +2352,8 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
         if (a.isLegacyExecution && !b.isLegacyExecution) return 1;
         if (!a.isLegacyExecution && b.isLegacyExecution) return -1;
 
-        const statusA = calculateActivityStatus(a, filteredPlanejamentos);
-        const statusB = calculateActivityStatus(b, filteredPlanejamentos);
+        const statusA = activityStatusMap.get(normalizeActivityId(a.id)) || a.status || 'nao_iniciado';
+        const statusB = activityStatusMap.get(normalizeActivityId(b.id)) || b.status || 'nao_iniciado';
 
         if (statusA === 'concluido' && statusB !== 'concluido') return 1;
         if (statusA !== 'concluido' && statusB === 'concluido') return -1;
@@ -2432,21 +2399,8 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       }
     });
 
-    // Adicionar carga de execuções virtuais (legadas)
-    (execucoes || []).forEach(exec => {
-      // Somente execuções que não estão ligadas a um planejamento existente já considerado
-      if (!(exec.planejamento_id && filteredPlanejamentos.some(p => normalizeActivityId(p.id) === normalizeActivityId(exec.planejamento_id)))) {
-        const userEmail = exec.usuario;
-        const dayKey = exec.inicio ? format(startOfDay(parseLocalDate(exec.inicio)), 'yyyy-MM-dd') : null;
-        if (userEmail && dayKey) {
-          if (!carga[userEmail]) carga[userEmail] = {};
-          carga[userEmail][dayKey] = (carga[userEmail][dayKey] || 0) + (exec.tempo_total || 0);
-        }
-      }
-    });
-
     return carga;
-  }, [filteredPlanejamentos, execucoes, hasSelectedUser]);
+  }, [filteredPlanejamentos, hasSelectedUser]);
 
   // Funções de navegação
   const handleDateChange = (direction) => {
@@ -2501,7 +2455,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       soma += horasDia;
     });
 
-    return Math.ceil(soma * 10) / 10;
+    return soma;
   }, [currentDate, activitiesByDay, viewMode]);
 
   const headerTitle = useMemo(() => {
@@ -2523,13 +2477,11 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
 
     if ((isGestao || isColaborador || isApoio) && !temPermissao) {
       const tipoUsuario = isGestao ? 'gestão' : isColaborador ? 'colaborador' : 'apoio';
-      console.log(`🔒 Perfil ${tipoUsuario} não pode limpar filtro de usuário`);
       setFilters(prev => ({ ...prev, discipline: 'all' })); // Só limpa disciplina
       clearSelection();
       return;
     }
 
-    console.log('🧹 Limpando filtros e seleção de usuário...');
     setFilters({
       user: '', // Limpa seleção de usuário
       discipline: 'all'
@@ -2611,7 +2563,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
                   <span>{`Calendário - ${selectedUserName} (${filteredPlanejamentos.length})`}</span>
                   {viewMode === 'day' && (
                     <span className="text-sm font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">
-                      {horasDoDia}h planejadas
+                      {formatHours(horasDoDia)}h planejadas
                     </span>
                   )}
                 </div>
@@ -2677,11 +2629,9 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
             const usuariosPermitidosLocal = userProfile?.usuarios_permitidos_visualizar || [];
             const temPermissao = Array.isArray(usuariosPermitidosLocal) && usuariosPermitidosLocal.length > 0;
 
-            console.log('🔄 onFilterChange:', { key, value, temPermissao, usuariosPermitidos: usuariosPermitidosLocal });
 
             if ((isGestao || isColaborador || isApoio) && !temPermissao && key === 'user') {
               const tipoUsuario = isGestao ? 'gestão' : isColaborador ? 'colaborador' : 'apoio';
-              console.log(`🔒 Perfil ${tipoUsuario} não pode mudar de usuário`);
               return;
             }
             setFilters(prev => ({ ...prev, [key]: value }));

@@ -19,6 +19,23 @@ const ETAPAS_PADRAO = [
   "Etapa 7"
 ];
 
+const normalizeEtapas = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .flatMap(item => String(item || '').split(/[\n,;|]+/))
+      .map(item => item.trim())
+      .filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/[\n,;|]+/)
+      .map(item => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+};
+
 export default function EmpreendimentoForm({ empreendimento, onSubmit, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     nome: empreendimento?.nome || "",
@@ -27,7 +44,7 @@ export default function EmpreendimentoForm({ empreendimento, onSubmit, onClose, 
     num_proposta: empreendimento?.num_proposta || "",
     status: empreendimento?.status || "em_planejamento",
     foto_url: empreendimento?.foto_url || "",
-    etapas: empreendimento?.etapas || [
+    etapas: normalizeEtapas(empreendimento?.etapas) || [
       "Estudo Preliminar",
       "Ante-Projeto",
       "Projeto Básico",
@@ -38,7 +55,7 @@ export default function EmpreendimentoForm({ empreendimento, onSubmit, onClose, 
   
   const [etapasEditaveis, setEtapasEditaveis] = useState(() => {
     // Inicializar com as etapas existentes ou 7 etapas vazias
-    const etapasAtuais = empreendimento?.etapas || [];
+    const etapasAtuais = normalizeEtapas(empreendimento?.etapas);
     return ETAPAS_PADRAO.map((_, index) => etapasAtuais[index] || "");
   });
   const [isUploading, setIsUploading] = useState(false);

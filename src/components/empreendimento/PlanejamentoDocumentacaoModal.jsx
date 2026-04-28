@@ -140,7 +140,6 @@ export default function PlanejamentoDocumentacaoModal({
     setIsSubmitting(true);
 
     try {
-      console.log('🎯 Iniciando planejamento de documentação...');
 
       const atividadesParaPlanejar = todasAtividades
         .filter(ativ => selectedAtividades.has(ativ.id))
@@ -168,7 +167,6 @@ export default function PlanejamentoDocumentacaoModal({
           });
         }
       });
-      console.log('📊 Carga diária INICIAL do executor:', { ...cargaDiariaAtual });
 
       let dataInicioSequencia;
       if (metodoCalculo === 'manual') {
@@ -194,7 +192,6 @@ export default function PlanejamentoDocumentacaoModal({
       }
       dataInicioSequencia = getNextWorkingDay(dataInicioSequencia); // Ensure start on a working day
 
-      console.log('🚀 Data de início final:', format(dataInicioSequencia, 'yyyy-MM-dd'));
 
       const novosPlanejamentos = [];
 
@@ -202,11 +199,9 @@ export default function PlanejamentoDocumentacaoModal({
         const horasAtividadeOriginal = Number(atividade.tempo) || 0;
 
         if (horasAtividadeOriginal <= 0) {
-          console.log(`⏭️ Pulando atividade sem tempo: ${atividade.atividade}`);
           continue;
         }
 
-        console.log(`\n🔄 Processando: ${atividade.atividade} (${horasAtividadeOriginal}h)`);
 
         // CRITICAL: Call `distribuirHorasPorDias` with the current accumulated load
         // and explicitly pass `false` for `considerWorkingDaysOnly` as per outline.
@@ -226,8 +221,6 @@ export default function PlanejamentoDocumentacaoModal({
 
         const { distribuicao, dataTermino } = resultado;
 
-        console.log(`📊 Distribuição da atividade (${horasAtividadeOriginal}h):`, distribuicao);
-        console.log(`📅 Data de término: ${format(dataTermino, 'yyyy-MM-dd')}`);
 
         // CRITICAL: Update the accumulated `cargaDiariaAtual` with the hours distributed for the current activity.
         // This ensures subsequent activities are planned against an up-to-date schedule.
@@ -254,21 +247,17 @@ export default function PlanejamentoDocumentacaoModal({
         
         // The next activity will start from the next working day after the current one's completion.
         dataInicioSequencia = getNextWorkingDay(dataTermino);
-        console.log(`➡️ Próxima atividade começará em: ${format(dataInicioSequencia, 'yyyy-MM-dd')}`);
       }
       
       if (novosPlanejamentos.length === 0) {
         throw new Error('Nenhum planejamento foi gerado. Verifique as atividades selecionadas.');
       }
 
-      console.log(`💾 Salvando ${novosPlanejamentos.length} planejamentos...`);
       
       for (const planejamento of novosPlanejamentos) {
-        console.log(`💾 Salvando: ${planejamento.descritivo} - ${planejamento.tempo_planejado}h`);
         await retryWithExtendedBackoff(() => PlanejamentoAtividade.create(planejamento), `createPlanejamento-${planejamento.atividade_id}`);
       }
 
-      console.log('✅ Todos os planejamentos salvos com sucesso!');
 
       const totalHorasPlanejadas = novosPlanejamentos.reduce((total, p) => total + p.tempo_planejado, 0);
       alert(`✅ ${novosPlanejamentos.length} atividades de documentação planejadas!\n\nTotal de horas: ${totalHorasPlanejadas.toFixed(1)}h`);

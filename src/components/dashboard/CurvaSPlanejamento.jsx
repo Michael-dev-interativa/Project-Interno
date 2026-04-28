@@ -33,7 +33,6 @@ export default function CurvaSPlanejamento({ isLoading: isDashboardLoading, onRe
   const loadCurvaSData = useCallback(async (forceRefresh = false) => {
     const now = Date.now();
     if (!forceRefresh && cacheRef.current.data && (now - cacheRef.current.timestamp) < cacheRef.current.ttl) {
-      console.log('📦 [CurvaS] Usando dados do cache');
       setPlanejamentos(cacheRef.current.data.planejamentos);
       setExecucoes(cacheRef.current.data.execucoes);
       setEmpreendimentos(cacheRef.current.data.empreendimentos);
@@ -43,7 +42,6 @@ export default function CurvaSPlanejamento({ isLoading: isDashboardLoading, onRe
 
     setIsLoading(true);
     try {
-        console.log('🔄 [CurvaS] Carregando dados...');
         
         // **MODIFICADO**: Carregar ambos PlanejamentoAtividade, PlanejamentoDocumento e Empreendimentos
         const [planAtividadeData, planDocumentoData, execData, empData] = await Promise.all([
@@ -91,7 +89,6 @@ export default function CurvaSPlanejamento({ isLoading: isDashboardLoading, onRe
           timestamp: now
         };
         
-        console.log(`✅ [CurvaS] Dados carregados: ${finalPlanData.length} planejamentos, ${finalExecData.length} execuções, ${(empData || []).length} empreendimentos`);
         
     } catch (error) {
         console.error("❌ Erro ao carregar dados para a Curva S:", error);
@@ -108,7 +105,6 @@ export default function CurvaSPlanejamento({ isLoading: isDashboardLoading, onRe
 
   useEffect(() => {
     if (!dataLoaded) {
-      console.log('👁️ [CurvaS] Componente visível, carregando dados...');
       // **MODIFICADO**: Adicionar delay antes de carregar
       const timeout = setTimeout(() => {
         loadCurvaSData();
@@ -128,7 +124,6 @@ export default function CurvaSPlanejamento({ isLoading: isDashboardLoading, onRe
       }))
       .sort((a, b) => a.nome.localeCompare(b.nome));
     
-    console.log('📍 Empreendimentos disponíveis carregados do banco:', resultado);
     return resultado;
   }, [empreendimentos]);
 
@@ -139,7 +134,7 @@ export default function CurvaSPlanejamento({ isLoading: isDashboardLoading, onRe
   const planejamentosFiltrados = useMemo(() => {
     let filtered = planejamentos;
     if (selectedEmpreendimento !== 'all') {
-      filtered = filtered.filter(plano => plano.empreendimento_id === selectedEmpreendimento);
+      filtered = filtered.filter(plano => String(plano.empreendimento_id) === String(selectedEmpreendimento));
     }
     if (selectedUser !== 'all') {
       filtered = filtered.filter(plano => plano.executor_principal === selectedUser);
@@ -156,7 +151,7 @@ export default function CurvaSPlanejamento({ isLoading: isDashboardLoading, onRe
       : execucoes;
     
     if (selectedEmpreendimento !== 'all') {
-      filtered = filtered.filter(exec => exec.empreendimento_id === selectedEmpreendimento);
+      filtered = filtered.filter(exec => String(exec.empreendimento_id) === String(selectedEmpreendimento));
     }
     if (selectedUser !== 'all') {
       filtered = filtered.filter(exec => exec.usuario === selectedUser);
@@ -261,7 +256,6 @@ export default function CurvaSPlanejamento({ isLoading: isDashboardLoading, onRe
                         executadoDoDia += Number(exec.tempo_total) || 0;
                     }
                 } catch (error) {
-                    console.warn(`⚠️ Erro ao processar data da execução ${exec.id}:`, error);
                 }
             }
         });

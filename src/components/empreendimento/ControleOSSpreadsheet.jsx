@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Grid3x3, List } from "lucide-react";
@@ -33,7 +34,7 @@ const getStatusBgColor = (status) => {
 
 const StatusCell = ({ status, editable, onUpdate, customOptions }) => {
   const [isEditing, setIsEditing] = useState(false);
-
+  
   if (!editable) {
     return (
       <div
@@ -46,7 +47,7 @@ const StatusCell = ({ status, editable, onUpdate, customOptions }) => {
   }
 
   const statusOptions = customOptions || [
-    "NA", "Concluído", "Pendente", "Em andamento", "Hold",
+    "NA", "Concluído", "Pendente", "Em andamento", "Hold", 
     "Paralisado", "Técnico", "Ag. Liberação", "Finalizado", "Em aprovação"
   ];
 
@@ -84,7 +85,7 @@ const StatusCell = ({ status, editable, onUpdate, customOptions }) => {
 const GestaoCell = ({ value, editable, onUpdate, usuarios }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [tempValue, setTempValue] = useState(value || '');
-
+  
   if (!editable) {
     return (
       <div className="px-2 py-1 text-xs">
@@ -133,7 +134,7 @@ const GestaoCell = ({ value, editable, onUpdate, usuarios }) => {
 const FormalizacaoCell = ({ value, editable, onUpdate }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [localValue, setLocalValue] = useState(value || '');
-
+  
   if (!editable) {
     return (
       <div className="px-2 py-1 text-xs">
@@ -299,7 +300,7 @@ export default function ControleOSSpreadsheet({ controlesOS, empreendimentos, se
   }, [controlesOS, empreendimentos, searchTerm, empreendimentosMap]);
 
   const planejamentoOptions = [
-    "NA", "Concluído", "Pendente", "Em andamento", "Hold",
+    "NA", "Concluído", "Pendente", "Em andamento", "Hold", 
     "Paralisado", "Técnico", "Ag. Liberação", "Finalizado"
   ];
 
@@ -333,7 +334,7 @@ export default function ControleOSSpreadsheet({ controlesOS, empreendimentos, se
   ];
 
   const concessionariaOptions = [
-    "NA", "Concluído", "Pendente", "Em andamento", "Hold",
+    "NA", "Concluído", "Pendente", "Em andamento", "Hold", 
     "Paralisado", "Técnico", "Ag. Liberação", "Finalizado", "Em aprovação"
   ];
 
@@ -393,8 +394,7 @@ export default function ControleOSSpreadsheet({ controlesOS, empreendimentos, se
       columns: [
         { key: 'projeto', label: 'PROJETO', width: '200px' },
         { key: 'planejamento_hidraulica_concepcao', label: 'CONCEPÇÃO', width: '100px', isStatus: true, statusOptions: planejamentoOptions },
-        { key: 'planejamento_hidraulica_calculo', label: 'CÁLCULO', width: '100px', isStatus: true, statusOptions: planejamentoOptions },
-        { key: 'planejamento_hidraulica_diagrama', label: 'DIAGRAMA', width: '100px', isStatus: true, statusOptions: planejamentoOptions }
+        { key: 'planejamento_hidraulica_calculo', label: 'CÁLCULO', width: '100px', isStatus: true, statusOptions: planejamentoOptions }
       ]
     },
     eletrica: {
@@ -411,8 +411,7 @@ export default function ControleOSSpreadsheet({ controlesOS, empreendimentos, se
       columns: [
         { key: 'projeto', label: 'PROJETO', width: '200px' },
         { key: 'planejamento_incendio_concepcao', label: 'CONCEPÇÃO', width: '100px', isStatus: true, statusOptions: planejamentoOptions },
-        { key: 'planejamento_incendio_calculo', label: 'CÁLCULO', width: '100px', isStatus: true, statusOptions: planejamentoOptions },
-        { key: 'planejamento_incendio_diagrama', label: 'DIAGRAMA', width: '100px', isStatus: true, statusOptions: planejamentoOptions }
+        { key: 'planejamento_incendio_calculo', label: 'CÁLCULO', width: '100px', isStatus: true, statusOptions: planejamentoOptions }
       ]
     },
     sistemas: {
@@ -420,8 +419,7 @@ export default function ControleOSSpreadsheet({ controlesOS, empreendimentos, se
       columns: [
         { key: 'projeto', label: 'PROJETO', width: '200px' },
         { key: 'planejamento_sistemas_eletronicos_concepcao', label: 'CONCEPÇÃO', width: '100px', isStatus: true, statusOptions: planejamentoOptions },
-        { key: 'planejamento_sistemas_eletronicos_calculo', label: 'CÁLCULO', width: '100px', isStatus: true, statusOptions: planejamentoOptions },
-        { key: 'planejamento_sistemas_eletronicos_diagrama', label: 'DIAGRAMA', width: '100px', isStatus: true, statusOptions: planejamentoOptions }
+        { key: 'planejamento_sistemas_eletronicos_calculo', label: 'CÁLCULO', width: '100px', isStatus: true, statusOptions: planejamentoOptions }
       ]
     },
     ar: {
@@ -481,7 +479,7 @@ export default function ControleOSSpreadsheet({ controlesOS, empreendimentos, se
               </thead>
               <tbody>
                 {filteredControles.map((row, idx) => (
-                  <tr key={`${tableKey}-fixed-${row.id ?? 'sem-id'}-${idx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} style={{ height: '30px' }}>
+                  <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} style={{ height: '30px' }}>
                     <td className="border border-gray-300 whitespace-nowrap font-medium align-middle" style={{ height: '30px', padding: '0 8px' }}>
                       {row.projeto || 'NA'}
                     </td>
@@ -490,7 +488,7 @@ export default function ControleOSSpreadsheet({ controlesOS, empreendimentos, se
               </tbody>
             </table>
           </div>
-
+          
           {/* Tabelas com scroll horizontal */}
           <div className="flex-1 overflow-x-auto">
             <table className="text-xs w-full" style={{ borderCollapse: 'collapse' }}>
@@ -514,30 +512,30 @@ export default function ControleOSSpreadsheet({ controlesOS, empreendimentos, se
               </thead>
               <tbody>
                 {filteredControles.map((row, idx) => (
-                  <tr key={`${tableKey}-main-${row.id ?? 'sem-id'}-${idx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} style={{ height: '30px' }}>
+                  <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} style={{ height: '30px' }}>
                     {columns.slice(1).map((col) => {
                       const value = row[col.key] || (col.type === 'text' ? '' : 'NA');
                       return (
                         <td key={col.key} className="border border-gray-300 whitespace-nowrap align-middle" style={{ height: '30px', padding: '0 8px' }}>
                           {col.isStatus ? (
-                            <StatusCell
-                              status={value}
+                            <StatusCell 
+                              status={value} 
                               editable={editable}
-                              onUpdate={(newValue) => onUpdate && onUpdate(row.empreendimento_id, col.key, newValue)}
+                              onUpdate={(newValue) => onUpdate && onUpdate(row.id, col.key, newValue)}
                               customOptions={col.statusOptions}
                             />
                           ) : col.type === 'gestao' ? (
-                            <GestaoCell
+                            <GestaoCell 
                               value={value === 'NA' ? '' : value}
                               editable={editable}
-                              onUpdate={(newValue) => onUpdate && onUpdate(row.empreendimento_id, col.key, newValue)}
+                              onUpdate={(newValue) => onUpdate && onUpdate(row.id, col.key, newValue)}
                               usuarios={usuarios}
                             />
                           ) : col.type === 'formalizacao' ? (
-                            <FormalizacaoCell
+                            <FormalizacaoCell 
                               value={value}
                               editable={editable}
-                              onUpdate={(newValue) => onUpdate && onUpdate(row.empreendimento_id, col.key, newValue)}
+                              onUpdate={(newValue) => onUpdate && onUpdate(row.id, col.key, newValue)}
                             />
                           ) : value}
                         </td>

@@ -34,10 +34,8 @@ export const retryWithBackoff = async (fn, retries = 3, delayMs = 2000, context 
       
       if (isRateLimit) {
         backoffDelay = Math.min(120000, delayMs * Math.pow(4, i) + Math.random() * 10000); // Até 2 minutos
-        console.warn(`🚫 [${context}] Rate limit na tentativa ${i + 1}/${retries}. Aguardando ${Math.round(backoffDelay/1000)}s...`);
       } else {
         backoffDelay = delayMs * Math.pow(2, i) + Math.random() * 2000;
-        console.warn(`⚠️ [${context}] Tentativa ${i + 1}/${retries} falhou. Nova tentativa em ${Math.round(backoffDelay/1000)}s...`);
       }
       
       await new Promise(resolve => setTimeout(resolve, backoffDelay));
@@ -83,10 +81,8 @@ export const retryWithExtendedBackoff = async (fn, context = 'default') => {
       
       if (isRateLimit) {
         backoffDelay = Math.min(150000, baseDelay * Math.pow(5, i) + Math.random() * 15000); // Até 2.5 minutos
-        console.warn(`🚫 [${context}] Rate limit (backoff estendido) na tentativa ${i + 1}/${maxRetries}. Aguardando ${Math.round(backoffDelay/1000)}s...`);
       } else {
         backoffDelay = baseDelay * Math.pow(2.5, i) + Math.random() * 3000;
-        console.warn(`⚠️ [${context}] Tentativa ${i + 1}/${maxRetries} (backoff estendido) falhou. Nova tentativa em ${Math.round(backoffDelay/1000)}s...`);
       }
       
       await new Promise(resolve => setTimeout(resolve, backoffDelay));
@@ -104,7 +100,6 @@ export const executeSequentialWithDelay = async (tasks, delayBetween = 1000) => 
       const result = await tasks[i]();
       results.push(result);
     } catch (error) {
-      console.warn(`Tarefa ${i} falhou:`, error);
       results.push(null);
     }
   }

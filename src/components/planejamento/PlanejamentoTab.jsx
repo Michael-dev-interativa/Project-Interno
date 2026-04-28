@@ -118,7 +118,9 @@ export default function PlanejamentoTab({ empreendimentoId }) {
 
         return {
           ...plano,
-          atividade: atividadeObj?.atividade || plano.descritivo || 'Atividade não encontrada',
+          atividade: atividadeObj?.atividade || plano.descritivo
+            || [documento?.numero, documento?.arquivo, plano.etapa].filter(Boolean).join(' - ')
+            || 'Atividade não encontrada',
           atividadeObj,
           disciplina: atividadeObj?.disciplina || plano.etapa,
           documento,
@@ -206,7 +208,6 @@ export default function PlanejamentoTab({ empreendimentoId }) {
         if (error.message?.includes("Object not found") || 
             error.message?.includes("ObjectNotFoundError") ||
             error.response?.status === 404) {
-          console.warn("Planejamento já foi excluído anteriormente");
           enrichPlanejamentos();
         } else {
           alert("Erro ao excluir planejamento. Tente novamente.");

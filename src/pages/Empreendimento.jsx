@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback, useMemo, useContext } from "react";
+// @ts-nocheck
+import { useState, useEffect, useCallback, useMemo, useContext } from "react";
 import { useLocation } from "react-router-dom";
 import {
   Empreendimento,
   Documento,
   Disciplina,
   Atividade,
-  AtividadeGenerica,
   PlanejamentoAtividade,
   Usuario,
   Pavimento,
@@ -14,19 +14,18 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RefreshCw, AlertCircle, ListChecks } from "lucide-react";
+import { RefreshCw, AlertCircle } from "lucide-react";
 import { retryWithBackoff, retryWithExtendedBackoff } from "../components/utils/apiUtils";
 
 import EmpreendimentoHeader from "../components/empreendimento/EmpreendimentoHeader";
 import DocumentosTab from "../components/empreendimento/DocumentosTab";
 import PavimentosTab from "../components/empreendimento/PavimentosTab";
-import AtividadesProjetoTab from "../components/empreendimento/AtividadesProjetoTab";
 import AnaliticoGlobalTab from "../components/empreendimento/AnaliticoGlobalTab";
-import AnaliseConcepcaoPlanejamentoTab from "../components/empreendimento/AnaliseConcepcaoPlanejamentoTab";
 import GestaoTab from "../components/empreendimento/GestaoTab";
 import PRETab from "../components/empreendimento/PRETab";
 import CadastroTab from "../components/empreendimento/CadastroTab";
 import ControleOSTab from "../components/empreendimento/ControleOSTab";
+import { ChecklistCadastroTab } from "@/pages/ChecklistCadastro";
 import { ActivityTimerContext } from "@/components/contexts/ActivityTimerContext";
 
 export default function EmpreendimentoPage() {
@@ -40,7 +39,8 @@ export default function EmpreendimentoPage() {
     pavimentos: { data: [], loaded: false, loading: false },
     atividades_projeto: { data: [], loaded: false, loading: false },
     gestao: { data: [], loaded: false, loading: false },
-    controle_os: { data: [], loaded: false, loading: false }
+    controle_os: { data: [], loaded: false, loading: false },
+    checklists: { data: [], loaded: false, loading: false }
   });
 
   const [sharedData, setSharedData] = useState({
@@ -53,7 +53,27 @@ export default function EmpreendimentoPage() {
   });
 
   const [activeTab, setActiveTab] = useState('documentos');
+  const [mountedTabs, setMountedTabs] = useState(new Set(['documentos']));
   const [etapaParaPlanejamento, setEtapaParaPlanejamento] = useState('todas');
+
+  const etapasConfiguradas = useMemo(() => {
+    const etapas = (empreendimento?.etapas || [])
+      .map(etapa => String(etapa || '').trim())
+      .filter(Boolean);
+    return [...new Set(etapas)];
+  }, [empreendimento?.etapas]);
+
+  useEffect(() => {
+    if (etapasConfiguradas.length === 0) {
+      if (etapaParaPlanejamento !== 'todas') {
+        setEtapaParaPlanejamento('todas');
+      }
+      return;
+    }
+    if (etapasConfiguradas.length === 1 && etapaParaPlanejamento === 'todas') {
+      setEtapaParaPlanejamento(etapasConfiguradas[0]);
+    }
+  }, [etapasConfiguradas, etapaParaPlanejamento]);
 
   const empreendimentoQueryId = useMemo(() =>
     new URLSearchParams(location.search).get("id"), [location.search]
@@ -61,12 +81,13 @@ export default function EmpreendimentoPage() {
 
   const empreendimentoFilterId = empreendimento?.id || null;
 
-  const { user } = useContext(ActivityTimerContext);
+  const { user, hasPermission, perfilAtual } = useContext(ActivityTimerContext);
   const hasAccessToGestao = user && (
     user.role === 'admin' ||
     user.perfil === 'lider' ||
     user.perfil === 'direcao'
   );
+   const hasChecklistAccess = hasPermission('coordenador') || perfilAtual === 'consultor';
 
   const canEdit = user && (
     user.role === 'admin' ||
@@ -120,57 +141,48 @@ export default function EmpreendimentoPage() {
   const loadSharedData = useCallback(async () => {
     if (!empreendimentoFilterId) return;
 
-    // Force load: avoid depending on stale `sharedData` closure values which
-    // can cause an early return. Mark loading immediately.
-    setSharedData(prev => ({ ...prev, loading: true }));
+    setSharedData(prev => {
+      if (prev.loading || prev.loaded) return prev;
+      return { ...prev, loading: true };
+    });
 
     try {
-      const [disciplinasData, usuariosData, atividadesData, execucoesData] = await Promise.all([
+      const { base44: b44 } = await import('@/api/base44Client');
+
+      const [
+        disciplinasData,
+        usuariosData,
+        atividadesGenericasData,
+        atividadesEmpData,
+        atividadesProjetoData,
+        execucoesData,
+      ] = await Promise.all([
         retryWithBackoff(() => Disciplina.list(), 3, 1000, 'loadDisciplinas'),
         retryWithBackoff(() => Usuario.list(), 3, 1000, 'loadUsuarios'),
-        retryWithExtendedBackoff(() => AtividadeGenerica.list(null, 5000), 'loadAtividadesGlobais'),
-        retryWithExtendedBackoff(() => Execucao.filter({ empreendimento_id: empreendimentoFilterId }), 'loadExecucoes')
+        retryWithBackoff(() => Atividade.list(null, 500), 3, 1000, 'loadAtividadesGenericas'),
+        retryWithBackoff(() => b44.entities.AtividadesEmpreendimento.filter({ empreendimento_id: empreendimentoFilterId }), 3, 1000, 'loadAtividadesEmp').catch(() => []),
+        retryWithBackoff(() => Atividade.filter({ empreendimento_id: empreendimentoFilterId }), 3, 1000, 'loadAtividadesProjeto').catch(() => []),
+        retryWithExtendedBackoff(() => Execucao.filter({ empreendimento_id: empreendimentoFilterId }), 'loadExecucoes'),
       ]);
-
-      // Também carregar atividades específicas do empreendimento (atividades_empreendimento)
-      let atividadesEmpreendimento = [];
-      let atividadesProjetoEspecificas = [];
-      try {
-        const { base44 } = await import('@/api/base44Client');
-        atividadesEmpreendimento = await retryWithExtendedBackoff(() => base44.entities.AtividadesEmpreendimento.filter({ empreendimento_id: empreendimentoFilterId }), 'loadAtividadesEmpreendimento');
-      } catch (err) {
-        console.warn('Não foi possível carregar atividades por empreendimento:', err);
-        atividadesEmpreendimento = [];
-      }
-
-      try {
-        atividadesProjetoEspecificas = await retryWithExtendedBackoff(() => Atividade.filter({ empreendimento_id: empreendimentoFilterId }), 'loadAtividadesProjetoCatalog');
-      } catch (err) {
-        console.warn('Não foi possível carregar atividades do empreendimento:', err);
-        atividadesProjetoEspecificas = [];
-      }
-
-      // Mesclar atividades globais (mãe) com as atividades específicas do empreendimento
-      const mergedAtividades = [
-        ...(atividadesData || []),
-        ...(atividadesEmpreendimento || []),
-        ...(atividadesProjetoEspecificas || [])
-      ];
 
       setSharedData({
         disciplinas: disciplinasData || [],
         usuarios: usuariosData || [],
-        atividades: mergedAtividades,
+        atividades: [
+          ...(atividadesGenericasData || []),
+          ...(atividadesEmpData || []),
+          ...(atividadesProjetoData || []),
+        ],
         execucoes: execucoesData || [],
         loaded: true,
-        loading: false
+        loading: false,
       });
 
     } catch (err) {
       console.error("Erro ao carregar dados compartilhados:", err);
       setSharedData(prev => ({ ...prev, loading: false }));
     }
-  }, [empreendimentoFilterId, sharedData.loading, sharedData.loaded]);
+  }, [empreendimentoFilterId]);
 
   const loadTabData = useCallback(async (tabName) => {
     if (!empreendimentoFilterId || tabData[tabName]?.loading || tabData[tabName]?.loaded) return;
@@ -183,8 +195,8 @@ export default function EmpreendimentoPage() {
     try {
       let data = [];
 
-      switch (tabName) {
-        case 'documentos':
+    switch (tabName) {
+      case 'documentos':
           const [documentosData, planejamentosAtividadeData, planejamentosDocumentoData] = await Promise.all([
             retryWithExtendedBackoff(() => Documento.filter({ empreendimento_id: empreendimentoFilterId }), 'loadDocumentos'),
             retryWithExtendedBackoff(() => PlanejamentoAtividade.filter({ empreendimento_id: empreendimentoFilterId }), 'loadPlanejamentosAtividade'),
@@ -205,26 +217,30 @@ export default function EmpreendimentoPage() {
               tipo_plano: p.documento_id && !p.atividade_id ? 'documento' : 'atividade'
             })),
           };
-          break;
+        break;
 
-        case 'pavimentos':
+      case 'pavimentos':
           data = await retryWithExtendedBackoff(() => Pavimento.filter({ empreendimento_id: empreendimentoFilterId }), 'loadPavimentos');
-          break;
+        break;
 
-        case 'atividades_projeto':
+      case 'atividades_projeto':
           data = await retryWithExtendedBackoff(() => Atividade.filter({ empreendimento_id: empreendimentoFilterId }), 'loadAtividadesProjeto');
-          break;
+        break;
 
-        case 'gestao':
-          data = {};
-          break;
+      case 'gestao':
+        data = {};
+        break;
 
-        case 'controle_os':
-          data = {};
+      case 'pre':
+      case 'checklists':
+        data = {};
+        break;
+
+      case 'controle_os':
+        data = {};
           break;
 
         default:
-          console.warn(`Aba desconhecida: ${tabName}`);
           break;
       }
 
@@ -252,50 +268,26 @@ export default function EmpreendimentoPage() {
         [tabName]: { ...prev[tabName], loading: false }
       }));
     }
-  }, [empreendimentoFilterId, tabData]);
+  }, [empreendimentoFilterId]);
 
   const handleTabChange = useCallback((newTab) => {
     setActiveTab(newTab);
+    setMountedTabs(prev => { prev.add(newTab); return new Set(prev); });
 
-    if (!sharedData.loaded && !sharedData.loading) {
-      loadSharedData();
+    if (!sharedData.loaded && !sharedData.loading) loadSharedData();
+
+    const needsLoad = newTab !== 'gestao' && !tabData[newTab]?.loaded && !tabData[newTab]?.loading;
+    if (needsLoad) loadTabData(newTab);
+
+    if (newTab === 'atividades_projeto' || newTab === 'documentos' || newTab === 'gestao') {
+      if (!tabData.documentos?.loaded && !tabData.documentos?.loading) loadTabData('documentos');
+      if (!tabData.pavimentos?.loaded && !tabData.pavimentos?.loading) loadTabData('pavimentos');
     }
 
-    if (newTab !== 'gestao' && !tabData[newTab]?.loaded && !tabData[newTab]?.loading) {
-      loadTabData(newTab);
+    if (newTab === 'gestao' && !tabData.gestao?.loaded) {
+      setTabData(prev => ({ ...prev, gestao: { ...prev.gestao, loaded: true } }));
     }
-
-    if (newTab === 'atividades_projeto') {
-      if (!tabData.documentos.loaded && !tabData.documentos.loading) {
-        loadTabData('documentos');
-      }
-      if (!tabData.pavimentos.loaded && !tabData.pavimentos.loading) {
-        loadTabData('pavimentos');
-      }
-    }
-
-    if (newTab === 'documentos' && !tabData.pavimentos.loaded && !tabData.pavimentos.loading) {
-      loadTabData('pavimentos');
-    }
-
-    if (newTab === 'gestao') {
-      if (!tabData.documentos.loaded && !tabData.documentos.loading) {
-        loadTabData('documentos');
-      }
-      if (!tabData.pavimentos.loaded && !tabData.pavimentos.loading) {
-        loadTabData('pavimentos');
-      }
-      if (!tabData.gestao.loaded) {
-        setTabData(prev => ({
-          ...prev,
-          gestao: { ...prev.gestao, loaded: true }
-        }));
-      }
-    }
-
-
-
-  }, [sharedData.loaded, sharedData.loading, tabData, loadSharedData, loadTabData]);
+  }, [loadSharedData, loadTabData, sharedData, tabData]);
 
   const forceFullReload = useCallback(() => {
     setTabData({
@@ -303,7 +295,8 @@ export default function EmpreendimentoPage() {
       pavimentos: { data: [], loaded: false, loading: false },
       atividades_projeto: { data: [], loaded: false, loading: false },
       gestao: { data: [], loaded: false, loading: false },
-      controle_os: { data: [], loaded: false, loading: false }
+      controle_os: { data: [], loaded: false, loading: false },
+      checklists: { data: [], loaded: false, loading: false }
     });
     // mark shared data stale and trigger an immediate reload to avoid
     // race conditions where state updates are not visible to subsequent checks
@@ -321,8 +314,11 @@ export default function EmpreendimentoPage() {
   useEffect(() => {
     if (empreendimento) {
       handleTabChange(activeTab);
+      // Pré-carregar sharedData em paralelo sem bloquear a aba principal
+      loadSharedData();
     }
-  }, [empreendimento, activeTab, handleTabChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empreendimento?.id]);
 
   if (isLoadingEmpreendimento) {
     return (
@@ -354,6 +350,9 @@ export default function EmpreendimentoPage() {
 
   const isGestaoLoading = sharedData.loading || tabData.documentos.loading || tabData.pavimentos.loading;
   const isGestaoLoaded = sharedData.loaded && tabData.documentos.loaded && tabData.pavimentos.loaded;
+  const tabsGridClass = canEdit
+    ? (hasAccessToGestao ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-8' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-7')
+    : 'grid-cols-3';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -361,8 +360,9 @@ export default function EmpreendimentoPage() {
         <EmpreendimentoHeader empreendimento={empreendimento} />
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className={`grid w-full ${canEdit ? (hasAccessToGestao ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-7' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6') : 'grid-cols-3'} bg-white shadow-sm`}>
+        <TabsList className={`grid w-full ${tabsGridClass} bg-white shadow-sm`}>
             {visibleTabsForUser.includes('documentos') && <TabsTrigger value="documentos">Documentos</TabsTrigger>}
+            {hasChecklistAccess && <TabsTrigger value="checklists">Check-List</TabsTrigger>}
             {visibleTabsForUser.includes('cadastro') && <TabsTrigger value="cadastro">Cadastro</TabsTrigger>}
             {visibleTabsForUser.includes('pavimentos') && <TabsTrigger value="pavimentos">Pavimentos</TabsTrigger>}
             {visibleTabsForUser.includes('atividades_projeto') && <TabsTrigger value="atividades_projeto">Atividades do Projeto</TabsTrigger>}
@@ -374,12 +374,12 @@ export default function EmpreendimentoPage() {
           </TabsList>
 
           <TabsContent value="documentos">
-            {tabData.documentos.loading || sharedData.loading || tabData.pavimentos.loading ? (
+            {tabData.documentos.loading || tabData.pavimentos.loading ? (
               <div className="flex flex-col items-center justify-center h-96">
                 <RefreshCw className="w-8 h-8 animate-spin text-blue-500 mb-4" />
                 <p className="text-gray-600">Carregando documentos...</p>
               </div>
-            ) : tabData.documentos.loaded && sharedData.loaded && tabData.pavimentos.loaded ? (
+            ) : tabData.documentos.loaded && tabData.pavimentos.loaded ? (
               <DocumentosTab
                 empreendimento={empreendimento}
                 documentos={tabData.documentos.data.documentos || []}
@@ -432,20 +432,30 @@ export default function EmpreendimentoPage() {
               <AnaliticoGlobalTab
                 empreendimentoId={empreendimento?.id}
                 onUpdate={forceFullReload}
+                etapaParaPlanejamento={etapaParaPlanejamento}
+                disciplinasProp={sharedData.disciplinas}
+                usuariosProp={sharedData.usuarios}
+                documentosProp={tabData.documentos.data?.documentos || []}
+                pavimentosProp={tabData.pavimentos.data || []}
+                allAtividadesProp={sharedData.atividades || []}
               />
             ) : null}
           </TabsContent>
-
+            
           <TabsContent value="cadastro">
-            <CadastroTab empreendimento={empreendimento} readOnly={!canEdit} />
+            {mountedTabs.has('cadastro') && <CadastroTab empreendimento={empreendimento} readOnly={!canEdit} />}
           </TabsContent>
-
+          {hasChecklistAccess && (
+            <TabsContent value="checklists">
+              {mountedTabs.has('checklists') && <ChecklistCadastroTab empreendimento={empreendimento} />}
+            </TabsContent>
+          )}
           <TabsContent value="pre">
-            <PRETab empreendimento={empreendimento} readOnly={!canEdit} />
+            {mountedTabs.has('pre') && <PRETab empreendimento={empreendimento} readOnly={!canEdit} />}
           </TabsContent>
 
           <TabsContent value="controle_os">
-            {sharedData.loading ? (
+            {mountedTabs.has('controle_os') && (sharedData.loading ? (
               <div className="flex flex-col items-center justify-center h-96">
                 <RefreshCw className="w-8 h-8 animate-spin text-blue-500 mb-4" />
                 <p className="text-gray-600">Carregando...</p>
@@ -455,12 +465,12 @@ export default function EmpreendimentoPage() {
                 empreendimento={empreendimento}
                 atividades={sharedData.atividades || []}
               />
-            ) : null}
+            ) : null)}
           </TabsContent>
 
           {hasAccessToGestao && (
             <TabsContent value="gestao">
-              {isGestaoLoading ? (
+              {mountedTabs.has('gestao') && (isGestaoLoading ? (
                 <div className="flex flex-col items-center justify-center h-96">
                   <RefreshCw className="w-8 h-8 animate-spin text-blue-500 mb-4" />
                   <p className="text-gray-600">Carregando gestão...</p>
@@ -478,7 +488,7 @@ export default function EmpreendimentoPage() {
                   pavimentos={tabData.pavimentos.data || []}
                   onUpdate={forceFullReload}
                 />
-              ) : null}
+              ) : null)}
             </TabsContent>
           )}
         </Tabs>

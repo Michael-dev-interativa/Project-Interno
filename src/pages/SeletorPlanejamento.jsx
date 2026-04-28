@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,12 @@ const fetchAtividades = async () => Atividade.list();
 
 export default function SeletorPlanejamento() {
   const [searchTerm, setSearchTerm] = useState("");
+  const searchRef = useRef(null);
+  const searchDebounceRef = useRef(null);
+  const handleSearchChange = useCallback((value) => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => setSearchTerm(value), 250);
+  }, []);
   const [isDeleting, setIsDeleting] = useState(false); // NOVO ESTADO
   const [userToDeleteFilter, setUserToDeleteFilter] = useState('all'); // NOVO ESTADO
   const queryClient = useQueryClient();
@@ -211,9 +217,10 @@ export default function SeletorPlanejamento() {
           <div className="relative mb-6">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <Input
+              ref={searchRef}
               placeholder="Buscar por nome do empreendimento ou cliente..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              defaultValue=""
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-10"
             />
           </div>

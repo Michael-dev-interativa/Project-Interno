@@ -83,16 +83,12 @@ export default function Usuarios() {
   };
 
   const handleSubmit = async (data) => {
-    console.log('💾 Salvando usuário com dados:', data);
-    console.log('   - usuarios_permitidos_visualizar:', data.usuarios_permitidos_visualizar);
 
     try {
       if (editingUsuario) {
         await Usuario.update(editingUsuario.id, data);
-        console.log('✅ Usuário atualizado:', editingUsuario.id);
       } else {
         await Usuario.create(data);
-        console.log('✅ Novo usuário criado');
       }
 
       setShowForm(false);
@@ -101,11 +97,9 @@ export default function Usuarios() {
 
       // Trigger update no contexto para recarregar userProfile
       if (triggerUpdate) {
-        console.log('🔄 Disparando atualização do contexto...');
         triggerUpdate();
       }
 
-      console.log('✅ Página de usuários recarregada com sucesso');
     } catch (error) {
       console.error('❌ Erro ao salvar usuário:', error);
       alert('Erro ao salvar usuário. Verifique o console.');

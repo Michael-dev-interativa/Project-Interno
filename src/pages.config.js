@@ -47,35 +47,35 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
-import AnaliseConcepcaoPlanejamento from './pages/AnaliseConcepcaoPlanejamento';
-import Analitico from './pages/Analitico';
-import AtaPlanejamento from './pages/AtaPlanejamento';
-import AtividadesRapidas from './pages/AtividadesRapidas';
-import ChecklistPlanejamento from './pages/ChecklistPlanejamento';
-import Comercial from './pages/Comercial';
-import ComercialDetalhes from './pages/ComercialDetalhes';
-import Configuracoes from './pages/Configuracoes';
-import ControleOSGlobal from './pages/ControleOSGlobal';
-import Dashboard from './pages/Dashboard';
-import Empreendimento from './pages/Empreendimento';
-import Empreendimentos from './pages/Empreendimentos';
-import Home from './pages/Home';
-import Orcamentos from './pages/Orcamentos';
-import PRE from './pages/PRE';
-import Planejamento from './pages/Planejamento';
-import Propostas from './pages/Propostas';
-import Relatorios from './pages/Relatorios';
-import SeletorPlanejamento from './pages/SeletorPlanejamento';
-import Usuarios from './pages/Usuarios';
+import { lazy } from 'react';
 import __Layout from './Layout.jsx';
 
+const AnaliseConcepcaoPlanejamento = lazy(() => import('./pages/AnaliseConcepcaoPlanejamento'));
+const Analitico = lazy(() => import('./pages/Analitico'));
+const AtaPlanejamento = lazy(() => import('./pages/AtaPlanejamento'));
+const AtividadesRapidas = lazy(() => import('./pages/AtividadesRapidas'));
+const ChecklistCadastro = lazy(() => import('./pages/ChecklistCadastro'));
+const Comercial = lazy(() => import('./pages/Comercial'));
+const ComercialDetalhes = lazy(() => import('./pages/ComercialDetalhes'));
+const Configuracoes = lazy(() => import('./pages/Configuracoes'));
+const ControleOSGlobal = lazy(() => import('./pages/ControleOSGlobal'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Empreendimento = lazy(() => import('./pages/Empreendimento'));
+const Empreendimentos = lazy(() => import('./pages/Empreendimentos'));
+const Home = lazy(() => import('./pages/Home'));
+const Orcamentos = lazy(() => import('./pages/Orcamentos'));
+const PRE = lazy(() => import('./pages/PRE'));
+const Planejamento = lazy(() => import('./pages/Planejamento'));
+const Propostas = lazy(() => import('./pages/Propostas'));
+const Relatorios = lazy(() => import('./pages/Relatorios'));
+const SeletorPlanejamento = lazy(() => import('./pages/SeletorPlanejamento'));
+const Usuarios = lazy(() => import('./pages/Usuarios'));
 
 export const PAGES = {
     "AnaliseConcepcaoPlanejamento": AnaliseConcepcaoPlanejamento,
     "Analitico": Analitico,
     "AtaPlanejamento": AtaPlanejamento,
     "AtividadesRapidas": AtividadesRapidas,
-    "ChecklistPlanejamento": ChecklistPlanejamento,
     "Comercial": Comercial,
     "ComercialDetalhes": ComercialDetalhes,
     "Configuracoes": Configuracoes,

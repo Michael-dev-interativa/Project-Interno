@@ -187,7 +187,6 @@ export default function ComercialDetalhesPage() {
             data = {};
             break;
         default:
-            console.warn(`Aba desconhecida: ${tabName}`);
             break;
       }
 
@@ -420,6 +419,7 @@ export default function ComercialDetalhesPage() {
                 documentos={tabData.documentos.data.documentos || []}
                 usuarios={sharedData.usuarios}
                 planejamentos={tabData.documentos.data.planejamentos || []}
+                etapasEmpreendimento={comercial?.etapas || []}
                 onUpdate={() => {
                   setTabData(prev => ({
                     ...prev,

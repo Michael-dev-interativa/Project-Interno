@@ -19,7 +19,6 @@ async function localRetry(fn, retries = 3, delayMs = 2000, context = 'propostas'
       return await fn();
     } catch (err) {
       const isLast = i === retries - 1;
-      console.warn(`[${context}] tentativa ${i + 1} falhou: ${err?.message || err}`);
       if (isLast) throw err;
       await delay(delayMs * Math.pow(2, i));
     }

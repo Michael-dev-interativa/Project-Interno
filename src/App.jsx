@@ -10,6 +10,8 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import LoginPage from '@/components/auth/LoginPage';
+import { useEffect, Suspense } from 'react';
+import { startOfflineWarmup } from '@/lib/offline-warmup';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -19,31 +21,45 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
   : <>{children}</>;
 
+const PageFallback = () => (
+  <div className="fixed inset-0 flex items-center justify-center">
+    <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
+  </div>
+);
+
 const ProtectedRoutes = () => (
-  <Routes>
-    <Route path="/" element={
-      <LayoutWrapper currentPageName={mainPageKey}>
-        <MainPage />
-      </LayoutWrapper>
-    } />
-    {Object.entries(Pages).map(([path, Page]) => (
-      <Route
-        key={path}
-        path={`/${path}`}
-        element={
-          <LayoutWrapper currentPageName={path}>
-            <Page />
-          </LayoutWrapper>
-        }
-      />
-    ))}
-    <Route path="/login" element={<Navigate to="/" replace />} />
-    <Route path="*" element={<PageNotFound />} />
-  </Routes>
+  <Suspense fallback={<PageFallback />}>
+    <Routes>
+      <Route path="/" element={
+        <LayoutWrapper currentPageName={mainPageKey}>
+          <MainPage />
+        </LayoutWrapper>
+      } />
+      {Object.entries(Pages).map(([path, Page]) => (
+        <Route
+          key={path}
+          path={`/${path}`}
+          element={
+            <LayoutWrapper currentPageName={path}>
+              <Page />
+            </LayoutWrapper>
+          }
+        />
+      ))}
+      <Route path="/login" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<PageNotFound />} />
+    </Routes>
+  </Suspense>
 );
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin, authMode } = useAuth();
+
+  useEffect(() => {
+    if (authMode === 'local' && isAuthenticated) {
+      startOfflineWarmup();
+    }
+  }, [authMode, isAuthenticated]);
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {

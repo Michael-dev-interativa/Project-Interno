@@ -32,7 +32,7 @@ export default function AnaliticoList({ analiticoItens, atividadesMap }) {
                   <TableCell>{String(atividade.subdisciplina || '')}</TableCell>
                   <TableCell className="font-medium">{String(atividade.atividade || '')}</TableCell>
                   <TableCell className="font-bold text-blue-600">
-                    {item.tempo_real?.toFixed(2)}h
+                    {parseFloat(Number(item.tempo_real || 0).toFixed(2))}h
                   </TableCell>
                 </TableRow>
               );

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -19,7 +18,7 @@ export default function AtividadesProjetoFilters({
   onClearFilters
 }) {
   const etapas = ['Estudo Preliminar', 'Ante-Projeto', 'Projeto Básico', 'Projeto Executivo', 'Liberado para Obra', 'Concepção', 'Planejamento'];
-
+  
   // Get unique subdisciplinas based on selected disciplina
   const subdisciplinasDisponiveis = React.useMemo(() => {
     if (!disciplinaFilter) return [];
@@ -38,13 +37,15 @@ export default function AtividadesProjetoFilters({
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-medium text-sm">Filtros Avançados</h3>
         {hasActiveFilters && (
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onClearFilters}
-            className="text-xs h-7 px-2 py-1 rounded hover:bg-gray-200"
+            className="text-xs h-7"
           >
-            <X className="w-3 h-3 mr-1 inline" />
+            <X className="w-3 h-3 mr-1" />
             Limpar filtros
-          </button>
+          </Button>
         )}
       </div>
 
@@ -52,12 +53,11 @@ export default function AtividadesProjetoFilters({
         {/* Busca por Nome */}
         <div>
           <label className="text-xs font-medium text-gray-600 block mb-1">Nome da Atividade</label>
-          <input
-            type="text"
+          <Input
+            placeholder="Buscar por nome..."
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="h-8 text-sm rounded border border-gray-300 px-2"
-            placeholder="Digite o nome"
+            className="h-8 text-sm"
           />
         </div>
 

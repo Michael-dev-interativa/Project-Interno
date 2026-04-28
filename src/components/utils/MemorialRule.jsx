@@ -23,7 +23,6 @@ export const isMemorialActivity = (atividade) => {
   const isMemorialSub = MEMORIAL_SUBDISCIPLINAS.includes(atividade.subdisciplina);
   
   if (isConcepcao && isMemorialSub) {
-    console.log(`📋 Atividade Memorial identificada: "${atividade.atividade}" (Disciplina: ${atividade.disciplina}, Subdisciplina: ${atividade.subdisciplina})`);
   }
   
   return isConcepcao && isMemorialSub;
@@ -31,7 +30,6 @@ export const isMemorialActivity = (atividade) => {
 
 export const getCorrectEtapa = (atividade) => {
   if (isMemorialActivity(atividade)) {
-    console.log(`📋 Memorial "${atividade.atividade}" (${atividade.subdisciplina}) → "Estudo Preliminar"`);
     return 'Estudo Preliminar';
   }
   return atividade.etapa;

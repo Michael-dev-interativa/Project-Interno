@@ -15,7 +15,6 @@ export const simularReagendamento = async (atividadesAtrasadas, todosPlanejament
     return { success: true, changes: [], message: "Nenhuma atividade para simular." };
   }
 
-  console.log('[simularReagendamento] 🚀 Iniciando simulação de reagendamento...');
   
   const hoje = startOfDay(new Date());
   const overdueIds = new Set(atividadesAtrasadas.map(p => p.id));
@@ -31,7 +30,6 @@ export const simularReagendamento = async (atividadesAtrasadas, todosPlanejament
   }, {});
 
   for (const executorEmail in atividadesPorExecutor) {
-    console.log(`[SIMULAÇÃO] 🧑‍💻 Processando executor: ${executorEmail}`);
     const planosDoExecutor = atividadesPorExecutor[executorEmail];
     
     // **CORREÇÃO**: Adicionar 'pausado' à lista de status fixos
@@ -120,12 +118,10 @@ export const simularReagendamento = async (atividadesAtrasadas, todosPlanejament
             });
 
         } else {
-            console.warn(`[simularReagendamento] ⚠️ Não foi possível alocar horas para ${plano.id}`);
         }
     });
   }
 
-  console.log(`[SIMULAÇÃO] ✅ Simulação concluída. ${mudancasPropostas.length} mudanças propostas.`);
   return { success: true, changes: mudancasPropostas };
 };
 
@@ -139,7 +135,6 @@ export const aplicarReagendamento = async (mudancas) => {
     return { success: true, message: "Nenhuma mudança para aplicar." };
   }
 
-  console.log(`[aplicarReagendamento] 💾 Aplicando ${mudancas.length} mudanças em fila...`);
 
   // **CORREÇÃO**: Criar uma fila de tarefas para executar sequencialmente
   const tasks = mudancas.map(item => {
@@ -170,12 +165,10 @@ export const aplicarReagendamento = async (mudancas) => {
 
     if (falhas > 0) {
       const errorMsg = `${falhas} de ${mudancas.length} atividades não puderam ser salvas.`;
-      console.warn(`[aplicarReagendamento] ⚠️ ${errorMsg}`);
       return { success: false, message: `${errorMsg} Verifique o console e tente novamente.` };
     }
 
     const successMsg = `${mudancas.length} atividades foram reagendadas com sucesso.`;
-    console.log(`[aplicarReagendamento] ✅ ${successMsg}`);
     return { success: true, message: successMsg };
 
   } catch (error) {

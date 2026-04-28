@@ -32,7 +32,6 @@ const useEmpreendimentosData = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadData = useCallback(async (isRefresh = false) => {
-    console.log(`🔄 ${isRefresh ? 'Atualizando' : 'Carregando'} dados dos empreendimentos...`);
 
     if (isRefresh) {
       setIsRefreshing(true);
@@ -60,7 +59,6 @@ const useEmpreendimentosData = () => {
         'Usuarios'
       );
 
-      console.log(`✅ Dados carregados: ${empreendimentosData?.length || 0} empreendimentos, ${usuariosData?.length || 0} usuários`);
 
       const empreendimentosNormalizados = (empreendimentosData || []).map((emp) => ({
         ...emp,

@@ -71,14 +71,12 @@ export default function Relatorios() {
         setHasSearched(true);
         
         try {
-            console.log(`🔍 Buscando atividades do usuário: ${filters.usuario}`);
             
             // MODIFICADO: Buscar planejamentos e execuções baseado no filtro de usuário
             let planejamentosAtividadeQuery, planejamentosDocumentoQuery, execucoesQuery;
             
             if (filters.usuario === 'all') {
                 // Buscar TODOS os planejamentos e execuções
-                console.log('🌐 Buscando dados de TODOS os usuários...');
                 planejamentosAtividadeQuery = base44.entities.PlanejamentoAtividade.list();
                 planejamentosDocumentoQuery = base44.entities.PlanejamentoDocumento.list();
                 execucoesQuery = base44.entities.Execucao.list();
@@ -109,7 +107,6 @@ export default function Relatorios() {
                 ...(planejamentosDocumento || []).map(p => ({ ...p, tipo_plano: 'documento' }))
             ];
 
-            console.log(`📊 Planejamentos carregados: ${planejamentosAtividade?.length || 0} atividades + ${planejamentosDocumento?.length || 0} documentos = ${planejamentos.length} total`);
 
             const atividadesMap = atividades.reduce((acc, a) => ({ ...acc, [a.id]: a }), {});
             const documentosMap = documentos.reduce((acc, d) => ({ ...acc, [d.id]: d }), {});
@@ -213,7 +210,6 @@ export default function Relatorios() {
                 execucoes: execucoes || []
             }));
             
-            console.log(`✅ Carregados ${combinedData.length} planejamentos e ${execucoes.length} execuções`);
             
         } catch (error) {
             console.error("Erro ao carregar dados do relatório:", error);

@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -12,7 +12,7 @@ import { Users, X, Link } from "lucide-react"; // Added Link icon for predecesso
 import { format } from "date-fns";
 
 // New imports for DateCalculator functions
-import { calcularDataInicioPorPredecessora, distribuirHorasPorDias, getNextWorkingDay } from '../utils/DateCalculator';
+import { calcularDataInicioPorPredecessora, distribuirHorasPorDias, getNextWorkingDay, normalizeUnavailableDates } from '../utils/DateCalculator';
 
 export default function PlanejamentoForm({
   isOpen,
@@ -75,6 +75,16 @@ export default function PlanejamentoForm({
     }
   }, [multiplosExecutores, executor, executores, executorPrincipal]);
 
+  const executorUnavailableDatesMap = useMemo(() => {
+    const map = {};
+    (usuarios || []).forEach((user) => {
+      const dates = user.datas_indisponiveis || user.unavailable_dates || user.feriados || user.ferias || [];
+      map[user.email] = normalizeUnavailableDates(dates);
+    });
+    return map;
+  }, [usuarios]);
+
+  const getExecutorUnavailableDates = (email) => executorUnavailableDatesMap[email] || new Set();
 
   const handleExecutorToggle = (userEmail, checked) => {
     if (checked) {
@@ -195,7 +205,6 @@ export default function PlanejamentoForm({
           8 // Assuming 8 working hours per day
         );
 
-        console.log(`📅 Data de início calculada por predecessora para ${documento.numero}: ${format(finalDataInicio, 'dd/MM/yyyy')}`);
       } else {
         finalDataInicio = new Date(dataInicio);
       }
@@ -217,7 +226,6 @@ export default function PlanejamentoForm({
         const tempoReal = analitico.tempo_real || 0;
 
         if (tempoReal <= 0) {
-          console.warn(`Analítico ${analitico.id} possui tempo real <= 0, pulando planejamento.`);
           continue;
         }
 
@@ -233,11 +241,12 @@ export default function PlanejamentoForm({
             dataAtualParaAnalitico, // Start date for this specific analitico
             tempoReal,
             8, // Max daily hours for an executor
-            cargaExecutorCopia // The existing load for this executor
+            cargaExecutorCopia, // The existing load for this executor
+            false,
+            getExecutorUnavailableDates(executorEmail)
           );
 
           if (Object.keys(distribuicao).length === 0) {
-            console.warn(`Não foi possível distribuir horas para executor ${executorEmail} no analítico ${analitico.id}. Pode haver sobrecarga ou data de início inviável.`);
             continue; // Skip planning this analitico for this executor
           }
 
@@ -278,7 +287,10 @@ export default function PlanejamentoForm({
         // This only happens if we are NOT using a predecessor and there are multiple analiticos.
         // It ensures sequential planning for analiticos within the same document when not linked to a predecessor.
         if (!usarPredecessora && analiticosDoDocumento.length > 1 && maxTerminoForCurrentAnalitico > 0) {
-            dataAtualParaAnalitico = getNextWorkingDay(new Date(maxTerminoForCurrentAnalitico));
+            dataAtualParaAnalitico = getNextWorkingDay(
+              new Date(maxTerminoForCurrentAnalitico),
+              getExecutorUnavailableDates(executorPrincipal || executoresSelecionados[0])
+            );
         }
       }
 
@@ -287,7 +299,6 @@ export default function PlanejamentoForm({
         await PlanejamentoAtividade.create(planejamento);
       }
 
-      console.log(`✅ ${novosPlanejamentos.length} planejamentos criados para o documento ${documento.numero}`);
 
       // Update the main Document object with overall planning information
       const documentOverallStartDate = novosPlanejamentos.length > 0 ?

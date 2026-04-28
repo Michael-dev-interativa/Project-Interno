@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,12 @@ export default function AtividadesManager({ atividades, disciplinas, onUpdate, i
   const [showForm, setShowForm] = useState(false);
   const [editingAtividade, setEditingAtividade] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const searchRef = useRef(null);
+  const searchDebounceRef = useRef(null);
+  const handleSearchChange = useCallback((value) => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => setSearchTerm(value), 250);
+  }, []);
   const [filtroDisciplina, setFiltroDisciplina] = useState("todas");
   const [filtroEtapa, setFiltroEtapa] = useState("todas");
   const [formData, setFormData] = useState({
@@ -398,9 +404,10 @@ export default function AtividadesManager({ atividades, disciplinas, onUpdate, i
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input
+                ref={searchRef}
                 placeholder="Buscar por nome, disciplina, etapa..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                defaultValue=""
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="pl-10"
               />
             </div>

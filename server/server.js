@@ -1,4 +1,9 @@
 require('dotenv').config();
+
+// --- AJUSTE: Usar variáveis padrão do Render ---
+// DATABASE_URL já está OK no pool.js
+// Para CORS, padronizar para ALLOWED_ORIGINS (Render) ou fallback para CORS_ALLOWED_ORIGINS
+const CORS_ORIGINS = process.env.ALLOWED_ORIGINS || process.env.CORS_ALLOWED_ORIGINS || '';
 const express = require('express');
 const path = require('path');
 const { runMigrations } = require('./db/init');
@@ -68,7 +73,7 @@ function parseAllowedOrigins(raw) {
     .filter(Boolean);
 }
 
-const allowedOrigins = parseAllowedOrigins(process.env.CORS_ALLOWED_ORIGINS);
+const allowedOrigins = parseAllowedOrigins(CORS_ORIGINS);
 
 function normalizeStringArrayField(raw) {
   const out = [];

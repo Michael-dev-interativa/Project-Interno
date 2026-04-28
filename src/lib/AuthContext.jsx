@@ -69,7 +69,6 @@ async function loadUserEntityByEmail(email) {
       return usuarios[0];
     }
   } catch (error) {
-    console.warn('Falha ao buscar dados da entidade users para a sessão:', error);
   }
 
   return null;

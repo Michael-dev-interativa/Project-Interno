@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { User, Trash2, RefreshCw, Play, ListMusic, PlusCircle, Loader2, Edit2 } from "lucide-react";
 import { ActivityTimerContext } from '../contexts/ActivityTimerContext';
 import FinalizarAtividadeButton from './FinalizarAtividadeButton';
+import { formatHoras } from '../utils/formatHours';
 import { Execucao, PlanejamentoAtividade, PlanejamentoDocumento } from '@/entities/all';
 import { retryWithBackoff } from '../utils/apiUtils';
 import { format } from 'date-fns';
@@ -90,7 +91,7 @@ export default function ActivityItemCalendar({
       const etapa = plano.etapa || 'Sem Etapa';
       return `${numeroFolha} - ${nomeArquivo} - ${etapa}`;
     }
-    return plano.atividade?.atividade || plano.descritivo || 'Atividade não identificada';
+    return plano.atividade?.atividade || plano.descritivo || plano.titulo || 'Atividade não identificada';
   }, [plano]);
   
   const subdisciplina = plano.atividade?.subdisciplina;
@@ -100,7 +101,17 @@ export default function ActivityItemCalendar({
   
   // Horas específicas deste dia
   const horasAlocadasDia = Number(plano.horas_por_dia?.[dayKey]) || 0;
-  const horasExecutadasDia = Number(plano.horas_executadas_por_dia?.[dayKey]) || 0;
+  let horasExecutadasDia = Number(plano.horas_executadas_por_dia?.[dayKey]) || 0;
+
+  // Se não tem horas executadas registradas por dia, mas tem:
+  // - Status concluído OU tempo executado > 0
+  // - E horas alocadas neste dia
+  // Então considerar as horas alocadas como executadas
+  if (horasExecutadasDia === 0 && horasAlocadasDia > 0) {
+    if (plano.status === 'concluido' || Number(plano.tempo_executado) > 0) {
+      horasExecutadasDia = horasAlocadasDia;
+    }
+  }
   
   // Verificar se a atividade continua em dias futuros
   const contemDiasFuturos = useMemo(() => {
@@ -198,19 +209,29 @@ export default function ActivityItemCalendar({
 
       const entityToUpdate = plano.tipo_planejamento === 'documento' ? PlanejamentoDocumento : PlanejamentoAtividade;
 
+      // Preencher as horas executadas por dia
+      const horasExecutadasPorDia = { ...plano.horas_executadas_por_dia || {} };
+      horasExecutadasPorDia[dayKey] = timeValue;
+
       await retryWithBackoff(
         () => entityToUpdate.update(plano.id, {
           tempo_executado: timeValue,
-          tempo_planejado: timeValue,
           status: 'concluido',
-          termino_real: format(new Date(), 'yyyy-MM-dd')
+          termino_real: format(new Date(), 'yyyy-MM-dd'),
+          horas_executadas_por_dia: horasExecutadasPorDia
         }),
         3, 1000, 'adjustTime'
       );
-      
+
+      // Verificar se foi salvo corretamente
+      const atividadeAtualizada = await retryWithBackoff(
+        () => entityToUpdate.get(plano.id),
+        3, 1000, 'verificarAjuste'
+      );
+
       setShowTimeAdjustModal(false);
       setAdjustedTime('');
-      
+
       if (onDelete) onDelete();
     } catch (error) {
       console.error("Erro ao ajustar:", error);
@@ -394,34 +415,36 @@ export default function ActivityItemCalendar({
           </div>
         )}
 
-        <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-1 mb-1.5">
-          <div className="flex items-center gap-3 flex-wrap">
-            {subdisciplina && (
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                <span className="text-blue-600 font-medium">{subdisciplina}</span>
-              </div>
-            )}
-            {realStatus === 'concluido' && (
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span className="text-green-600 font-medium">Concluída</span>
-              </div>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <div className="font-mono text-blue-600 flex flex-col items-end">
-              <span className="font-semibold text-sm" title={contemDiasFuturos ? "Planejado / Executado (continua nos próximos dias)" : "Planejado / Executado"}>
-                {horasAlocadasDia.toFixed(1)}/{horasExecutadasDia.toFixed(1)}h{contemDiasFuturos ? ' ...' : ''}
-              </span>
+        <div className="mb-1.5">
+          <div className="flex items-start justify-between gap-2 min-w-0 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap min-w-0">
+              {subdisciplina && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full shrink-0"></div>
+                  <span className="text-blue-600 font-medium line-clamp-1">{subdisciplina}</span>
+                </div>
+              )}
+              {realStatus === 'concluido' && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="w-2 h-2 bg-green-500 rounded-full shrink-0"></div>
+                  <span className="text-green-600 font-medium">Concluída</span>
+                </div>
+              )}
             </div>
-            
-            {realStatus === 'concluido' && (
-              <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
-                <span className="text-white text-xs font-bold">✓</span>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="font-mono text-blue-600 flex flex-col items-end">
+                <span className="font-semibold text-sm" title={contemDiasFuturos ? "Planejado / Executado (continua nos próximos dias)" : "Planejado / Executado"}>
+                  {formatHoras(horasAlocadasDia)}/{formatHoras(horasExecutadasDia)}{contemDiasFuturos ? ' ...' : ''}
+                </span>
               </div>
-            )}
+
+              {realStatus === 'concluido' && (
+                <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shrink-0">
+                  <span className="text-white text-xs font-bold">✓</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
         

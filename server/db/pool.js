@@ -15,7 +15,12 @@ function maskConnectionString(cs) {
 
 console.log('DB connectionString type=', typeof connectionString, 'sample=', maskConnectionString(connectionString).slice(0, 120));
 
-const pool = new Pool({ connectionString });
+const pool = new Pool({
+  connectionString,
+  ssl: connectionString.includes('render.com') || connectionString.includes('ondigitalocean.com')
+    ? { rejectUnauthorized: false }
+    : undefined
+});
 
 // Test DB connection early and give a clearer diagnostic if auth/connection fails
 (async function testConnection() {

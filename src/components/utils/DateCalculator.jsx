@@ -1,32 +1,69 @@
 import { addDays, isWeekend, format, parseISO, isValid, startOfDay } from 'date-fns';
 
-export const isWorkingDay = (date) => {
-  return !isWeekend(date);
+export const normalizeUnavailableDates = (dates) => {
+  const normalized = new Set();
+  if (!dates) return normalized;
+  const dateValues = Array.isArray(dates) ? dates : [dates];
+
+  dateValues.forEach((item) => {
+    if (!item) return;
+    if (item instanceof Date) {
+      if (isValid(item)) {
+        normalized.add(format(item, 'yyyy-MM-dd'));
+      }
+      return;
+    }
+
+    let text = String(item).trim();
+    if (!text) return;
+
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(text)) {
+      const [day, month, year] = text.split('/');
+      text = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+
+    const parsed = parseISO(text);
+    if (isValid(parsed)) {
+      normalized.add(format(parsed, 'yyyy-MM-dd'));
+    }
+  });
+
+  return normalized;
 };
 
-export const getNextWorkingDay = (date) => {
+export const isUnavailableDay = (date, unavailableDates = new Set()) => {
+  if (!date || !isValid(date) || unavailableDates.size === 0) return false;
+  const dayKey = format(date, 'yyyy-MM-dd');
+  return unavailableDates.has(dayKey);
+};
+
+export const isWorkingDay = (date, unavailableDates = new Set()) => {
+  return !isWeekend(date) && !isUnavailableDay(date, unavailableDates);
+};
+
+export const getNextWorkingDay = (date, unavailableDates = new Set()) => {
   let nextDay = addDays(date, 1);
-  while (!isWorkingDay(nextDay)) {
+  while (!isWorkingDay(nextDay, unavailableDates)) {
     nextDay = addDays(nextDay, 1);
   }
   return nextDay;
 };
 
-export const ensureWorkingDay = (date) => {
+export const ensureWorkingDay = (date, unavailableDates = new Set()) => {
   let currentDay = new Date(date);
-  while (!isWorkingDay(currentDay)) {
+  while (!isWorkingDay(currentDay, unavailableDates)) {
     currentDay = addDays(currentDay, 1);
   }
   return currentDay;
 };
 
-export const getNextAvailableDay = (startDate, cargaDiariaExistente = {}, limiteDiario = 8) => {
-  let currentDay = ensureWorkingDay(startDate);
+export const getNextAvailableDay = (startDate, cargaDiariaExistente = {}, limiteDiario = 8, unavailableDates = new Set()) => {
+  let currentDay = ensureWorkingDay(startDate, unavailableDates);
   const maxTentativas = 365;
   let tentativas = 0;
 
   while (tentativas < maxTentativas) {
-    if (isWorkingDay(currentDay)) {
+    if (isWorkingDay(currentDay, unavailableDates)) {
       const diaKey = format(currentDay, 'yyyy-MM-dd');
       const cargaAtual = cargaDiariaExistente[diaKey] || 0;
       const espacoDisponivel = Math.max(0, limiteDiario - cargaAtual);
@@ -40,10 +77,10 @@ export const getNextAvailableDay = (startDate, cargaDiariaExistente = {}, limite
     tentativas++;
   }
 
-  return ensureWorkingDay(startDate);
+  return ensureWorkingDay(startDate, unavailableDates);
 };
 
-export const calculateEndDate = (startDate, horasTotais, horasPorDia = 8) => {
+export const calculateEndDate = (startDate, horasTotais, horasPorDia = 8, unavailableDates = new Set()) => {
   if (!startDate || !isValid(startDate) || horasTotais <= 0) {
     return startDate;
   }
@@ -52,7 +89,7 @@ export const calculateEndDate = (startDate, horasTotais, horasPorDia = 8) => {
   let horasRestantes = horasTotais;
 
   while (horasRestantes > 0) {
-    if (isWorkingDay(dataAtual)) {
+    if (isWorkingDay(dataAtual, unavailableDates)) {
       const horasNoDia = Math.min(horasRestantes, horasPorDia);
       horasRestantes -= horasNoDia;
     }
@@ -63,6 +100,48 @@ export const calculateEndDate = (startDate, horasTotais, horasPorDia = 8) => {
   }
 
   return dataAtual;
+};
+
+export const calcularDataInicioPorPredecessora = (
+  predecessorDoc,
+  planejamentos = [],
+  cargaPrincipalExecutor = {},
+  limiteDiario = 8
+) => {
+  if (!predecessorDoc) {
+    return getNextWorkingDay(new Date(), new Set());
+  }
+
+  const parseTermino = (value) => {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    const parsed = parseISO(String(value));
+    return isValid(parsed) ? parsed : null;
+  };
+
+  let termino = parseTermino(predecessorDoc.termino_planejado);
+
+  if (!termino) {
+    const predecessores = (planejamentos || [])
+      .filter(p => p.documento_id === predecessorDoc.id && p.termino_planejado)
+      .map(p => parseTermino(p.termino_planejado))
+      .filter(isValid)
+      .sort((a, b) => b.getTime() - a.getTime());
+
+    if (predecessores.length > 0) {
+      termino = predecessores[0];
+    }
+  }
+
+  const unavailableDates = normalizeUnavailableDates(
+    predecessorDoc.datas_indisponiveis || predecessorDoc.unavailable_dates || predecessorDoc.feriados || predecessorDoc.ferias || []
+  );
+
+  if (!termino) {
+    return getNextWorkingDay(new Date(), unavailableDates);
+  }
+
+  return getNextWorkingDay(termino, unavailableDates);
 };
 
 export const isActivityOverdue = (plano, hoje = new Date()) => {
@@ -104,31 +183,27 @@ export const isActivityOverdue = (plano, hoje = new Date()) => {
   }
 };
 
-export const distribuirHorasPorDias = (dataInicio, horasTotais, limiteDiario = 8, cargaDiariaExistente = {}, isStrictStartDate = false) => {
+export const distribuirHorasPorDias = (dataInicio, horasTotais, limiteDiario = 8, cargaDiariaExistente = {}, isStrictStartDate = false, unavailableDates = new Set()) => {
   const distribuicao = {};
   const novaCargaDiaria = { ...cargaDiariaExistente };
   
-  let dataAtual = ensureWorkingDay(dataInicio);
+  let dataAtual = ensureWorkingDay(dataInicio, unavailableDates);
   let horasRestantes = Number(horasTotais) || 0;
   horasTotais = horasRestantes;
   let tentativas = 0;
   const maxTentativas = 365;
 
-  console.log(`\n🔄 [distribuirHorasPorDias] Iniciando distribuição:`);
-  console.log(`   Total de horas: ${horasTotais.toFixed(1)}h`);
-  console.log(`   Data de início: ${format(dataAtual, 'yyyy-MM-dd')}`);
-  console.log(`   Limite diário: ${limiteDiario}h`);
-  console.log(`   Modo estrito (manual): ${isStrictStartDate ? 'SIM' : 'NÃO'}`);
+  if (unavailableDates && unavailableDates.size > 0) {
+  }
 
   while (horasRestantes > 0.01 && tentativas < maxTentativas) {
     tentativas++;
     const diaKey = format(dataAtual, 'yyyy-MM-dd');
     
-    if (isWorkingDay(dataAtual)) {
+    if (isWorkingDay(dataAtual, unavailableDates)) {
       const cargaAtual = novaCargaDiaria[diaKey] || 0;
       const espacoDisponivel = Math.max(0, limiteDiario - cargaAtual);
 
-      console.log(`   📅 ${diaKey}: Carga atual ${cargaAtual.toFixed(1)}h, Espaço ${espacoDisponivel.toFixed(1)}h`);
 
       // Alocar o que couber no dia, respeitando sempre o limite de 8h
       if (espacoDisponivel > 0.01) {
@@ -138,7 +213,6 @@ export const distribuirHorasPorDias = (dataInicio, horasTotais, limiteDiario = 8
         novaCargaDiaria[diaKey] = cargaAtual + horasParaAlocar;
         horasRestantes -= horasParaAlocar;
         
-        console.log(`   ✅ Alocado: ${horasParaAlocar.toFixed(1)}h → Nova carga: ${(cargaAtual + horasParaAlocar).toFixed(1)}h → Restante: ${horasRestantes.toFixed(1)}h`);
       }
     }
     
@@ -153,12 +227,10 @@ export const distribuirHorasPorDias = (dataInicio, horasTotais, limiteDiario = 8
   }
 
   const diasDistribuidos = Object.keys(distribuicao).sort();
-  const dataTermino = parseISO(diasDistribuidos[diasDistribuidos.length - 1]); 
+  const lastDayStr = diasDistribuidos[diasDistribuidos.length - 1];
+  const [dyear, dmonth, dday] = lastDayStr.split('-').map(Number);
+  const dataTermino = new Date(dyear, dmonth - 1, dday); // local midnight — avoids UTC timezone shift
 
-  console.log(`\n✅ Distribuição concluída:`);
-  console.log(`   Dias utilizados: ${diasDistribuidos.length}`);
-  console.log(`   Data término: ${format(dataTermino, 'yyyy-MM-dd')}`);
-  console.log(`   Total alocado: ${Object.values(distribuicao).reduce((sum, h) => sum + h, 0).toFixed(1)}h\n`);
 
   return {
     distribuicao,

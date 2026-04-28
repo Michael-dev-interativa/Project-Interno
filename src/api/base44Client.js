@@ -2,6 +2,9 @@
 import { createClient } from '@base44/sdk';
 import { appParams } from '@/lib/app-params';
 import * as LocalEntities from '@/entities/all';
+import { enqueueOfflineMutation } from '@/lib/offline-queue';
+import { isNetworkError } from '@/lib/offline-sync';
+import { buildReadCacheKey, getReadCache, setReadCache } from '@/lib/offline-read-cache';
 
 const { appId, serverUrl, token, functionsVersion } = appParams;
 
@@ -29,6 +32,16 @@ if (appId && serverUrl) {
     .replace(/__+/g, '_')
     .toLowerCase();
 
+  // Deduplicates concurrent identical read requests — if the same key is already
+  // in-flight, returns the same Promise instead of firing a second HTTP request.
+  const inFlightRequests = new Map();
+  const withDedup = (key, fn) => {
+    if (inFlightRequests.has(key)) return inFlightRequests.get(key);
+    const promise = fn().finally(() => inFlightRequests.delete(key));
+    inFlightRequests.set(key, promise);
+    return promise;
+  };
+
   const makeEntityClient = (path) => {
     const base = `${apiOrigin}/api/${path}`;
     const q = (obj) => {
@@ -41,36 +54,128 @@ if (appId && serverUrl) {
         if (sort) params.sort = sort;
         if (limit) params.limit = limit;
         if (offset) params.offset = offset;
-        const res = await fetch(base + q(params));
-        return res.ok ? res.json() : Promise.reject(new Error(await res.text()));
+        const cacheKey = buildReadCacheKey(path, 'list', params);
+        if (!navigator.onLine) {
+          const cached = await getReadCache(cacheKey);
+          return cached ?? [];
+        }
+        return withDedup(cacheKey, async () => {
+          try {
+            const res = await fetch(base + q(params));
+            if (!res.ok) return Promise.reject(new Error(await res.text()));
+            const data = await res.json();
+            await setReadCache(cacheKey, path, data);
+            return data;
+          } catch (err) {
+            if (isNetworkError(err)) {
+              const cached = await getReadCache(cacheKey);
+              return cached ?? [];
+            }
+            throw err;
+          }
+        });
       },
       filter: async (params) => {
-        const res = await fetch(base + q(params));
-        return res.ok ? res.json() : Promise.reject(new Error(await res.text()));
+        const cacheKey = buildReadCacheKey(path, 'filter', params || {});
+        if (!navigator.onLine) {
+          const cached = await getReadCache(cacheKey);
+          return cached ?? [];
+        }
+        return withDedup(cacheKey, async () => {
+          try {
+            const res = await fetch(base + q(params));
+            if (!res.ok) return Promise.reject(new Error(await res.text()));
+            const data = await res.json();
+            await setReadCache(cacheKey, path, data);
+            return data;
+          } catch (err) {
+            if (isNetworkError(err)) {
+              const cached = await getReadCache(cacheKey);
+              return cached ?? [];
+            }
+            throw err;
+          }
+        });
       },
       get: async (id) => {
-        const res = await fetch(`${base}/${id}`);
-        return res.ok ? res.json() : null;
+        const cacheKey = buildReadCacheKey(path, 'get', { id });
+        if (!navigator.onLine) {
+          const cached = await getReadCache(cacheKey);
+          return cached ?? null;
+        }
+        return withDedup(cacheKey, async () => {
+          try {
+            const res = await fetch(`${base}/${id}`);
+            if (!res.ok) return null;
+            const data = await res.json();
+            await setReadCache(cacheKey, path, data);
+            return data;
+          } catch (err) {
+            if (isNetworkError(err)) {
+              const cached = await getReadCache(cacheKey);
+              return cached ?? null;
+            }
+            throw err;
+          }
+        });
       },
       create: async (data) => {
-        const res = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-        return res.ok ? res.json() : Promise.reject(new Error(await res.text()));
+        if (!navigator.onLine) {
+          await enqueueOfflineMutation({ entity: path, operation: 'create', method: 'POST', endpoint: base, payload: data });
+          const tempId = `offline_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+          return { ...data, id: tempId, _offlineId: tempId, _pendingSync: true };
+        }
+        try {
+          const res = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          return res.ok ? res.json() : Promise.reject(new Error(await res.text()));
+        } catch (err) {
+          if (isNetworkError(err)) {
+            await enqueueOfflineMutation({ entity: path, operation: 'create', method: 'POST', endpoint: base, payload: data });
+            const tempId = `offline_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            return { ...data, id: tempId, _offlineId: tempId, _pendingSync: true };
+          }
+          throw err;
+        }
       },
       update: async (id, data) => {
-        const res = await fetch(`${base}/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-        return res.ok ? res.json() : Promise.reject(new Error(await res.text()));
+        if (!navigator.onLine) {
+          await enqueueOfflineMutation({ entity: path, operation: 'update', method: 'PATCH', endpoint: `${base}/${id}`, payload: data });
+          return { ...data, id, _pendingSync: true };
+        }
+        try {
+          const res = await fetch(`${base}/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          return res.ok ? res.json() : Promise.reject(new Error(await res.text()));
+        } catch (err) {
+          if (isNetworkError(err)) {
+            await enqueueOfflineMutation({ entity: path, operation: 'update', method: 'PATCH', endpoint: `${base}/${id}`, payload: data });
+            return { ...data, id, _pendingSync: true };
+          }
+          throw err;
+        }
       },
       delete: async (id) => {
-        const res = await fetch(`${base}/${id}`, { method: 'DELETE' });
-        if (!res.ok) {
-          const errText = await res.text();
-          return Promise.reject(new Error(errText || `HTTP ${res.status}`));
+        if (!navigator.onLine) {
+          await enqueueOfflineMutation({ entity: path, operation: 'delete', method: 'DELETE', endpoint: `${base}/${id}`, payload: null });
+          return null;
         }
-        // No content (204) or empty body - return null
-        if (res.status === 204) return null;
-        const txt = await res.text();
-        if (!txt) return null;
-        try { return JSON.parse(txt); } catch (e) { return txt; }
+        try {
+          const res = await fetch(`${base}/${id}`, { method: 'DELETE' });
+          if (!res.ok) {
+            const errText = await res.text();
+            return Promise.reject(new Error(errText || `HTTP ${res.status}`));
+          }
+          // No content (204) or empty body - return null
+          if (res.status === 204) return null;
+          const txt = await res.text();
+          if (!txt) return null;
+          try { return JSON.parse(txt); } catch (e) { return txt; }
+        } catch (err) {
+          if (isNetworkError(err)) {
+            await enqueueOfflineMutation({ entity: path, operation: 'delete', method: 'DELETE', endpoint: `${base}/${id}`, payload: null });
+            return null;
+          }
+          throw err;
+        }
       },
       bulkCreate: async (items) => Promise.all((items || []).map(i => makeEntityClient(path).create(i)))
     };

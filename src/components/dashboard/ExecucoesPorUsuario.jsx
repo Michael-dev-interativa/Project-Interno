@@ -104,7 +104,6 @@ export default function ExecucoesPorUsuario() {
         const dateChanged = lastLoadedDateRef.current !== dateStr;
 
         if (hasLoadedRef.current && !dateChanged) {
-            console.log('✅ [ExecucoesPorUsuario] Dados já carregados para esta data');
             return;
         }
 

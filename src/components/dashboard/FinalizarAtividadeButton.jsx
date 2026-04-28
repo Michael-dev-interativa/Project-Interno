@@ -32,11 +32,6 @@ export default function FinalizarAtividadeButton({ plano, displayName, onSuccess
         return total + (Number(exec.tempo_total) || 0);
       }, 0);
 
-      console.log(`🏁 [Finalizar Manual] Atividade: ${displayName}`);
-      console.log(`   Execuções encontradas: ${execucoesAtividade?.length || 0}`);
-      console.log(`   Tempo total executado: ${tempoTotalExecutado.toFixed(2)}h`);
-      console.log(`   Tempo planejado original: ${plano.tempo_planejado}h`);
-      console.log(`   Observação: ${observacao || '(nenhuma)'}`);
 
       // Mapear horas executadas por dia (calculadas a partir das execuções)
       const horasExecutadasPorDia = {};
@@ -48,7 +43,6 @@ export default function FinalizarAtividadeButton({ plano, displayName, onSuccess
         }
       });
 
-      console.log(`   ✅ Horas executadas por dia:`, horasExecutadasPorDia);
 
       const entityToUpdate = plano.tipo_planejamento === 'documento' ? PlanejamentoDocumento : PlanejamentoAtividade;
 
@@ -63,14 +57,12 @@ export default function FinalizarAtividadeButton({ plano, displayName, onSuccess
         updateData.observacao = observacao.trim();
       }
 
-      console.log(`📝 [Finalizar] Atualizando planejamento ${plano.id} com:`, updateData);
       
       await retryWithBackoff(
         () => entityToUpdate.update(plano.id, updateData),
         3, 1000, 'finalizarAtividade.update'
       );
 
-      console.log(`✅ [Finalizar] Planejamento ${plano.id} atualizado no banco de dados`);
       
       // **CRÍTICO**: Verificar se realmente foi atualizado
       const verificacao = await retryWithBackoff(
@@ -78,26 +70,20 @@ export default function FinalizarAtividadeButton({ plano, displayName, onSuccess
         3, 1000, 'finalizarAtividade.verificar'
       );
       
-      console.log(`🔍 [Verificação] Status após update:`, verificacao?.[0]?.status);
-      console.log(`🔍 [Verificação] Tempo executado após update:`, verificacao?.[0]?.tempo_executado);
-      console.log(`🔍 [Verificação] Tempo planejado após update:`, verificacao?.[0]?.tempo_planejado);
 
       setShowModal(false);
       
       // **CRÍTICO**: Chamar onSuccess ANTES de fazer outras operações
       if (onSuccess) {
-        console.log('🔄 Chamando onSuccess para atualizar UI...');
         onSuccess();
       }
 
       const horasLiberadas = plano.tempo_planejado - tempoTotalExecutado;
       
-      console.log(`✅ Atividade finalizada manualmente! Horas liberadas: ${horasLiberadas.toFixed(2)}h`);
 
       // **REALOCAÇÃO AUTOMÁTICA**: Tentar antecipar atividades do dia seguinte
       let atividadesMovidas = [];
       if (horasLiberadas > 0.1 && plano.executor_principal && plano.inicio_planejado) {
-        console.log(`\n🎯 Iniciando realocação automática inteligente...`);
         atividadesMovidas = await realocarAtividadesDoDiaSeguinte(
           plano.executor_principal,
           plano.inicio_planejado,

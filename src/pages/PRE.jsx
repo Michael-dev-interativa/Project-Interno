@@ -284,7 +284,6 @@ export default function PRE() {
         }
       }
       setLastSavedTime(new Date());
-      console.log('✅ Auto-save concluído com sucesso');
     } catch (error) {
       console.error('Erro no auto-save:', error);
     } finally {

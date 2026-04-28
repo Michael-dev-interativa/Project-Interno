@@ -34,7 +34,6 @@ export default function AplicarAtividadeModal({ isOpen, onClose, empreendimentoI
 
         setIsSubmitting(true);
         try {
-            console.log("Iniciando processo de planejamento em lote...");
 
             // 1. Buscar a carga de trabalho existente do executor
             const planejamentosExistentes = await retryWithBackoff(() => PlanejamentoAtividade.filter({ executor_principal: executorEmail }), 3, 1000);
@@ -46,7 +45,6 @@ export default function AplicarAtividadeModal({ isOpen, onClose, empreendimentoI
                     }
                 }
             });
-            console.log(`Carga diária inicial para ${executorEmail} carregada.`);
 
             // 2. Preparar os novos planejamentos sequencialmente
             const novosPlanejamentos = [];
@@ -71,7 +69,6 @@ export default function AplicarAtividadeModal({ isOpen, onClose, empreendimentoI
                 const inicioPlanejado = Object.keys(distribuicao).sort()[0];
 
                 if (!inicioPlanejado) {
-                    console.warn(`Não foi possível alocar horas para a atividade: ${String(atividade.atividade || '')}. Pulando.`);
                     continue;
                 }
 
@@ -92,12 +89,10 @@ export default function AplicarAtividadeModal({ isOpen, onClose, empreendimentoI
                 dataReferencia = addDays(dataTermino, 1);
             }
             
-            console.log(`${novosPlanejamentos.length} novos planejamentos preparados para criação.`);
 
             // 3. Criar todos os novos planejamentos em lote
             if (novosPlanejamentos.length > 0) {
                 await retryWithBackoff(() => PlanejamentoAtividade.bulkCreate(novosPlanejamentos), 3, 2000);
-                console.log("Planejamentos criados com sucesso.");
             }
 
             onApply();

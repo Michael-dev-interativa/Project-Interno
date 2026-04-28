@@ -1,28 +1,54 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Button as UIButton } from "@/components/ui/button";
-import { Input as UIInput } from "@/components/ui/input";
+// @ts-nocheck
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog as UIDialog,
-  DialogContent as UIDialogContent,
-  DialogHeader as UIDialogHeader,
-  DialogTitle as UIDialogTitle,
-} from "@/components/ui/dialog";
-import { Plus, Trash2, Save, Loader2, Upload, Download, Copy, ArrowDown, ArrowRight, Wand2, ChevronRight, ChevronLeft } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Plus, Trash2, Save, Loader2, Upload, Download, Wand2, ChevronRight, ChevronLeft, GripHorizontal } from "lucide-react";
 import { DataCadastro, Documento } from "@/entities/all";
 import { retryWithBackoff } from "@/components/utils/apiUtils";
 import { format } from "date-fns";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 
 // As etapas serão carregadas do empreendimento
 
 const DEFAULT_REVISOES = ["R00", "R01", "R02"];
 
-const Button = /** @type {any} */ (UIButton);
-const Input = /** @type {any} */ (UIInput);
-const Dialog = /** @type {any} */ (UIDialog);
-const DialogContent = /** @type {any} */ (UIDialogContent);
-const DialogHeader = /** @type {any} */ (UIDialogHeader);
-const DialogTitle = /** @type {any} */ (UIDialogTitle);
+// Memoized date cell — prevents full grid re-render when one cell changes
+const DateCell = React.memo(function DateCell({ linhaId, etapa, revisao, value, onUpdate, readOnly, onCopy }) {
+  const handleChange = useCallback(
+    (e) => onUpdate(linhaId, etapa, revisao, e.target.value),
+    [linhaId, etapa, revisao, onUpdate]
+  );
+  const handleCopy = useCallback(
+    () => onCopy(linhaId, etapa, revisao),
+    [linhaId, etapa, revisao, onCopy]
+  );
+  return (
+    <div
+      className="border-r border-gray-100 p-0.5 flex-shrink-0 flex items-center relative group"
+      style={{ width: '110px', minWidth: '110px' }}
+    >
+      <input
+        type="date"
+        value={value}
+        onChange={handleChange}
+        className="h-8 text-xs w-full px-1 border border-gray-300 rounded cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
+        style={{ color: value ? 'black' : 'transparent' }}
+        disabled={readOnly}
+      />
+      {!readOnly && value && (
+        <button
+          onClick={handleCopy}
+          className="text-purple-600 hover:text-purple-800 p-0.5 absolute right-0 opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Preencher todas abaixo"
+        >
+          <Wand2 className="w-2.5 h-2.5" />
+        </button>
+      )}
+    </div>
+  );
+});
 
 export default function CadastroTab({ empreendimento, readOnly = false }) {
   // Etapas do empreendimento convertidas para uppercase
@@ -46,8 +72,8 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [loadedEmpreendimentoId, setLoadedEmpreendimentoId] = useState(null);
-  const autoSaveTimeoutRef = useRef(null);
+  const [_loadedEmpreendimentoId, setLoadedEmpreendimentoId] = useState(null);
+  // autoSaveTimeoutRef removed — auto-save is disabled
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -58,21 +84,20 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
   const [massEditData, setMassEditData] = useState('');
   const [etapasMinimizadas, setEtapasMinimizadas] = useState({});
   const [linhasModificadas, setLinhasModificadas] = useState(new Set());
-
+  const [etapasEfetivas, setEtapasEfetivas] = useState([]);
+  const [editingRevisao, setEditingRevisao] = useState(null); // { etapa, revisao }
+  const [editingRevisaoValue, setEditingRevisaoValue] = useState('');
+  const [ordemEtapas, setOrdemEtapas] = useState([]); // ordem customizada de etapas
+  
   const folhasScrollRef = useRef(null);
   const dataScrollRef = useRef(null);
+  const linhasRef = useRef([]);
+  linhasRef.current = linhas; // always current, without useEffect
 
   useEffect(() => {
     if (!empreendimento?.id) return;
-
-    // Se mudou de empreendimento, reseta e carrega dados do novo
-    if (empreendimento.id !== loadedEmpreendimentoId) {
-      console.log(`🔄 Mudança de empreendimento: ${loadedEmpreendimentoId} -> ${empreendimento.id}`);
-      setLoadedEmpreendimentoId(empreendimento.id);
-      setIsLoading(true);
-      // Carrega dados imediatamente
-      loadData();
-    }
+    setIsLoading(true);
+    loadData();
   }, [empreendimento?.id]);
 
   // Auto-save desabilitado - causava conflitos de rate limit
@@ -101,17 +126,17 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
     try {
       const [data, docs] = await Promise.all([
         retryWithBackoff(
-          () => DataCadastro.filter({ empreendimento_id: empreendimento.id }),
+          () => DataCadastro.filter({ empreendimento_id: empreendimento.id, limit: 10000 }),
           3, 2000,
           'loadDataCadastro'
         ),
         retryWithBackoff(
-          () => Documento.filter({ empreendimento_id: empreendimento.id }),
+          () => Documento.filter({ empreendimento_id: empreendimento.id, limit: 10000 }),
           3, 2000,
           'loadDocumentos'
         )
       ]);
-
+      
       // Ordenar por disciplina e depois por arquivo (mesma ordem do DocumentosTab)
       const sortedDocs = (docs || []).sort((a, b) => {
         // Primeiro por disciplina
@@ -131,26 +156,22 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
         });
       });
       setDocumentos(sortedDocs);
-
+      
       // Criar um mapa de dados existentes por documento_id
       const dataMap = new Map();
       const revisoesMap = {};
       const revisoesExcluidasMap = {};
       const etapasExcluidasSet = new Set();
-
+      
       if (data && data.length > 0) {
-        console.log('📊 Processando dados carregados do banco:', data.length, 'registros');
         data.forEach((item, itemIdx) => {
-          console.log(`\n[${itemIdx}] Processando item ID: ${item.id}, documento_id: ${item.documento_id}`);
           if (item.documento_id) {
             dataMap.set(item.documento_id, item);
           }
 
           // Detectar revisões existentes e excluídas por etapa
           if (item.datas) {
-            console.log(`  Datas para este item:`, Object.keys(item.datas));
             Object.entries(item.datas).forEach(([etapa, etapaData]) => {
-              console.log(`  📌 Processando etapa: ${etapa}`, etapaData);
               if (etapaData && typeof etapaData === 'object') {
                 if (!revisoesMap[etapa]) {
                   revisoesMap[etapa] = new Set();
@@ -161,24 +182,20 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
 
                 // Adicionar revisões que têm dados preenchidos
                 Object.keys(etapaData).forEach(rev => {
-                  if (rev !== '_excluida' && rev !== '_revisoes_excluidas' && rev !== '_revisoes_existentes') {
-                    const valor = etapaData[rev];
-                    console.log(`    📝 Revisão com dados: ${rev} = ${valor}`);
-                    revisoesMap[etapa].add(rev);
-                  }
+                 if (rev !== '_excluida' && rev !== '_revisoes_excluidas' && rev !== '_revisoes_existentes') {
+                   const valor = etapaData[rev];
+                   revisoesMap[etapa].add(rev);
+                 }
                 });
 
                 // Carregar revisões que foram criadas (mesmo sem dados)
                 if ('_revisoes_existentes' in etapaData) {
-                  console.log(`    📋 _revisoes_existentes encontrado:`, etapaData._revisoes_existentes);
-                  if (Array.isArray(etapaData._revisoes_existentes)) {
-                    etapaData._revisoes_existentes.forEach(rev => {
-                      console.log(`      ➕ Adicionando revisão criada: ${rev}`);
-                      revisoesMap[etapa].add(rev);
-                    });
-                  } else {
-                    console.log(`      ❌ _revisoes_existentes NÃO é array!`);
-                  }
+                 if (Array.isArray(etapaData._revisoes_existentes)) {
+                   etapaData._revisoes_existentes.forEach(rev => {
+                     revisoesMap[etapa].add(rev);
+                   });
+                 } else {
+                 }
                 }
 
                 // Detectar revisões excluídas
@@ -196,60 +213,80 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
             });
           }
         });
-        console.log('🎯 Resumo de revisões carregadas:', revisoesMap);
       }
-
-      // Inicializar revisões para todas as etapas, removendo as excluídas
+      
+      // Inicializar revisões para TODAS as etapas encontradas nos dados do banco + etapas do empreendimento
+      // Priorizar chaves do banco (onde os dados realmente estão), deduplicando case-insensitive
+      const etapasDoBanco = Object.keys(revisoesMap);
+      const etapasNormalizadas = [...etapasDoBanco];
+      ETAPAS.forEach(etapaConfig => {
+        const jaExiste = etapasDoBanco.some(e => e.toLowerCase() === etapaConfig.toLowerCase());
+        if (!jaExiste) etapasNormalizadas.push(etapaConfig);
+      });
+      // Ordenar etapas na sequência correta (baseado em ETAPAS)
+      const etapasUnion = etapasNormalizadas.sort((a, b) => {
+        const indexA = ETAPAS.findIndex(e => e.toLowerCase() === a.toLowerCase());
+        const indexB = ETAPAS.findIndex(e => e.toLowerCase() === b.toLowerCase());
+        return (indexA !== -1 ? indexA : 999) - (indexB !== -1 ? indexB : 999);
+      });
       const revisoesCompletas = {};
-      ETAPAS.forEach(etapa => {
+      etapasUnion.forEach(etapa => {
         // Usar APENAS as revisões mapeadas (dados + _revisoes_existentes)
         // NÃO usar DEFAULT_REVISOES como fallback, pois pode sobrescrever revisões criadas
         const revisoesEtapaSet = revisoesMap[etapa];
-        console.log(`🔎 Buscando ${etapa}:`, {
-          existe: !!revisoesEtapaSet,
-          isSet: revisoesEtapaSet instanceof Set,
-          size: revisoesEtapaSet?.size,
-          values: revisoesEtapaSet ? Array.from(revisoesEtapaSet) : 'N/A'
-        });
-
+        
         let todasRevisoes = revisoesEtapaSet && revisoesEtapaSet.size > 0
           ? Array.from(revisoesEtapaSet).sort()
-          : [];
+          : [...DEFAULT_REVISOES];
 
         const revisoesExcluidas = revisoesExcluidasMap[etapa] || new Set();
         const filtradas = todasRevisoes.filter(rev => !revisoesExcluidas.has(rev));
         revisoesCompletas[etapa] = filtradas;
-        console.log(`✅ Etapa ${etapa}: ${revisoesCompletas[etapa].join(', ')} (Total: ${revisoesCompletas[etapa].length})`);
       });
+      
+      
+      // Montar linhas baseado nos registros do DataCadastro (fonte primária),
+      // depois adicionar documentos que ainda não têm registro.
+      const docIdSet = new Set(sortedDocs.map(d => d.id));
+      
+      // Mapa de índices dos documentos para reordenação
+      const docIndexMap = new Map(sortedDocs.map((doc, idx) => [doc.id, idx]));
 
-      // Log com stringify para evitar problema de referência do console
-      console.log('📋 Revisões finais para setar no estado:', JSON.stringify(revisoesCompletas, null, 2));
-      console.log('📋 ETAPAS para debug:', ETAPAS);
-      console.log('📋 revisoesMap para debug:', revisoesMap);
-      console.log('🔴 ANTES DE SETAR STATE - revisoesCompletas:', JSON.stringify(revisoesCompletas, null, 2));
+      // Linhas com DataCadastro existente
+      const linhasComData = (data || [])
+        .filter(item => item.documento_id);
 
-      // Criar uma linha para cada documento
-      const novasLinhas = sortedDocs.map((doc, idx) => {
-        const existingData = dataMap.get(doc.id);
-        return existingData || {
+      const documento_idsComData = new Set(linhasComData.map(l => l.documento_id));
+
+      // Documentos sem registro DataCadastro ainda
+      const docsNovos = sortedDocs
+        .filter(doc => !documento_idsComData.has(doc.id))
+        .map((doc, idx) => ({
           id: `temp-${doc.id}`,
           empreendimento_id: empreendimento.id,
-          ordem: idx,
           documento_id: doc.id,
+          ordem: linhasComData.length + idx,
           datas: {},
           isNew: true
-        };
-      });
+        }));
 
+      // Ordenar todas as linhas de acordo com a ordem dos documentos
+      const todasAsLinhas = [...linhasComData, ...docsNovos];
+      const novasLinhas = todasAsLinhas.sort((a, b) => {
+        const indexA = docIndexMap.get(a.documento_id) ?? 999999;
+        const indexB = docIndexMap.get(b.documento_id) ?? 999999;
+        return indexA - indexB;
+      });
+      
       // Setar tudo junto de uma vez
+      setEtapasEfetivas(etapasUnion);
       setRevisoesPorEtapa(revisoesCompletas);
       setEtapasExcluidas(Array.from(etapasExcluidasSet));
       setLinhas(novasLinhas);
       setLoadedEmpreendimentoId(empreendimento.id);
       setLinhasModificadas(new Set());
-
+      
       // Log final para confirmar que revisões foram setadas
-      console.log('🎬 FINAL DO LOADDATA - Revisões devem estar em revisoesPorEtapa agora');
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
@@ -263,7 +300,6 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
     const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
     if (revisoesEtapa.length === 0) {
       // Se não há revisões, começar com R00
-      console.log(`➕ Adicionando primeira revisão (R00) em ${etapa}`);
       setHasUnsavedChanges(true);
       setRevisoesPorEtapa(prev => ({
         ...prev,
@@ -290,7 +326,6 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
     const numero = parseInt(ultimaRevisao.substring(1)) + 1;
     const novaRevisao = `R${String(numero).padStart(2, '0')}`;
 
-    console.log(`➕ Adicionando revisão ${novaRevisao} em ${etapa} (antes: ${revisoesEtapa.join(', ')})`);
     setHasUnsavedChanges(true);
     setRevisoesPorEtapa(prev => ({
       ...prev,
@@ -312,30 +347,63 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
       return { ...linha, datas: novasDatas };
     }));
     setLinhasModificadas(new Set(linhas.map(l => l.id)));
-    console.log(`✅ Revisão ${novaRevisao} marcada em todas as ${linhas.length} linhas`);
+  };
+
+  const handleRenameRevisao = (etapa, oldName, newName) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) {
+      setEditingRevisao(null);
+      return;
+    }
+
+    setHasUnsavedChanges(true);
+    setRevisoesPorEtapa(prev => ({
+      ...prev,
+      [etapa]: prev[etapa].map(r => r === oldName ? trimmed : r)
+    }));
+
+    // Renomear chave nos dados de cada linha
+    setLinhas(prev => prev.map(linha => {
+      const novasDatas = { ...linha.datas };
+      if (novasDatas[etapa]) {
+        const etapaData = { ...novasDatas[etapa] };
+        if (etapaData[oldName] !== undefined) {
+          etapaData[trimmed] = etapaData[oldName];
+          delete etapaData[oldName];
+        }
+        // Atualizar _revisoes_existentes
+        if (Array.isArray(etapaData._revisoes_existentes)) {
+          etapaData._revisoes_existentes = etapaData._revisoes_existentes.map(r => r === oldName ? trimmed : r);
+        }
+        novasDatas[etapa] = etapaData;
+      }
+      return { ...linha, datas: novasDatas };
+    }));
+    setLinhasModificadas(new Set(linhas.map(l => l.id)));
+    setEditingRevisao(null);
   };
 
   const handleRemoveRevisao = (etapa, revisao) => {
     if (!confirm(`Deseja excluir a revisão ${revisao} da etapa ${etapa}? Os dados desta revisão serão perdidos.`)) return;
-
+    
     setHasUnsavedChanges(true);
     setRevisoesPorEtapa(prev => ({
       ...prev,
       [etapa]: prev[etapa].filter(r => r !== revisao)
     }));
-
+    
     // Limpar dados e marcar revisão como excluída
     setLinhas(prev => prev.map(linha => {
       const novasDatas = { ...linha.datas };
       if (!novasDatas[etapa]) {
         novasDatas[etapa] = {};
       }
-
+      
       // Remover dados da revisão
       if (novasDatas[etapa][revisao]) {
         delete novasDatas[etapa][revisao];
       }
-
+      
       // Adicionar à lista de revisões excluídas
       if (!novasDatas[etapa]._revisoes_excluidas) {
         novasDatas[etapa]._revisoes_excluidas = [];
@@ -343,7 +411,7 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
       if (!novasDatas[etapa]._revisoes_excluidas.includes(revisao)) {
         novasDatas[etapa]._revisoes_excluidas.push(revisao);
       }
-
+      
       return { ...linha, datas: novasDatas };
     }));
     setLinhasModificadas(new Set(linhas.map(l => l.id)));
@@ -351,10 +419,10 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
 
   const handleExcluirEtapa = (etapa) => {
     if (!confirm(`Deseja excluir a etapa ${etapa}? Você poderá restaurá-la depois se necessário.`)) return;
-
+    
     setHasUnsavedChanges(true);
     setEtapasExcluidas(prev => [...prev, etapa]);
-
+    
     // Marcar etapa como excluída nas linhas
     setLinhas(prev => prev.map(linha => {
       const novasDatas = { ...linha.datas };
@@ -370,7 +438,7 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
   const handleRestaurarEtapa = (etapa) => {
     setHasUnsavedChanges(true);
     setEtapasExcluidas(prev => prev.filter(e => e !== etapa));
-
+    
     // Remover marcador de exclusão
     setLinhas(prev => prev.map(linha => {
       const novasDatas = { ...linha.datas };
@@ -382,43 +450,29 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
     setLinhasModificadas(new Set(linhas.map(l => l.id)));
   };
 
-  const handleUpdateData = (linhaId, etapa, revisao, valor) => {
-    console.log('📝 handleUpdateData:', { linhaId, etapa, revisao, valor });
+  const handleUpdateData = useCallback((linhaId, etapa, revisao, valor) => {
     setLinhasModificadas(prev => new Set([...prev, linhaId]));
-    setLinhas(prev => {
-      const updated = prev.map(linha => {
-        if (linha.id !== linhaId) return linha;
+    setLinhas(prev => prev.map(linha => {
+      if (linha.id !== linhaId) return linha;
+      const novasDatas = { ...linha.datas };
+      if (!novasDatas[etapa]) novasDatas[etapa] = {};
+      if (!valor || valor.trim() === '') {
+        delete novasDatas[etapa][revisao];
+      } else {
+        novasDatas[etapa][revisao] = valor;
+      }
+      return { ...linha, datas: novasDatas };
+    }));
+    setHasUnsavedChanges(true);
+  }, []);
 
-        const novasDatas = { ...linha.datas };
-        if (!novasDatas[etapa]) {
-          novasDatas[etapa] = {};
-        }
-        // Se o valor estiver vazio, deletar a chave ao invés de setar como vazio
-        if (!valor || valor.trim() === '') {
-          delete novasDatas[etapa][revisao];
-          console.log(`  ❌ Deletado: ${linhaId}/${etapa}/${revisao}`);
-        } else {
-          novasDatas[etapa][revisao] = valor;
-          console.log(`  ✅ Adicionado: ${linhaId}/${etapa}/${revisao} = ${valor}`);
-        }
-
-        return { ...linha, datas: novasDatas };
-      });
-      return updated;
-    });
-    // Garantir que o flag de mudanças não salvas é setado DEPOIS da atualização das linhas
-    setTimeout(() => {
-      console.log('🔔 Marcando como "Alterações não salvas"');
-      setHasUnsavedChanges(true);
-    }, 0);
-  };
-
-  const copiarDataParaBaixo = (linhaId, etapa, revisao) => {
-    const linhaIndex = linhas.findIndex(l => l.id === linhaId);
+  const copiarDataParaBaixo = useCallback((linhaId, etapa, revisao) => {
+    const currentLinhas = linhasRef.current;
+    const linhaIndex = currentLinhas.findIndex(l => l.id === linhaId);
     if (linhaIndex === -1) return;
 
-    const valorOriginal = getDataValue(linhas[linhaIndex], etapa, revisao);
-    if (!valorOriginal) {
+    const valorOriginal = currentLinhas[linhaIndex].datas?.[etapa]?.[revisao] || '';
+    if (!valorOriginal || valorOriginal === '0001-01-01' || valorOriginal.includes('dd/mm/aaaa')) {
       alert('Selecione uma data primeiro');
       return;
     }
@@ -426,33 +480,29 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
     if (!confirm(`Copiar a data ${format(new Date(valorOriginal), 'dd/MM/yyyy')} para todas as células abaixo nesta coluna?`)) return;
 
     setHasUnsavedChanges(true);
-    const linhasAfetadas = linhas.slice(linhaIndex + 1).map(l => l.id);
+    const linhasAfetadas = currentLinhas.slice(linhaIndex + 1).map(l => l.id);
     setLinhasModificadas(prev => new Set([...prev, ...linhasAfetadas]));
     setLinhas(prev => prev.map((linha, idx) => {
       if (idx <= linhaIndex) return linha;
-
       const novasDatas = { ...linha.datas };
-      if (!novasDatas[etapa]) {
-        novasDatas[etapa] = {};
-      }
+      if (!novasDatas[etapa]) novasDatas[etapa] = {};
       novasDatas[etapa][revisao] = valorOriginal;
-
       return { ...linha, datas: novasDatas };
     }));
-  };
+  }, []);
 
   const copiarLinhaParaProxima = (linhaId) => {
     const linhaIndex = linhas.findIndex(l => l.id === linhaId);
     if (linhaIndex === -1 || linhaIndex === linhas.length - 1) return;
-
+    
     const linhaOriginal = linhas[linhaIndex];
     if (!linhaOriginal.datas || Object.keys(linhaOriginal.datas).length === 0) {
       alert('Esta linha não possui datas para copiar');
       return;
     }
-
+    
     if (!confirm('Copiar todas as datas desta linha para a próxima linha?')) return;
-
+    
     setHasUnsavedChanges(true);
     const proxLinha = linhas[linhaIndex + 1];
     if (proxLinha) {
@@ -460,7 +510,7 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
     }
     setLinhas(prev => prev.map((linha, idx) => {
       if (idx !== linhaIndex + 1) return linha;
-
+      
       // Deep clone do objeto datas para evitar referências compartilhadas
       return { ...linha, datas: JSON.parse(JSON.stringify(linhaOriginal.datas)) };
     }));
@@ -469,30 +519,30 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
   const copiarDataParaProximaColuna = (linhaId, etapa, revisao) => {
     const linha = linhas.find(l => l.id === linhaId);
     if (!linha) return;
-
+    
     const valorOriginal = getDataValue(linha, etapa, revisao);
     if (!valorOriginal) {
       alert('Selecione uma data primeiro');
       return;
     }
-
-    const etapasVisiveis = ETAPAS.filter(e => !etapasExcluidas.includes(e));
+    
+    const etapasVisiveis = ETAPAS_VIEW.filter(e => !etapasExcluidas.includes(e));
     const etapaIndex = etapasVisiveis.indexOf(etapa);
     const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
     const revisaoIndex = revisoesEtapa.indexOf(revisao);
-
+    
     setHasUnsavedChanges(true);
     setLinhasModificadas(prev => new Set([...prev, linhaId]));
     setLinhas(prev => prev.map(l => {
       if (l.id !== linhaId) return l;
-
+      
       const novasDatas = { ...l.datas };
-
+      
       // Se há próxima revisão na mesma etapa
       if (revisaoIndex < revisoesEtapa.length - 1) {
         if (!novasDatas[etapa]) novasDatas[etapa] = {};
         novasDatas[etapa][revisoesEtapa[revisaoIndex + 1]] = valorOriginal;
-      }
+      } 
       // Senão, vai para primeira revisão da próxima etapa
       else if (etapaIndex < etapasVisiveis.length - 1) {
         const proxEtapa = etapasVisiveis[etapaIndex + 1];
@@ -502,7 +552,7 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
           novasDatas[proxEtapa][proxRevisoes[0]] = valorOriginal;
         }
       }
-
+      
       return { ...l, datas: novasDatas };
     }));
   };
@@ -545,13 +595,13 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
     setLinhasModificadas(prev => new Set([...prev, ...Array.from(selectedFolhas)]));
     setLinhas(prev => prev.map(linha => {
       if (!selectedFolhas.has(linha.id)) return linha;
-
+      
       const novasDatas = { ...linha.datas };
       if (!novasDatas[massEditEtapa]) {
         novasDatas[massEditEtapa] = {};
       }
       novasDatas[massEditEtapa][massEditRevisao] = massEditData;
-
+      
       return { ...linha, datas: novasDatas };
     }));
 
@@ -572,44 +622,44 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
   const copiarDataParaDireita = (linhaId, etapa, revisao) => {
     const linha = linhas.find(l => l.id === linhaId);
     if (!linha) return;
-
+    
     const valorOriginal = getDataValue(linha, etapa, revisao);
     if (!valorOriginal) {
       alert('Selecione uma data primeiro');
       return;
     }
-
-    const etapasVisiveis = ETAPAS.filter(e => !etapasExcluidas.includes(e));
+    
+    const etapasVisiveis = ETAPAS_VIEW.filter(e => !etapasExcluidas.includes(e));
     const etapaIndex = etapasVisiveis.indexOf(etapa);
     const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
     const revisaoIndex = revisoesEtapa.indexOf(revisao);
-
+    
     if (!confirm(`Copiar a data ${format(new Date(valorOriginal), 'dd/MM/yyyy')} para todas as células à direita nesta linha?`)) return;
-
+    
     setHasUnsavedChanges(true);
     setLinhasModificadas(prev => new Set([...prev, linhaId]));
     setLinhas(prev => prev.map(l => {
       if (l.id !== linhaId) return l;
-
+      
       const novasDatas = { ...l.datas };
-
+      
       // Copiar para revisões seguintes da mesma etapa
       for (let i = revisaoIndex + 1; i < revisoesEtapa.length; i++) {
         if (!novasDatas[etapa]) novasDatas[etapa] = {};
         novasDatas[etapa][revisoesEtapa[i]] = valorOriginal;
       }
-
+      
       // Copiar para próximas etapas
       for (let i = etapaIndex + 1; i < etapasVisiveis.length; i++) {
         const proxEtapa = etapasVisiveis[i];
         const proxRevisoes = revisoesPorEtapa[proxEtapa] || DEFAULT_REVISOES;
-
+        
         if (!novasDatas[proxEtapa]) novasDatas[proxEtapa] = {};
         proxRevisoes.forEach(rev => {
           novasDatas[proxEtapa][rev] = valorOriginal;
         });
       }
-
+      
       return { ...l, datas: novasDatas };
     }));
   };
@@ -617,168 +667,140 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
 
 
   const handleSave = async (silent = false) => {
-    console.log('💾 INICIANDO SALVAMENTO');
     if (isSaving) {
-      console.log('⚠️ Já está salvando, ignorando chamada duplicada');
       return;
     }
     setIsSaving(true);
     try {
-      console.log('📋 Estado atual hasUnsavedChanges:', hasUnsavedChanges);
-      console.log('📋 Total de linhas:', linhas.length);
-      console.log('📋 Linhas modificadas:', linhasModificadas.size);
-
+      
       // SALVAR APENAS linhas modificadas OU todas se não há rastreamento
       const linhasParaSalvar = linhas.filter(linha => {
         if (!linha.documento_id) {
-          console.log(`  ⏭️ Linha ${linha.id} ignorada (sem documento_id)`);
           return false;
         }
-
+        
         // Se há rastreamento de modificações, salvar apenas modificadas
         if (linhasModificadas.size > 0 && !linhasModificadas.has(linha.id)) {
-          console.log(`  ⏭️ Linha ${linha.id} não modificada`);
           return false;
         }
-
+        
         // Se tem datas (mesmo vazias), pode ter metadados
         if (linha.datas && Object.keys(linha.datas).length > 0) {
-          console.log(`  ✅ Linha ${linha.id} tem datas (salva)`);
           return true;
         }
-
+        
         // Se não tem datas nenhuma, não salva
-        console.log(`  ⏭️ Linha ${linha.id} ignorada (sem datas nenhuma)`);
         return false;
       });
-
-      console.log(`📤 ${linhasParaSalvar.length} linhas para salvar (de ${linhas.length} total)`);
-      console.log('📤 Primeiras 3 linhas para debug:', linhasParaSalvar.slice(0, 3).map(l => ({
-        id: l.id,
-        documento_id: l.documento_id,
-        datas: l.datas
-      })));
+      
 
       // Processar em lotes sequenciais para evitar rate limit
-      console.log('⚡ Iniciando salvamento em lotes...');
-      let successCount = 0;
-      let errorCount = 0;
-      const updatedLinhas = new Map();
-      const BATCH_SIZE = 2; // Máximo de requisições paralelas por lote
-      const DELAY_ENTRE_LOTES = 1500; // Delay entre lotes em ms
+       let successCount = 0;
+       let errorCount = 0;
+       const updatedLinhas = new Map();
+       const BATCH_SIZE = 5; // Máximo de requisições paralelas por lote
+       const DELAY_ENTRE_LOTES = 800; // Delay entre lotes em ms
 
-      // Dividir em lotes
-      for (let batchIdx = 0; batchIdx < linhasParaSalvar.length; batchIdx += BATCH_SIZE) {
-        const batch = linhasParaSalvar.slice(batchIdx, batchIdx + BATCH_SIZE);
-        console.log(`\n📦 Lote ${Math.floor(batchIdx / BATCH_SIZE) + 1}: ${batch.length} linhas`);
+       // Dividir em lotes
+       for (let batchIdx = 0; batchIdx < linhasParaSalvar.length; batchIdx += BATCH_SIZE) {
+         const batch = linhasParaSalvar.slice(batchIdx, batchIdx + BATCH_SIZE);
 
-        const batchPromises = batch.map((linha, idxNoBatch) =>
-          (async () => {
-            const idxGlobal = batchIdx + idxNoBatch;
-            try {
-              console.log(`\n📨 [${idxGlobal + 1}/${linhasParaSalvar.length}] Salvando linha: ${linha.id}`);
+         const batchPromises = batch.map((linha, _idxNoBatch) => 
+           (async () => {
+             try {
 
-              // Preservar metadados
-              const datasComMetadados = {};
-              if (linha.datas) {
-                Object.entries(linha.datas).forEach(([etapa, etapaData]) => {
-                  if (etapaData && typeof etapaData === 'object') {
-                    datasComMetadados[etapa] = {
-                      ...etapaData
-                    };
-                  }
-                });
-              }
+               // Preservar metadados
+               const datasComMetadados = {};
+               if (linha.datas) {
+                 Object.entries(linha.datas).forEach(([etapa, etapaData]) => {
+                   if (etapaData && typeof etapaData === 'object') {
+                     datasComMetadados[etapa] = {
+                       ...etapaData
+                     };
+                   }
+                 });
+               }
 
-              const linhaData = {
-                empreendimento_id: empreendimento.id,
-                ordem: linha.ordem,
-                documento_id: linha.documento_id,
-                datas: datasComMetadados
-              };
+               const linhaData = {
+                 empreendimento_id: empreendimento.id,
+                 ordem: linha.ordem ?? linhasParaSalvar.indexOf(linha),
+                 documento_id: linha.documento_id,
+                 datas: datasComMetadados
+               };
 
-              // GARANTIR que revisões criadas são salvas mesmo que vazias
-              const etapasVisiveis = ETAPAS.filter(e => !etapasExcluidas.includes(e));
-              etapasVisiveis.forEach(etapa => {
-                const revisoesEtapa = revisoesPorEtapa[etapa];
-                if (revisoesEtapa && revisoesEtapa.length > 0) {
-                  if (!datasComMetadados[etapa]) {
-                    datasComMetadados[etapa] = {};
-                  }
-                  // FORÇAR que _revisoes_existentes tem as revisões reais
-                  datasComMetadados[etapa]._revisoes_existentes = revisoesEtapa;
-                }
-              });
+               // GARANTIR que revisões criadas são salvas mesmo que vazias
+               const etapasVisiveis = ETAPAS_VIEW.filter(e => !etapasExcluidas.includes(e));
+               etapasVisiveis.forEach(etapa => {
+                 const revisoesEtapa = revisoesPorEtapa[etapa];
+                 if (revisoesEtapa && revisoesEtapa.length > 0) {
+                   if (!datasComMetadados[etapa]) {
+                     datasComMetadados[etapa] = {};
+                   }
+                   // FORÇAR que _revisoes_existentes tem as revisões reais
+                   datasComMetadados[etapa]._revisoes_existentes = revisoesEtapa;
+                 }
+               });
 
-              const linhaDataFinal = {
-                ...linhaData,
-                datas: datasComMetadados
-              };
+               const linhaDataFinal = {
+                 ...linhaData,
+                 datas: datasComMetadados
+               };
 
-              console.log(`  Dados FINAL a salvar:`, linhaDataFinal);
 
-              let result;
-              let attempts = 0;
-              const maxAttempts = 3;
+               let result;
+               let attempts = 0;
+               const maxAttempts = 3;
 
-              while (attempts < maxAttempts) {
-                try {
-                  const isNew = linha.isNew || linha.id.toString().startsWith('temp-');
-                  console.log(`  🔄 Tentativa ${attempts + 1}/${maxAttempts} (${isNew ? 'CREATE' : 'UPDATE'})`);
+               while (attempts < maxAttempts) {
+                 try {
+                   const isNew = linha.isNew || linha.id.toString().startsWith('temp-');
 
-                  if (isNew) {
-                    result = await DataCadastro.create(linhaDataFinal);
-                  } else {
-                    result = await DataCadastro.update(linha.id, linhaDataFinal);
-                  }
-                  console.log(`  ✅ Sucesso! ID: ${result.id}`);
-                  break;
-                } catch (err) {
-                  attempts++;
-                  console.error(`  ❌ Tentativa ${attempts} falhou:`, err.message);
+                   if (isNew) {
+                     result = await DataCadastro.create(linhaDataFinal);
+                   } else {
+                     result = await DataCadastro.update(linha.id, linhaDataFinal);
+                   }
+                   break;
+                 } catch (err) {
+                   attempts++;
+                   console.error(`  ❌ Tentativa ${attempts} falhou:`, err.message);
 
-                  if (attempts >= maxAttempts) {
-                    throw err;
-                  }
+                   if (attempts >= maxAttempts) {
+                     throw err;
+                   }
 
-                  const waitTime = 3000 * attempts;
-                  console.log(`  ⏳ Aguardando ${waitTime}ms...`);
-                  await new Promise(resolve => setTimeout(resolve, waitTime));
-                }
-              }
+                   const waitTime = 3000 * attempts;
+                   await new Promise(resolve => setTimeout(resolve, waitTime));
+                 }
+               }
 
-              successCount++;
-              updatedLinhas.set(linha.id, result);
-            } catch (error) {
-              errorCount++;
-              console.error(`❌ ERRO na linha ${linha.id}:`, error);
-            }
-          })()
-        );
+               successCount++;
+               updatedLinhas.set(linha.id, result);
+             } catch (error) {
+               errorCount++;
+               console.error(`❌ ERRO na linha ${linha.id}:`, error);
+             }
+           })()
+         );
 
-        // Executar lote em paralelo
-        await Promise.all(batchPromises);
+         // Executar lote em paralelo
+         await Promise.all(batchPromises);
 
-        // Delay entre lotes (exceto no último)
-        if (batchIdx + BATCH_SIZE < linhasParaSalvar.length) {
-          console.log(`⏳ Aguardando ${DELAY_ENTRE_LOTES}ms antes do próximo lote...`);
-          await new Promise(resolve => setTimeout(resolve, DELAY_ENTRE_LOTES));
-        }
-      }
+         // Delay entre lotes (exceto no último)
+         if (batchIdx + BATCH_SIZE < linhasParaSalvar.length) {
+           await new Promise(resolve => setTimeout(resolve, DELAY_ENTRE_LOTES));
+         }
+       }
 
       // Atualizar estado local com os IDs salvos
-      console.log(`\n✨ Atualizando ${successCount} linhas salvas no estado local`);
       setLinhas(prev => prev.map(linha => {
         const savedData = updatedLinhas.get(linha.id);
         if (savedData) {
-          console.log(`  ✅ ${linha.id} -> ${savedData.id}`);
           return { ...linha, id: savedData.id, isNew: false };
         }
         return linha;
       }));
 
-      console.log(`\n🎉 SALVAMENTO COMPLETO - Sucesso: ${successCount}, Erros: ${errorCount}`);
-      console.log('🔄 Setando hasUnsavedChanges = false');
       setHasUnsavedChanges(false);
       setLinhasModificadas(new Set());
 
@@ -795,38 +817,67 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
         alert(`Erro ao salvar dados: ${error.message || 'Erro desconhecido'}`);
       }
     } finally {
-      console.log('🔚 Finalizando salvamento - setando isSaving = false');
       setIsSaving(false);
     }
   };
 
   const getDataValue = (linha, etapa, revisao) => {
-    const data = linha.datas?.[etapa]?.[revisao] || '';
-    // Não exibir datas inválidas (01/01/0001 ou dd/mm/aaaa)
-    if (!data || data === '0001-01-01' || (typeof data === 'string' && data.includes('dd/mm/aaaa'))) {
-      return '';
-    }
-    return typeof data === 'string' ? data : '';
+  const data = linha.datas?.[etapa]?.[revisao] || '';
+  // Não exibir datas inválidas (01/01/0001 ou dd/mm/aaaa)
+  if (!data || data === '0001-01-01' || (typeof data === 'string' && data.includes('dd/mm/aaaa'))) {
+    return '';
+  }
+  return typeof data === 'string' ? data : '';
   };
+
+  const docMap = useMemo(() => new Map(documentos.map(d => [d.id, d])), [documentos]);
 
   const linhasPorDisciplina = useMemo(() => {
     const grupos = {};
-
     linhas.forEach(linha => {
-      const doc = documentos.find(d => d.id === linha.documento_id);
-      const disciplina = doc?.disciplina || 'Sem Disciplina';
-
-      if (!grupos[disciplina]) {
-        grupos[disciplina] = [];
-      }
+      const doc = docMap.get(linha.documento_id);
+      if (!doc) return;
+      const disciplina = doc.disciplina || 'Sem Disciplina';
+      if (!grupos[disciplina]) grupos[disciplina] = [];
       grupos[disciplina].push(linha);
     });
-
     return Object.entries(grupos).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [linhas, documentos]);
+  }, [linhas, docMap]);
+
+  const ETAPAS_VIEW_BASE = etapasEfetivas.length > 0 ? etapasEfetivas : ETAPAS;
+  // Aplicar ordem customizada se existir
+  const ETAPAS_VIEW = useMemo(() => {
+    if (ordemEtapas.length === 0) return ETAPAS_VIEW_BASE;
+    const sorted = [...ETAPAS_VIEW_BASE].sort((a, b) => {
+      const ia = ordemEtapas.indexOf(a);
+      const ib = ordemEtapas.indexOf(b);
+      if (ia === -1 && ib === -1) return 0;
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+    return sorted;
+  }, [ETAPAS_VIEW_BASE, ordemEtapas]);
+
+  // Pre-computed memoized value — avoids repeated .filter() in render loops
+  const etapasVisiveis = useMemo(
+    () => ETAPAS_VIEW.filter(e => !etapasExcluidas.includes(e)),
+    [ETAPAS_VIEW, etapasExcluidas]
+  );
+
+  const handleDragEndEtapas = (result) => {
+    if (!result.destination) return;
+    const etapasParaOrdenar = ETAPAS_VIEW.filter(e => !etapasExcluidas.includes(e));
+    const novaOrdem = Array.from(etapasParaOrdenar);
+    const [moved] = novaOrdem.splice(result.source.index, 1);
+    novaOrdem.splice(result.destination.index, 0, moved);
+    // Incluir etapas excluídas ao final para não perdê-las
+    const excluidas = ETAPAS_VIEW.filter(e => etapasExcluidas.includes(e));
+    setOrdemEtapas([...novaOrdem, ...excluidas]);
+  };
 
   const larguraTotalEtapas = useMemo(() => {
-    const etapasVisiveis = ETAPAS.filter(e => !etapasExcluidas.includes(e));
+    const etapasVisiveis = ETAPAS_VIEW_BASE.filter(e => !etapasExcluidas.includes(e));
     return etapasVisiveis.reduce((total, etapa) => {
       const isMinimizada = etapasMinimizadas[etapa];
       if (isMinimizada) {
@@ -835,11 +886,62 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
       const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
       return total + ((revisoesEtapa.length * 110) + 40);
     }, 0);
-  }, [ETAPAS, etapasExcluidas, etapasMinimizadas, revisoesPorEtapa]);
+  }, [ETAPAS_VIEW, etapasExcluidas, etapasMinimizadas, revisoesPorEtapa]);
+
+  const handleExportData = () => {
+    const etapasVisiveis = ETAPAS_VIEW.filter(e => !etapasExcluidas.includes(e));
+
+    // Cabeçalhos
+    let headers = ['folha', 'descritivo', 'disciplina'];
+    etapasVisiveis.forEach(etapa => {
+      const revisoes = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
+      revisoes.forEach(rev => {
+        headers.push(`${etapa}_${rev}`);
+      });
+    });
+
+    // Linhas de dados
+    const rows = linhas.map(linha => {
+      const doc = documentos.find(d => d.id === linha.documento_id);
+      const row = [
+        doc?.arquivo || doc?.numero || '',
+        doc?.descritivo || '',
+        doc?.disciplina || ''
+      ];
+
+      etapasVisiveis.forEach(etapa => {
+        const revisoes = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
+        revisoes.forEach(rev => {
+          const val = getDataValue(linha, etapa, rev);
+          if (val) {
+            // Converter de yyyy-mm-dd para dd/mm/yyyy
+            const [ano, mes, dia] = val.split('-');
+            row.push(`${dia}/${mes}/${ano}`);
+          } else {
+            row.push('');
+          }
+        });
+      });
+
+      return row;
+    });
+
+    const csvContent = [
+      headers.join(';'),
+      ...rows.map(r => r.join(';'))
+    ].join('\n');
+
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `cadastro_${empreendimento.nome.replace(/\s+/g, '_')}.csv`;
+    link.click();
+  };
 
   const handleExportTemplate = () => {
-    const etapasVisiveis = ETAPAS.filter(e => !etapasExcluidas.includes(e));
-
+    const etapasVisiveis = ETAPAS_VIEW.filter(e => !etapasExcluidas.includes(e));
+    
     // Criar cabeçalhos dinamicamente
     let headers = ['folha'];
     etapasVisiveis.forEach(etapa => {
@@ -848,18 +950,18 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
         headers.push(`${etapa}_${rev}`);
       });
     });
-
+    
     const csvContent = [
       headers.join(';'),
       // Linha de exemplo
       [
         'ARQ-01',
-        ...etapasVisiveis.flatMap(etapa =>
+        ...etapasVisiveis.flatMap(etapa => 
           (revisoesPorEtapa[etapa] || DEFAULT_REVISOES).map(() => '15/01/2025')
         )
       ].join(';')
     ].join('\n');
-
+    
     const BOM = '\uFEFF';
     const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -910,7 +1012,7 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
         }
 
         // Buscar documento por número ou arquivo
-        const documento = documentos.find(d =>
+        const documento = documentos.find(d => 
           d.numero === folhaNome || d.arquivo === folhaNome
         );
 
@@ -1056,10 +1158,18 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
                   onClick={clearSelection}
                   className="border-gray-400 text-gray-600 hover:bg-gray-50"
                 >
-                  <span>Limpar Seleção</span>
+                  Limpar Seleção
                 </Button>
               </>
             )}
+            <Button
+              variant="outline"
+              onClick={handleExportData}
+              className="border-blue-500 text-blue-600 hover:bg-blue-50"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Exportar
+            </Button>
             <Button
               variant="outline"
               onClick={() => setShowImportModal(true)}
@@ -1113,12 +1223,12 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
             </div>
 
             {/* Lista de Folhas */}
-            <div
+            <div 
               ref={folhasScrollRef}
               className="flex-1 overflow-y-auto"
               onScroll={(e) => {
                 if (dataScrollRef.current) {
-                  dataScrollRef.current.scrollTop = e.currentTarget.scrollTop;
+                  dataScrollRef.current.scrollTop = e.target.scrollTop;
                 }
               }}
             >
@@ -1180,183 +1290,218 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
 
           {/* Container de Etapas com Scroll Horizontal - 80% */}
           <div className="w-[80%] flex flex-col overflow-hidden">
-            <div
+            <div 
               ref={dataScrollRef}
               className="flex-1 overflow-x-auto overflow-y-auto"
               onScroll={(e) => {
-                if (folhasScrollRef.current && e.currentTarget.scrollTop !== folhasScrollRef.current.scrollTop) {
-                  folhasScrollRef.current.scrollTop = e.currentTarget.scrollTop;
+                if (folhasScrollRef.current && e.target.scrollTop !== folhasScrollRef.current.scrollTop) {
+                  folhasScrollRef.current.scrollTop = e.target.scrollTop;
                 }
               }}
             >
               <div style={{ width: `${larguraTotalEtapas}px` }}>
                 {/* Cabeçalho Fixo das Etapas */}
                 <div className="bg-blue-100 border-b-2 border-gray-300 sticky top-0 z-20" style={{ minWidth: `${larguraTotalEtapas}px`, height: '72px' }}>
-                  <div className="flex h-full">
-                    {ETAPAS.filter(etapa => !etapasExcluidas.includes(etapa)).map((etapa, idx) => {
-                      const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
-                      const isMinimizada = etapasMinimizadas[etapa];
-                      const colSpanTotal = isMinimizada ? 1 : revisoesEtapa.length + 1;
+                  <DragDropContext onDragEnd={handleDragEndEtapas}>
+                    <Droppable droppableId="etapas-header" direction="horizontal">
+                      {(provided) => (
+                        <div className="flex h-full" ref={provided.innerRef} {...provided.droppableProps}>
+                          {ETAPAS_VIEW.filter(etapa => !etapasExcluidas.includes(etapa)).map((etapa, idx) => {
+                            const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
+                            const isMinimizada = etapasMinimizadas[etapa];
+                            const colWidth = isMinimizada ? 40 : (revisoesEtapa.length * 110) + 40;
 
-                      return (
-                        <div
-                          key={etapa}
-                          className="border-r border-gray-300 last:border-r-0 relative group flex-shrink-0 flex flex-col"
-                          style={{ width: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`, minWidth: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px` }}
-                        >
-                          <div className="p-1.5 text-center font-semibold flex-1 flex items-center justify-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => toggleMinimizarEtapa(etapa)}
-                                className="text-gray-600 hover:text-gray-900 p-0.5"
-                                title={isMinimizada ? "Expandir" : "Minimizar"}
-                              >
-                                {isMinimizada ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
-                              </button>
-                              <span className={`${isMinimizada ? 'writing-mode-vertical-rl transform rotate-180 text-xs' : 'text-xs'}`}>
-                                {isMinimizada ? etapa.substring(0, 3).toUpperCase() : etapa}
-                              </span>
-                              {!readOnly && !isMinimizada && (
-                                <button
-                                  onClick={() => handleExcluirEtapa(etapa)}
-                                  className="absolute top-0.5 right-0.5 text-red-500 hover:text-red-700 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded"
-                                  title="Excluir etapa"
-                                >
-                                  <Trash2 className="w-2.5 h-2.5" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
+                            return (
+                              <Draggable key={etapa} draggableId={etapa} index={idx}>
+                                {(prov, snapshot) => (
+                                  <div
+                                    ref={prov.innerRef}
+                                    {...prov.draggableProps}
+                                    className={`border-r border-gray-300 last:border-r-0 relative group flex-shrink-0 flex flex-col ${snapshot.isDragging ? 'opacity-80 shadow-lg z-50' : ''}`}
+                                    style={{ width: `${colWidth}px`, minWidth: `${colWidth}px`, ...prov.draggableProps.style }}
+                                  >
+                                    <div className="p-1.5 text-center font-semibold flex-1 flex items-center justify-center">
+                                      <div className="flex items-center justify-center gap-1">
+                                        {/* Drag handle */}
+                                        <span {...prov.dragHandleProps} className="cursor-grab text-gray-400 hover:text-gray-600" title="Arrastar para reordenar">
+                                          <GripHorizontal className="w-3 h-3" />
+                                        </span>
+                                        <button
+                                          onClick={() => toggleMinimizarEtapa(etapa)}
+                                          className="text-gray-600 hover:text-gray-900 p-0.5"
+                                          title={isMinimizada ? "Expandir" : "Minimizar"}
+                                        >
+                                          {isMinimizada ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
+                                        </button>
+                                        <span className={`${isMinimizada ? 'writing-mode-vertical-rl transform rotate-180 text-xs' : 'text-xs'}`}>
+                                          {isMinimizada ? etapa.substring(0, 3).toUpperCase() : etapa}
+                                        </span>
+                                        {!readOnly && !isMinimizada && (
+                                          <button
+                                            onClick={() => handleExcluirEtapa(etapa)}
+                                            className="absolute top-0.5 right-0.5 text-red-500 hover:text-red-700 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded"
+                                            title="Excluir etapa"
+                                          >
+                                            <Trash2 className="w-2.5 h-2.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
 
-                          {/* Cabeçalho de Revisões */}
-                          {!isMinimizada && (
-                            <div className="flex border-t border-gray-300 bg-blue-50">
-                              {console.log(`🔍 Renderizando cabeçalho ${etapa}:`, revisoesEtapa, 'Estado:', revisoesPorEtapa)}
-                              {revisoesEtapa.map((revisao) => (
-                                <div
-                                  key={`${etapa}-${revisao}`}
-                                  className="border-r border-gray-200 p-1 text-center font-medium text-xs"
-                                  style={{ width: '110px', minWidth: '110px' }}
-                                >
-                                  <div className="flex items-center justify-center gap-0.5">
-                                    <span>{revisao}</span>
-                                    {!readOnly && (
-                                      <button
-                                        onClick={() => handleRemoveRevisao(etapa, revisao)}
-                                        className="text-red-500 hover:text-red-700 p-0.5"
-                                        title={`Excluir revisão ${revisao}`}
-                                      >
-                                        <Trash2 className="w-2.5 h-2.5" />
-                                      </button>
+                                    {/* Cabeçalho de Revisões */}
+                                    {!isMinimizada && (
+                                      <div className="flex border-t border-gray-300 bg-blue-50">
+                                        {revisoesEtapa.map((revisao) => (
+                                          <div
+                                            key={`${etapa}-${revisao}`}
+                                            className="border-r border-gray-200 p-1 text-center font-medium text-xs"
+                                            style={{ width: '110px', minWidth: '110px' }}
+                                          >
+                                            <div className="flex items-center justify-center gap-0.5">
+                                              {!readOnly && editingRevisao?.etapa === etapa && editingRevisao?.revisao === revisao ? (
+                                                <input
+                                                  autoFocus
+                                                  value={editingRevisaoValue}
+                                                  onChange={(e) => setEditingRevisaoValue(e.target.value)}
+                                                  onBlur={() => handleRenameRevisao(etapa, revisao, editingRevisaoValue)}
+                                                  onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') handleRenameRevisao(etapa, revisao, editingRevisaoValue);
+                                                    if (e.key === 'Escape') setEditingRevisao(null);
+                                                  }}
+                                                  className="w-16 px-1 py-0 text-xs border border-blue-500 rounded text-center"
+                                                />
+                                              ) : (
+                                                <span
+                                                  className={!readOnly ? 'cursor-pointer hover:text-blue-600' : ''}
+                                                  title={!readOnly ? 'Clique duplo para renomear' : ''}
+                                                  onDoubleClick={() => {
+                                                    if (readOnly) return;
+                                                    setEditingRevisao({ etapa, revisao });
+                                                    setEditingRevisaoValue(revisao);
+                                                  }}
+                                                >{revisao}</span>
+                                              )}
+                                              {!readOnly && !(editingRevisao?.etapa === etapa && editingRevisao?.revisao === revisao) && (
+                                                <button
+                                                  onClick={() => handleRemoveRevisao(etapa, revisao)}
+                                                  className="text-red-500 hover:text-red-700 p-0.5"
+                                                  title={`Excluir revisão ${revisao}`}
+                                                >
+                                                  <Trash2 className="w-2.5 h-2.5" />
+                                                </button>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ))}
+                                        <div className="bg-green-50 p-0.5 text-center" style={{ width: '40px', minWidth: '40px' }}>
+                                          {!readOnly && (
+                                            <button
+                                              onClick={() => handleAddRevisao(etapa)}
+                                              className="text-green-600 hover:text-green-800 p-0.5"
+                                              title="Adicionar revisão"
+                                            >
+                                              <Plus className="w-3 h-3" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
                                     )}
                                   </div>
-                                </div>
-                              ))}
-                              <div className="bg-green-50 p-0.5 text-center" style={{ width: '40px', minWidth: '40px' }}>
-                                {!readOnly && (
-                                  <button
-                                    onClick={() => handleAddRevisao(etapa)}
-                                    className="text-green-600 hover:text-green-800 p-0.5"
-                                    title="Adicionar revisão"
-                                  >
-                                    <Plus className="w-3 h-3" />
-                                  </button>
                                 )}
-                              </div>
-                            </div>
-                          )}
+                              </Draggable>
+                            );
+                          })}
+                          {provided.placeholder}
                         </div>
-                      );
-                    })}
-                  </div>
+                      )}
+                    </Droppable>
+                  </DragDropContext>
                 </div>
 
                 {/* Área de Dados */}
                 <div style={{ minWidth: `${larguraTotalEtapas}px` }}>
-                  {linhas.length === 0 ? (
-                    <div className="p-8 text-center text-gray-500">
-                      Nenhum documento cadastrado
+              {linhas.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  Nenhum documento cadastrado
+                </div>
+              ) : (
+                linhasPorDisciplina.map(([disciplina, linhasDaDisciplina]) => (
+                  <div key={disciplina}>
+                    {/* Cabeçalho da Disciplina - para alinhar com a coluna de folhas */}
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-300 flex" style={{ minWidth: `${larguraTotalEtapas}px`, height: '44px' }}>
+                      {ETAPAS_VIEW.filter(e => !etapasExcluidas.includes(e)).map((etapa) => {
+                        const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
+                        const isMinimizada = etapasMinimizadas[etapa];
+                        return (
+                          <div
+                            key={`${disciplina}-${etapa}`}
+                            className="border-r border-gray-200 flex-shrink-0"
+                            style={{ 
+                              width: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`,
+                              minWidth: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`
+                            }}
+                          ></div>
+                        );
+                      })}
                     </div>
-                  ) : (
-                    linhasPorDisciplina.map(([disciplina, linhasDaDisciplina]) => (
-                      <div key={disciplina}>
-                        {/* Cabeçalho da Disciplina - para alinhar com a coluna de folhas */}
-                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-300 flex" style={{ minWidth: `${larguraTotalEtapas}px`, height: '44px' }}>
-                          {ETAPAS.filter(e => !etapasExcluidas.includes(e)).map((etapa) => {
+
+                    {/* Linhas da Disciplina */}
+                    {linhasDaDisciplina.map((linha) => {
+                      const doc = docMap.get(linha.documento_id);
+                      
+                      return (
+                        <div key={linha.id} className="flex border-b border-gray-200 hover:bg-gray-50" style={{ minWidth: `${larguraTotalEtapas}px`, height: '48px' }}>
+                          {etapasVisiveis.map((etapa) => {
                             const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
                             const isMinimizada = etapasMinimizadas[etapa];
+                            
                             return (
                               <div
-                                key={`${disciplina}-${etapa}`}
-                                className="border-r border-gray-200 flex-shrink-0"
-                                style={{
-                                  width: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`,
-                                  minWidth: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`
-                                }}
-                              ></div>
+                                key={`${linha.id}-${etapa}`}
+                                className="border-r border-gray-200 last:border-r-0 flex-shrink-0"
+                                style={{ width: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`, minWidth: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px` }}
+                              >
+                                {isMinimizada ? (
+                                  <div className="h-full flex items-center justify-center p-0.5 bg-gray-50"></div>
+                                ) : (
+                                  <div className="flex">
+                                    {revisoesEtapa.map((revisao) => (
+                                      <div
+                                       key={`${linha.id}-${etapa}-${revisao}`}
+                                        className="border-r border-gray-100 p-0.5 flex-shrink-0 flex items-center relative group"
+                                       style={{ width: '110px', minWidth: '110px' }}
+                                     >
+                                       <input
+                                         type="date"
+                                         value={getDataValue(linha, etapa, revisao)}
+                                         onChange={(e) => handleUpdateData(linha.id, etapa, revisao, e.target.value)}
+                                         className="h-8 text-xs w-full px-1 border border-gray-300 rounded cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
+                                         style={{ color: getDataValue(linha, etapa, revisao) ? 'black' : 'transparent' }}
+                                         disabled={readOnly}
+                                       />
+                                       {!readOnly && getDataValue(linha, etapa, revisao) && (
+                                         <button
+                                           onClick={() => copiarDataParaBaixo(linha.id, etapa, revisao)}
+                                           className="text-purple-600 hover:text-purple-800 p-0.5 absolute right-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                           title="Preencher todas abaixo"
+                                         >
+                                           <Wand2 className="w-2.5 h-2.5" />
+                                         </button>
+                                       )}
+                                     </div>
+                                    ))}
+                                    <div className="p-0.5 flex-shrink-0" style={{ width: '40px', minWidth: '40px' }}></div>
+                                  </div>
+                                )}
+                              </div>
                             );
                           })}
                         </div>
-
-                        {/* Linhas da Disciplina */}
-                        {linhasDaDisciplina.map((linha) => {
-                          const doc = documentos.find(d => d.id === linha.documento_id);
-                          const etapasVisiveis = ETAPAS.filter(e => !etapasExcluidas.includes(e));
-
-                          return (
-                            <div key={linha.id} className="flex border-b border-gray-200 hover:bg-gray-50" style={{ minWidth: `${larguraTotalEtapas}px`, height: '48px' }}>
-                              {etapasVisiveis.map((etapa) => {
-                                const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
-                                const isMinimizada = etapasMinimizadas[etapa];
-                                const colSpanTotal = isMinimizada ? 1 : revisoesEtapa.length + 1;
-
-                                return (
-                                  <div
-                                    key={`${linha.id}-${etapa}`}
-                                    className="border-r border-gray-200 last:border-r-0 flex-shrink-0"
-                                    style={{ width: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`, minWidth: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px` }}
-                                  >
-                                    {isMinimizada ? (
-                                      <div className="h-full flex items-center justify-center p-0.5 bg-gray-50"></div>
-                                    ) : (
-                                      <div className="flex">
-                                        {revisoesEtapa.map((revisao) => (
-                                          <div
-                                            key={`${linha.id}-${etapa}-${revisao}`}
-                                            className="border-r border-gray-100 p-0.5 flex-shrink-0 flex items-center relative group"
-                                            style={{ width: '110px', minWidth: '110px' }}
-                                          >
-                                            <input
-                                              type="date"
-                                              value={getDataValue(linha, etapa, revisao)}
-                                              onChange={(e) => handleUpdateData(linha.id, etapa, revisao, e.target.value)}
-                                              className="h-8 text-xs w-full px-1 border border-gray-300 rounded cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
-                                              style={{ color: getDataValue(linha, etapa, revisao) ? 'black' : 'transparent' }}
-                                              disabled={readOnly}
-                                            />
-                                            {!readOnly && getDataValue(linha, etapa, revisao) && (
-                                              <button
-                                                onClick={() => copiarDataParaBaixo(linha.id, etapa, revisao)}
-                                                className="text-purple-600 hover:text-purple-800 p-0.5 absolute right-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                title="Preencher todas abaixo"
-                                              >
-                                                <Wand2 className="w-2.5 h-2.5" />
-                                              </button>
-                                            )}
-                                          </div>
-                                        ))}
-                                        <div className="p-0.5 flex-shrink-0" style={{ width: '40px', minWidth: '40px' }}></div>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))
-                  )}
+                      );
+                    })}
+                  </div>
+                ))
+              )}
                 </div>
               </div>
             </div>
@@ -1369,20 +1514,22 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
           <h3 className="text-sm font-semibold text-gray-700 mb-2">Etapas Excluídas</h3>
           <div className="flex flex-wrap gap-2">
             {etapasExcluidas.map(etapa => (
-              <button
+              <Button
                 key={etapa}
+                variant="outline"
+                size="sm"
                 onClick={() => handleRestaurarEtapa(etapa)}
-                className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                className="text-xs"
               >
                 {etapa} - Clique para restaurar
-              </button>
+              </Button>
             ))}
           </div>
         </div>
-      )}
+        )}
 
-      {/* Modal de Importação */}
-      <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
+        {/* Modal de Importação */}
+        <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Importar Datas de Cadastro</DialogTitle>
@@ -1454,84 +1601,84 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
             </div>
           </div>
         </DialogContent>
-      </Dialog>
+        </Dialog>
 
-      {/* Modal de Preenchimento em Massa */}
-      <Dialog open={showMassEditModal} onOpenChange={setShowMassEditModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Preencher Data em Massa</DialogTitle>
-          </DialogHeader>
+        {/* Modal de Preenchimento em Massa */}
+        <Dialog open={showMassEditModal} onOpenChange={setShowMassEditModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Preencher Data em Massa</DialogTitle>
+            </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-sm text-blue-800">
-                Preencher data para <strong>{selectedFolhas.size}</strong> folha{selectedFolhas.size > 1 ? 's' : ''} selecionada{selectedFolhas.size > 1 ? 's' : ''}
-              </p>
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-800">
+                  Preencher data para <strong>{selectedFolhas.size}</strong> folha{selectedFolhas.size > 1 ? 's' : ''} selecionada{selectedFolhas.size > 1 ? 's' : ''}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Etapa</label>
+                <select
+                  value={massEditEtapa}
+                  onChange={(e) => setMassEditEtapa(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md p-2 text-sm"
+                >
+                  <option value="">Selecione a etapa</option>
+                  {ETAPAS_VIEW.filter(e => !etapasExcluidas.includes(e)).map(etapa => (
+                    <option key={etapa} value={etapa}>{etapa}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Revisão</label>
+                <select
+                  value={massEditRevisao}
+                  onChange={(e) => setMassEditRevisao(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md p-2 text-sm"
+                  disabled={!massEditEtapa}
+                >
+                  <option value="">Selecione a revisão</option>
+                  {massEditEtapa && Array.isArray(revisoesPorEtapa[massEditEtapa] || DEFAULT_REVISOES) && (revisoesPorEtapa[massEditEtapa] || DEFAULT_REVISOES).map(rev => (
+                    <option key={rev} value={rev}>{rev}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Data</label>
+                <Input
+                  type="date"
+                  value={massEditData}
+                  onChange={(e) => setMassEditData(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowMassEditModal(false);
+                    setMassEditEtapa('');
+                    setMassEditRevisao('');
+                    setMassEditData('');
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={applyMassEdit}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  <Wand2 className="w-4 h-4 mr-2" />
+                  Aplicar a {selectedFolhas.size} Folha{selectedFolhas.size > 1 ? 's' : ''}
+                </Button>
+              </div>
             </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Etapa</label>
-              <select
-                value={massEditEtapa}
-                onChange={(e) => setMassEditEtapa(e.target.value)}
-                className="w-full border border-gray-300 rounded-md p-2 text-sm"
-              >
-                <option value="">Selecione a etapa</option>
-                {ETAPAS.filter(e => !etapasExcluidas.includes(e)).map(etapa => (
-                  <option key={etapa} value={etapa}>{etapa}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Revisão</label>
-              <select
-                value={massEditRevisao}
-                onChange={(e) => setMassEditRevisao(e.target.value)}
-                className="w-full border border-gray-300 rounded-md p-2 text-sm"
-                disabled={!massEditEtapa}
-              >
-                <option value="">Selecione a revisão</option>
-                {massEditEtapa && Array.isArray(revisoesPorEtapa[massEditEtapa] || DEFAULT_REVISOES) && (revisoesPorEtapa[massEditEtapa] || DEFAULT_REVISOES).map(rev => (
-                  <option key={rev} value={rev}>{rev}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Data</label>
-              <Input
-                type="date"
-                value={massEditData}
-                onChange={(e) => setMassEditData(e.target.value)}
-                className="w-full"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowMassEditModal(false);
-                  setMassEditEtapa('');
-                  setMassEditRevisao('');
-                  setMassEditData('');
-                }}
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={applyMassEdit}
-                className="bg-purple-600 hover:bg-purple-700"
-              >
-                <Wand2 className="w-4 h-4 mr-2" />
-                Aplicar a {selectedFolhas.size} Folha{selectedFolhas.size > 1 ? 's' : ''}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
+          </DialogContent>
+        </Dialog>
+        </div>
+        );
+        }

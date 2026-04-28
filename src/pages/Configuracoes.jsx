@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useContext } from "react";
 import { Navigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Disciplina, AtividadeGenerica } from "@/entities/all";
+import { Disciplina, Atividade } from "@/entities/all";
 import { ActivityTimerContext } from "@/components/contexts/ActivityTimerContext";
 import { createPageUrl } from "@/utils";
 
@@ -22,7 +22,7 @@ export default function ConfiguracoesPage() {
       // A aba de catalogo deve carregar apenas atividades genericas (sem empreendimento_id).
       const [disciplinasData, atividadesData] = await Promise.all([
         Disciplina.list(),
-        AtividadeGenerica.list(null, 5000)
+        Atividade.list(null, 5000)
       ]);
       setDisciplinas(disciplinasData || []);
       setAtividades(atividadesData || []);

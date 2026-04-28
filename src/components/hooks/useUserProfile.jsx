@@ -26,7 +26,6 @@ export const useUserProfile = (user) => {
           setUserProfile(null);
         }
       } catch (error) {
-        console.warn('Erro ao carregar perfil do usuário:', error);
         setUserProfile(null);
       } finally {
         setIsLoadingProfile(false);

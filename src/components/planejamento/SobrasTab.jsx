@@ -30,15 +30,12 @@ export default function SobrasTab({ empreendimentoId }) {
   const fetchData = async () => {
     setIsLoadingData(true);
     try {
-      console.log("Carregando dados de sobras para empreendimento:", empreendimentoId);
       
       const [sobrasData, usuariosData] = await Promise.all([
         SobraUsuario.filter({ empreendimento_id: empreendimentoId }),
         Usuario.list() // Usar Usuario.list() diretamente
       ]);
       
-      console.log("Sobras encontradas:", sobrasData.length);
-      console.log("Sobras:", sobrasData);
       
       setSobras(sobrasData || []);
       setUsuarios(usuariosData || []);
@@ -67,7 +64,6 @@ export default function SobrasTab({ empreendimentoId }) {
 
       if (editingSobra) {
         await SobraUsuario.update(editingSobra.id, sobraData);
-        console.log("Sobra atualizada:", sobraData);
       } else {
         // Verificar se já existe uma sobra para este usuário
         const existingSobra = sobras.find(s => s.usuario === selectedUsuario);
@@ -76,10 +72,8 @@ export default function SobrasTab({ empreendimentoId }) {
           await SobraUsuario.update(existingSobra.id, {
             horas_sobra: newTotal
           });
-          console.log(`Sobra ajustada para ${selectedUsuario}: ${existingSobra.horas_sobra} + ${horasSobra} = ${newTotal}`);
         } else {
           await SobraUsuario.create(sobraData);
-          console.log("Nova sobra criada:", sobraData);
         }
       }
 
@@ -106,7 +100,6 @@ export default function SobrasTab({ empreendimentoId }) {
     if (window.confirm("Tem certeza que deseja excluir esta sobra?")) {
       try {
         await SobraUsuario.delete(id);
-        console.log("Sobra deletada:", id);
         fetchData();
       } catch (error) {
         console.error("Erro ao excluir sobra:", error);

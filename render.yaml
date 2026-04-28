@@ -21,7 +21,7 @@ services:
     name: project-oficial-web
     rootDir: .
     buildCommand: npm ci && npm run build
-    publishPath: dist
+    staticPublishPath: dist
     routes:
       - type: rewrite
         source: /*

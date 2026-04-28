@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Loader2, CalendarIcon, AlertCircle, CheckCircle } from "lucide-react";
 import { format, addDays, parseISO, isValid } from "date-fns";
 import { ptBR } from 'date-fns/locale';
-import { PlanejamentoDocumento, PlanejamentoAtividade } from "@/entities/all";
+import { PlanejamentoDocumento, PlanejamentoAtividade, Documento } from "@/entities/all";
 import { distribuirHorasPorDias, getNextWorkingDay, isWorkingDay } from "../utils/DateCalculator";
 import { retryWithExtendedBackoff } from '../utils/apiUtils';
 import { Input } from '@/components/ui/input';
@@ -45,21 +45,22 @@ export default function PlanejamentoDocumentoEtapaModal({
 
   const atividadesDisponiveisPorEtapa = useMemo(() => {
     if (!documento || !allAtividades || allAtividades.length === 0) {
-      console.warn('⚠️ Sem documento ou atividades para processar');
       return {};
     }
 
-    console.log(`\n🔄 Calculando atividadesDisponiveisPorEtapa...`);
-    console.log(`📋 Documento: ${documento.numero}`);
-    console.log(`📊 Total de atividades disponíveis: ${allAtividades.length}`);
 
     const subdisciplinasDoc = documento.subdisciplinas || [];
     const disciplinaDoc = documento.disciplina;
 
-    console.log(`🎯 Filtros:`);
-    console.log(`   - Disciplina: ${disciplinaDoc}`);
-    console.log(`   - Subdisciplinas: [${subdisciplinasDoc.join(', ')}]`);
-    console.log(`   - Etapa para planejamento: ${etapaParaPlanejamento}`);
+
+    // Obter etapas do empreendimento para mapeamento
+    const empreendimentoEtapas = documento.empreendimento_etapas || [];
+    const mapearEtapa = (etapaAtividade) => {
+      if (!empreendimentoEtapas || empreendimentoEtapas.length === 0) return etapaAtividade;
+      if (empreendimentoEtapas.includes(etapaAtividade)) return etapaAtividade;
+      if (empreendimentoEtapas.length === 1) return empreendimentoEtapas[0];
+      return etapaAtividade;
+    };
 
     // Incluir tanto atividades gerais quanto atividades específicas vinculadas a esta folha
     let atividadesCorrespondentes = allAtividades.filter(ativ => {
@@ -70,7 +71,6 @@ export default function PlanejamentoDocumentoEtapaModal({
          const match = disciplinaMatch && subdisciplinaMatch;
          
          if (match) {
-           console.log(`   ✅ Match (genérica): ${ativ.atividade} (${ativ.etapa} - ${ativ.subdisciplina})`);
          }
          
          return match;
@@ -80,36 +80,32 @@ export default function PlanejamentoDocumentoEtapaModal({
        if (ativ.empreendimento_id === empreendimentoId && ativ.documento_id === documento.id && ativ.tempo !== -999) {
          // Não incluir marcadores de conclusão na lista
          if (ativ.tempo === 0 && String(ativ.atividade || '').includes('Concluída na folha')) {
-           console.log(`   ⏭️ Ignorando marcador de conclusão: ${ativ.atividade}`);
            return false;
          }
-         console.log(`   ✅ Match (específica da folha): ${ativ.atividade} (${ativ.etapa})`);
          return true;
        }
        
        return false;
     });
 
-    console.log(`📊 Atividades correspondentes encontradas: ${atividadesCorrespondentes.length}`);
 
     if (etapaParaPlanejamento !== 'todas') {
       atividadesCorrespondentes = atividadesCorrespondentes.filter(ativ =>
-        ativ.etapa === etapaParaPlanejamento
+        mapearEtapa(ativ.etapa) === etapaParaPlanejamento
       );
-      console.log(`📊 Após filtro de etapa: ${atividadesCorrespondentes.length}`);
     }
 
     const porEtapa = {};
     atividadesCorrespondentes.forEach(ativ => {
-      if (!porEtapa[ativ.etapa]) {
-        porEtapa[ativ.etapa] = [];
+      // Agrupar pela etapa MAPEADA, não pela original do catálogo
+      const etapaMapeada = mapearEtapa(ativ.etapa);
+      if (!porEtapa[etapaMapeada]) {
+        porEtapa[etapaMapeada] = [];
       }
-      porEtapa[ativ.etapa].push(ativ);
+      porEtapa[etapaMapeada].push(ativ);
     });
 
-    console.log(`📊 Etapas encontradas:`, Object.keys(porEtapa));
     Object.keys(porEtapa).forEach(etapa => {
-      console.log(`   - ${etapa}: ${porEtapa[etapa].length} atividades`);
     });
 
     return porEtapa;
@@ -220,13 +216,7 @@ export default function PlanejamentoDocumentoEtapaModal({
         setIsCalculatingDate(true);
         setDataInicioState(null);
         try {
-          console.log(`\n🔍 ========================================`);
-          console.log(`📅 CALCULANDO DATA PELA AGENDA DO EXECUTOR`);
-          console.log(`👤 Executor: ${executorParaAgenda}`);
-          console.log(`🏢 Empreendimento ID: ${empreendimentoId}`);
-          console.log(`🔍 ========================================\n`);
           
-          console.log(`🔄 Buscando TODOS os planejamentos do executor ${executorParaAgenda}...`);
           
           const [planosAtividade, planosDocumento] = await Promise.all([
             retryWithExtendedBackoff(
@@ -239,24 +229,18 @@ export default function PlanejamentoDocumentoEtapaModal({
             )
           ]);
           
-          console.log(`📊 PlanejamentoAtividade encontrados: ${(planosAtividade || []).length}`);
-          console.log(`📊 PlanejamentoDocumento encontrados: ${(planosDocumento || []).length}`);
           
           const todosPlanos = [
             ...(planosAtividade || []),
             ...(planosDocumento || [])
           ];
           
-          console.log(`📊 Total de planejamentos do executor: ${todosPlanos.length}\n`);
 
           const hoje = new Date();
           const hojeMidnight = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
           
           const cargaDiaria = {};
           
-          console.log(`🔨 Construindo mapa de carga diária...`);
-          console.log(`📅 Hoje: ${format(hojeMidnight, 'dd/MM/yyyy')}`);
-          console.log(`📅 Considerando apenas datas >= hoje\n`);
 
           todosPlanos.forEach((plano, index) => {
             if (plano.horas_por_dia && typeof plano.horas_por_dia === 'object') {
@@ -265,7 +249,6 @@ export default function PlanejamentoDocumentoEtapaModal({
               if (horasPorDiaKeys.length > 0) {
                 const nomeAtividade = plano.descritivo || plano.documento?.numero || plano.atividade?.atividade || 'N/A';
                 const empreendimento = plano.empreendimento?.nome || 'Sem empreendimento';
-                console.log(`   Plano #${index + 1}: ${nomeAtividade} (${empreendimento})`);
               }
 
               Object.entries(plano.horas_por_dia).forEach(([data, horas]) => {
@@ -279,19 +262,15 @@ export default function PlanejamentoDocumentoEtapaModal({
                       cargaDiaria[diaKey] = (cargaDiaria[diaKey] || 0) + horasValidas;
                       
                       const diaDaData = format(dataObj, 'dd/MM/yyyy');
-                      console.log(`      ${diaDaData}: +${horasValidas.toFixed(1)}h → Total: ${cargaDiaria[diaKey].toFixed(1)}h`);
                     }
                   }
                 } catch (erro) {
-                  console.warn(`      Erro ao processar data ${data}:`, erro);
                 }
               });
             }
           });
 
-          console.log(`\n📊 Mapa de carga construído. Total de dias com carga: ${Object.keys(cargaDiaria).length}`);
           
-          console.log(`\n📅 Carga dos próximos 15 dias úteis a partir de hoje:`);
           let dataAtual = new Date(hojeMidnight); 
           let diasMostrados = 0;
           
@@ -304,16 +283,13 @@ export default function PlanejamentoDocumentoEtapaModal({
               const disponivel = 8 - carga;
               const status = disponivel >= 0.5 ? '✅ DISPONÍVEL' : '❌ CHEIO';
               
-              console.log(`   ${format(dataAtual, 'dd/MM/yyyy (EEE)', { locale: ptBR })}: ${carga.toFixed(1)}h / 8h (livre: ${disponivel.toFixed(1)}h) ${status}`);
               diasMostrados++;
             } else {
-              console.log(`   ${format(dataAtual, 'dd/MM/yyyy (EEE)', { locale: ptBR })}: 🚫 FIM DE SEMANA`);
             }
             
             dataAtual = addDays(dataAtual, 1);
           }
 
-          console.log(`\n🔍 Buscando primeiro dia útil disponível...`);
           
           let diaDisponivel = new Date(hojeMidnight);
           let tentativas = 0;
@@ -327,10 +303,6 @@ export default function PlanejamentoDocumentoEtapaModal({
             const temEspaco = cargaDoDia < 7.5;
             
             if (ehDiaUtil && temEspaco) {
-              console.log(`\n✅ PRIMEIRO DIA DISPONÍVEL ENCONTRADO!`);
-              console.log(`   Data: ${format(diaDisponivel, 'dd/MM/yyyy (EEEE)', { locale: ptBR })}`);
-              console.log(`   Carga atual: ${cargaDoDia.toFixed(1)}h / 8h`);
-              console.log(`   Espaço disponível: ${(8 - cargaDoDia).toFixed(1)}h`);
               
               setDataInicioState(diaDisponivel);
               setCargaDiariaPorExecutor({ [executorParaAgenda]: cargaDiaria });
@@ -534,13 +506,32 @@ export default function PlanejamentoDocumentoEtapaModal({
         planejamentosCriados.push(novoPlan);
       }
 
+      // Atualizar o Documento com os dados do planejamento para habilitar cascade
+      const firstPlan = planejamentosCriados[0];
+      const lastPlan = planejamentosCriados[planejamentosCriados.length - 1];
+      const tempoTotalGeral = planejamentosCriados.reduce((sum, p) => sum + (p.tempo_planejado || 0), 0);
+      const multiExecutores = planejamentosCriados.some(p => p.executor_principal !== firstPlan.executor_principal);
+
+      let docAtualizado = null;
+      try {
+        docAtualizado = await Documento.update(documento.id, {
+          executor_principal: firstPlan.executor_principal,
+          inicio_planejado: firstPlan.inicio_planejado,
+          termino_planejado: lastPlan.termino_planejado,
+          tempo_total: tempoTotalGeral,
+          multiplos_executores: multiExecutores,
+        });
+      } catch (docErr) {
+        console.warn('[PlanejamentoDocumentoEtapaModal] Erro ao atualizar documento:', docErr);
+      }
+
       const etapaInfo = etapaParaPlanejamento !== 'todas' 
         ? ` (etapa: ${etapaParaPlanejamento})`
         : '';
       
       alert(`✅ Planejamento por documento concluído!\n\n${planejamentosCriados.length} etapa(s) planejada(s) para ${documento.numero}${etapaInfo}`);
       
-      if (onSuccess) onSuccess();
+      if (onSuccess) onSuccess({ planejamentos: planejamentosCriados, docAtualizado });
       onClose();
 
     } catch (error) {

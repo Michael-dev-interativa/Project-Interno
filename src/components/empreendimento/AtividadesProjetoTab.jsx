@@ -39,11 +39,11 @@ const initialState = {
 
 const AtividadeFormDialog = ({ open, setOpen, empreendimentoId, disciplinas, onUpdate, atividadeToEdit, documentos }) => {
   const [atividade, setAtividade] = useState(atividadeToEdit || initialState);
-  const [selectedDocumentoId, setSelectedDocumentoId] = useState(null);
+  const [selectedDocumentoIds, setSelectedDocumentoIds] = useState([]);
   
   React.useEffect(() => {
     setAtividade(atividadeToEdit || initialState);
-    setSelectedDocumentoId(atividadeToEdit?.documento_id || null);
+    setSelectedDocumentoIds(atividadeToEdit?.documento_ids || []);
   }, [atividadeToEdit, open]);
 
   const handleSubmit = async () => {
@@ -62,63 +62,48 @@ const AtividadeFormDialog = ({ open, setOpen, empreendimentoId, disciplinas, onU
           ...atividade, 
           tempo: tempoNovo, 
           empreendimento_id: empreendimentoId,
-          documento_id: selectedDocumentoId || atividade.documento_id
+          documento_ids: selectedDocumentoIds.length > 0 ? selectedDocumentoIds : (atividade.documento_ids || [])
         };
         await Atividade.update(atividade.id, payload);
         
         // Se o tempo mudou E a atividade é um override (tem id_atividade), recalcular documentos
         if (tempoAntigo !== tempoNovo && atividade.id_atividade) {
-          console.log(`🔄 Tempo mudou de ${tempoAntigo}h para ${tempoNovo}h, recalculando documentos...`);
-          
           try {
             const { Documento } = await import('@/entities/all');
-            
-            // Buscar todos os documentos deste empreendimento
+
             const docsDoEmp = documentos.filter(d => d.empreendimento_id === empreendimentoId);
-            console.log(`   📊 Encontrados ${docsDoEmp.length} documentos para verificar`);
-            
-            // Para cada documento, verificar se usa esta atividade e recalcular
-            for (const doc of docsDoEmp) {
-              // Verificar se o documento tem as mesmas disciplinas e subdisciplinas da atividade
-              const disciplinaMatch = doc.disciplinas?.includes(atividade.disciplina) || doc.disciplina === atividade.disciplina;
-              const subdisciplinaMatch = doc.subdisciplinas?.includes(atividade.subdisciplina);
-              
-              if (disciplinaMatch && subdisciplinaMatch) {
-                console.log(`   🔢 Recalculando documento ${doc.numero}...`);
-                
-                // Buscar o campo de tempo da etapa correspondente
-                const etapaMap = {
-                  'Concepção': 'tempo_concepcao',
-                  'Planejamento': 'tempo_planejamento',
-                  'Estudo Preliminar': 'tempo_estudo_preliminar',
-                  'Ante-Projeto': 'tempo_ante_projeto',
-                  'Projeto Básico': 'tempo_projeto_basico',
-                  'Projeto Executivo': 'tempo_projeto_executivo',
-                  'Liberado para Obra': 'tempo_liberado_obra'
-                };
-                
-                const campoTempo = etapaMap[atividade.etapa];
-                if (campoTempo) {
-                  const fatorDificuldade = doc.fator_dificuldade || 1;
-                  const diferenca = (tempoNovo - tempoAntigo) * fatorDificuldade;
-                  const tempoAtual = doc[campoTempo] || 0;
-                  const novoTempo = Math.max(0, tempoAtual + diferenca);
-                  
-                  // Atualizar também o tempo total se não for Concepção/Planejamento
-                  const atualizarTotal = !['Concepção', 'Planejamento'].includes(atividade.etapa);
-                  const tempoTotal = atualizarTotal ? Math.max(0, (doc.tempo_total || 0) + diferenca) : doc.tempo_total;
-                  
-                  await Documento.update(doc.id, {
-                    [campoTempo]: Number(novoTempo.toFixed(2)),
-                    ...(atualizarTotal ? { tempo_total: Number(tempoTotal.toFixed(2)) } : {})
-                  });
-                  
-                  console.log(`      ✅ ${doc.numero}: ${campoTempo} ${tempoAtual}h → ${novoTempo.toFixed(2)}h`);
-                }
-              }
+
+            const etapaMap = {
+              'Concepção': 'tempo_concepcao',
+              'Planejamento': 'tempo_planejamento',
+              'Estudo Preliminar': 'tempo_estudo_preliminar',
+              'Ante-Projeto': 'tempo_ante_projeto',
+              'Projeto Básico': 'tempo_projeto_basico',
+              'Projeto Executivo': 'tempo_projeto_executivo',
+              'Liberado para Obra': 'tempo_liberado_obra'
+            };
+            const campoTempo = etapaMap[atividade.etapa];
+            const atualizarTotal = !['Concepção', 'Planejamento'].includes(atividade.etapa);
+
+            if (campoTempo) {
+              await Promise.all(
+                docsDoEmp
+                  .filter(doc =>
+                    (doc.disciplinas?.includes(atividade.disciplina) || doc.disciplina === atividade.disciplina) &&
+                    doc.subdisciplinas?.includes(atividade.subdisciplina)
+                  )
+                  .map(doc => {
+                    const fatorDificuldade = doc.fator_dificuldade || 1;
+                    const diferenca = (tempoNovo - tempoAntigo) * fatorDificuldade;
+                    const novoTempo = Math.max(0, (doc[campoTempo] || 0) + diferenca);
+                    const tempoTotal = atualizarTotal ? Math.max(0, (doc.tempo_total || 0) + diferenca) : doc.tempo_total;
+                    return Documento.update(doc.id, {
+                      [campoTempo]: Number(novoTempo.toFixed(2)),
+                      ...(atualizarTotal ? { tempo_total: Number(tempoTotal.toFixed(2)) } : {})
+                    });
+                  })
+              );
             }
-            
-            console.log(`   ✅ Documentos recalculados com sucesso`);
           } catch (error) {
             console.error('❌ Erro ao recalcular documentos:', error);
             // Não bloquear a atualização da atividade
@@ -128,12 +113,12 @@ const AtividadeFormDialog = ({ open, setOpen, empreendimentoId, disciplinas, onU
         onUpdate();
         setOpen(false);
       } else {
-        // CRIAÇÃO: Cria atividade vinculada à folha selecionada
+        // CRIAÇÃO: Cria atividade vinculada às folhas selecionadas
         const payload = { 
           ...atividade, 
           tempo: Number(atividade.tempo) || 0, 
           empreendimento_id: empreendimentoId,
-          documento_id: selectedDocumentoId || null
+          documento_ids: selectedDocumentoIds.length > 0 ? selectedDocumentoIds : []
         };
         await Atividade.create(payload);
         onUpdate();
@@ -199,22 +184,32 @@ const AtividadeFormDialog = ({ open, setOpen, empreendimentoId, disciplinas, onU
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="folha">Folha (Opcional)</Label>
-            <Select value={selectedDocumentoId || 'sem_folha'} onValueChange={(value) => setSelectedDocumentoId(value === 'sem_folha' ? null : value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione a folha" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="sem_folha">Sem folha específica</SelectItem>
-                {(documentos || []).map(doc => (
-                  <SelectItem key={doc.id} value={doc.id}>
-                    {doc.numero} - {doc.arquivo}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Folhas (Opcional)</Label>
+            <div className="border rounded p-3 max-h-64 overflow-y-auto space-y-2">
+              {(documentos || []).length === 0 ? (
+                <p className="text-xs text-gray-500">Nenhuma folha disponível</p>
+              ) : (
+                (documentos || []).map(doc => (
+                  <label key={doc.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                    <input
+                      type="checkbox"
+                      checked={selectedDocumentoIds.includes(doc.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedDocumentoIds([...selectedDocumentoIds, doc.id]);
+                        } else {
+                          setSelectedDocumentoIds(selectedDocumentoIds.filter(id => id !== doc.id));
+                        }
+                      }}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm">{doc.numero} - {doc.arquivo}</span>
+                  </label>
+                ))
+              )}
+            </div>
             <p className="text-xs text-gray-500">
-              Se selecionada, a atividade ficará vinculada apenas a esta folha.
+              Selecione uma ou mais folhas. Se nenhuma for selecionada, a atividade será disponível para todas.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -292,8 +287,6 @@ export default function AtividadesProjetoTab({ empreendimentoId, atividades = []
         tempo_planejado: Number(atividade.tempo) || 0 
       };
 
-      console.log("🎯 Abrindo modal de planejamento para atividade:", atividadeComPlanejamento);
-      
       setAtividadeParaPlanejar(atividadeComPlanejamento);
       setShowPlanejamentoModal(true);
     } catch (error) {
@@ -322,9 +315,7 @@ export default function AtividadesProjetoTab({ empreendimentoId, atividades = []
 
     setIsDeleting(true);
     try {
-      for (const atividadeId of selectedAtividades) {
-        await Atividade.delete(atividadeId);
-      }
+      await Promise.all(selectedAtividades.map(id => Atividade.delete(id)));
       setSelectedAtividades([]);
       onUpdate();
       alert(`✅ ${selectedAtividades.length} atividade(s) excluída(s) com sucesso!`);
@@ -345,7 +336,6 @@ export default function AtividadesProjetoTab({ empreendimentoId, atividades = []
     const ids = (documentos || [])
       .filter(d => d.empreendimento_id === empreendimentoId)
       .map(d => d.id);
-    console.log("📄 Documentos do empreendimento:", ids.length, ids);
     return ids;
   }, [documentos, empreendimentoId]);
 
@@ -365,9 +355,6 @@ export default function AtividadesProjetoTab({ empreendimentoId, atividades = []
           
           // Incluir também atividades de outros empreendimentos dessas disciplinas específicas
           const incluir = ehGenerica || ehDoEmpreendimento || ehDoDocumento || a.empreendimento_id;
-          if (incluir) {
-            console.log("✅ Atividade incluída:", a.atividade, { ehGenerica, ehDoEmpreendimento, ehDoDocumento, disciplina: a.disciplina, empreendimento: a.empreendimento_id });
-          }
           return incluir;
         }
         
@@ -375,12 +362,9 @@ export default function AtividadesProjetoTab({ empreendimentoId, atividades = []
         const ehDoEmpreendimento = a.empreendimento_id === empreendimentoId;
         const ehDoDocumento = a.documento_id && documentoIdsDoEmpreendimento.includes(a.documento_id);
         const incluir = ehDoEmpreendimento || ehDoDocumento;
-        if (incluir) {
-          console.log("✅ Atividade incluída (outra disciplina):", a.atividade, { ehDoEmpreendimento, ehDoDocumento, disciplina: a.disciplina });
-        }
         return incluir;
       })
-      .filter(a => a.tempo !== -999) // Excluir marcadores de exclusão
+      .filter(a => a.tempo !== -999)
       .filter(a => {
         // Filtro por nome
         const nomeMatch = String(a.atividade || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -396,7 +380,6 @@ export default function AtividadesProjetoTab({ empreendimentoId, atividades = []
         
         return nomeMatch && etapaMatch && disciplinaMatch && subdisciplinaMatch;
       });
-    console.log("🔍 Total de atividades filtradas:", todasAtividades.length);
     return todasAtividades;
   }, [atividades, empreendimentoId, documentoIdsDoEmpreendimento, searchTerm, etapaFilter, disciplinaFilter, subdisciplinaFilter]);
 
@@ -452,7 +435,6 @@ export default function AtividadesProjetoTab({ empreendimentoId, atividades = []
         <PlanejamentoAtividadeModal
           isOpen={showPlanejamentoModal}
           onClose={() => {
-            console.log("🔄 Fechando modal de planejamento");
             setShowPlanejamentoModal(false);
             setAtividadeParaPlanejar(null);
           }}
@@ -461,7 +443,6 @@ export default function AtividadesProjetoTab({ empreendimentoId, atividades = []
           empreendimentoId={empreendimentoId}
           documentos={documentos}
           onSuccess={() => {
-            console.log("✅ Planejamento realizado com sucesso");
             setShowPlanejamentoModal(false);
             setAtividadeParaPlanejar(null);
             onUpdate();
@@ -553,20 +534,13 @@ export default function AtividadesProjetoTab({ empreendimentoId, atividades = []
                   </TableHeader>
                   <TableBody>
                     {atividadesDisciplina.map(atividade => {
-                      console.log("🔍 Atividade:", atividade.atividade, {
-                        documento_ids: atividade.documento_ids,
-                        documento_id: atividade.documento_id,
-                        tipo_documento_ids: typeof atividade.documento_ids,
-                        eh_array: Array.isArray(atividade.documento_ids)
-                      });
                       const numFolhas = atividade.documento_ids?.length || (atividade.documento_id ? 1 : 0);
-                      const documentosVinculados = atividade.documento_ids 
+                      const documentosVinculados = atividade.documento_ids
                         ? documentos.filter(d => atividade.documento_ids.includes(d.id))
-                        : atividade.documento_id 
+                        : atividade.documento_id
                         ? documentos.filter(d => d.id === atividade.documento_id)
                         : [];
-                      console.log("📊 Resultados:", { numFolhas, documentosVinculados: documentosVinculados.length });
-                      
+
                       return (
                         <TableRow key={atividade.id}>
                           <TableCell>
@@ -598,14 +572,13 @@ export default function AtividadesProjetoTab({ empreendimentoId, atividades = []
                             </Badge>
                           </TableCell>
                           <TableCell>{atividade.etapa}</TableCell>
-                          <TableCell>{atividade.tempo}h</TableCell>
-                          <TableCell className="font-semibold">{(atividade.tempo * numFolhas).toFixed(1)}h</TableCell>
+                          <TableCell>{parseFloat(atividade.tempo || 0)}h</TableCell>
+                          <TableCell className="font-semibold">{parseFloat((atividade.tempo * numFolhas).toFixed(1))}h</TableCell>
                           <TableCell className="text-right">
                           <Button 
                             variant="outline" 
                             size="sm" 
                             onClick={() => {
-                              console.log("🎯 Clicou no botão Planejar para:", atividade);
                               handlePlanejarDiretamente(atividade);
                             }}
                             className="bg-purple-600 text-white hover:bg-purple-700"

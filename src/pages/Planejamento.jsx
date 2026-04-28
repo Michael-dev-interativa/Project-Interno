@@ -29,9 +29,9 @@ export default function PlanejamentoPage() {
 
         setIsLoading(true);
         try {
-            const empData = await Empreendimento.filter({ id: empreendimentoId });
-            if (empData && empData.length > 0) {
-                setEmpreendimento(empData[0]);
+            const empData = await Empreendimento.get(empreendimentoId);
+            if (empData) {
+                setEmpreendimento(empData);
             } else {
                 setError("Empreendimento não encontrado.");
             }

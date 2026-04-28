@@ -57,13 +57,10 @@ export default function PlanejamentoAtividadeModal({
     
     const docs = documentos && Array.isArray(documentos) ? documentos : [];
     
-    console.log(`📄 [PlanejamentoAtividadeModal] Total de documentos recebidos:`, docs.length);
-    console.log(`📄 [PlanejamentoAtividadeModal] Atividade:`, atividade.disciplina, '-', atividade.subdisciplina);
 
     // Para Documentação, sempre mostrar todos os documentos SEM executor
     if (atividade.disciplina === 'Documentação') {
       const docsSemExecutor = docs.filter(d => !d.executor_principal);
-      console.log(`📄 [PlanejamentoAtividadeModal] Documentação detectada - ${docsSemExecutor.length} sem executor de ${docs.length} total`);
       return docsSemExecutor;
     }
 
@@ -86,17 +83,14 @@ export default function PlanejamentoAtividadeModal({
     // Se não encontrou documentos com filtro específico, mostrar todos sem executor
     if (result.length === 0) {
       const docsSemExecutor = docs.filter(d => !d.executor_principal);
-      console.log(`📄 [PlanejamentoAtividadeModal] Nenhum documento encontrado com filtro específico - ${docsSemExecutor.length} sem executor`);
       return docsSemExecutor;
     }
 
-    console.log(`📄 [PlanejamentoAtividadeModal] Documentos filtrados (sem executor):`, result.length);
     return result;
   }, [documentos, atividade]);
 
   useEffect(() => {
     if (isOpen && atividade) {
-      console.log('🎯 Modal aberto com atividade:', atividade);
       setFormData({
         tempo_planejado: atividade.tempo_planejado || atividade.tempo || '',
         executor_principal: '',
@@ -133,14 +127,7 @@ export default function PlanejamentoAtividadeModal({
 
   const calculateExecutorLoadAndDistribute = async (executorEmail, tempoPlanejado, fixedStartDate = null) => {
     try {
-      console.log('\n🔍 ========================================');
-      console.log('📅 CALCULANDO CARGA E DISTRIBUINDO HORAS');
-      console.log(`   Executor: ${executorEmail}`);
-      console.log(`   Tempo necessário: ${tempoPlanejado}h`);
-      console.log(`   Data de início fixa: ${fixedStartDate ? format(fixedStartDate, 'dd/MM/yyyy', { locale: pt }) : 'Nenhuma (Buscar automática)'}`);
-      console.log('🔍 ========================================\n');
 
-      console.log('🔄 PASSO 1: Buscando todos os planejamentos do executor...\n');
 
       const [planejamentosAtividade, planejamentosDocumentoResult] = await Promise.all([
         retryWithBackoff(
@@ -158,7 +145,6 @@ export default function PlanejamentoAtividadeModal({
                 status: { $ne: 'concluido' }
               });
             } catch (err) {
-              console.warn('⚠️ PlanejamentoDocumento não disponível ou erro ao buscar:', err.message);
               return [];
             }
           },
@@ -171,26 +157,15 @@ export default function PlanejamentoAtividadeModal({
         ...(planejamentosDocumentoResult || [])
       ];
 
-      console.log(`✅ Total de planejamentos encontrados: ${todosPlanejamentos.length}`);
-      console.log(`   📋 PlanejamentoAtividade: ${planejamentosAtividade?.length || 0}`);
-      console.log(`   📄 PlanejamentoDocumento: ${planejamentosDocumentoResult?.length || 0}\n`);
 
       if (todosPlanejamentos.length > 0) {
-        console.log(`📊 Detalhes dos primeiros planejamentos:`);
         todosPlanejamentos.slice(0, 5).forEach((p, i) => {
           const horasDias = p.horas_por_dia ? Object.keys(p.horas_por_dia).length : 0;
-          console.log(`   ${i + 1}. ${p.descritivo || 'Sem descrição'}`);
-          console.log(`      - Tempo planejado: ${p.tempo_planejado || 0}h`);
-          console.log(`      - Dias alocados: ${horasDias}`);
-          console.log(`      - Status: ${p.status || 'N/A'}`);
         });
         if (todosPlanejamentos.length > 5) {
-          console.log(`   ... e mais ${todosPlanejamentos.length - 5} planejamentos`);
         }
-        console.log('');
       }
 
-      console.log('🔄 PASSO 2: Construindo mapa de carga diária...\n');
 
       const cargaDiaria = {};
       const hoje = new Date();
@@ -204,7 +179,6 @@ export default function PlanejamentoAtividadeModal({
           const horasKeys = Object.keys(plano.horas_por_dia);
 
           if (horasKeys.length > 0) {
-            console.log(`   Processando plano #${index + 1}: ${plano.descritivo || plano.id}`);
           }
 
           Object.entries(plano.horas_por_dia).forEach(([data, horas]) => {
@@ -224,46 +198,35 @@ export default function PlanejamentoAtividadeModal({
                     totalDiasOcupados++;
                   }
 
-                  console.log(`      ${format(dataObj, 'dd/MM/yyyy', { locale: pt })}: +${horasValidas.toFixed(1)}h → Total: ${cargaDiaria[diaKey].toFixed(1)}h`);
                 }
               }
             } catch (erro) {
-              console.warn(`      ⚠️ Erro ao processar data ${data}:`, erro.message);
             }
           });
         }
       });
 
-      console.log(`\n📊 Resumo da carga do executor:`);
-      console.log(`   Total de dias ocupados: ${totalDiasOcupados}`);
-      console.log(`   Total de horas alocadas: ${totalHorasAlocadas.toFixed(1)}h\n`);
 
       const diasComCargaAlta = Object.entries(cargaDiaria)
         .filter(([_, horas]) => horas >= 6)
         .sort((a, b) => a[0].localeCompare(b[0]));
 
       if (diasComCargaAlta.length > 0) {
-        console.log(`⚠️ Dias com carga alta (≥6h):`);
         diasComCargaAlta.slice(0, 10).forEach(([data, horas]) => {
           const porcentagem = ((horas / 8) * 100).toFixed(0);
-          console.log(`   ${data}: ${horas.toFixed(1)}h (${porcentagem}% da capacidade)`);
         });
         if (diasComCargaAlta.length > 10) {
-          console.log(`   ... e mais ${diasComCargaAlta.length - 10} dias\n`);
         }
       }
 
       let distributionStartDate;
       if (fixedStartDate) {
         distributionStartDate = fixedStartDate;
-        console.log(`✅ Usando data de início fixa: ${format(distributionStartDate, 'dd/MM/yyyy', { locale: pt })}\n`);
       } else {
         const hoje = new Date();
         distributionStartDate = getNextWorkingDay(hoje);
-        console.log(`✅ Data de início automática: ${format(distributionStartDate, 'dd/MM/yyyy', { locale: pt })}\n`);
       }
 
-      console.log('🔄 PASSO 5: Distribuindo horas na agenda do executor...\n');
 
       // Se houver data fixa, permitir alocar na data escolhida mesmo com 8h
       const forcarDataFixa = fixedStartDate !== null;
@@ -280,21 +243,13 @@ export default function PlanejamentoAtividadeModal({
       const dataInicio = diasDistribuidos.length > 0 ? diasDistribuidos[0] : format(distributionStartDate, 'yyyy-MM-dd');
       const dataTermino = format(resultado.dataTermino, 'yyyy-MM-dd');
 
-      console.log(`\n✅ ========================================`);
-      console.log(`🎯 RESULTADO DO CÁLCULO`);
-      console.log(`   Data de início: ${format(parseISO(dataInicio), 'dd/MM/yyyy', { locale: pt })}`);
-      console.log(`   Data de término: ${format(parseISO(dataTermino), 'dd/MM/yyyy', { locale: pt })}`);
-      console.log(`   Dias utilizados: ${diasDistribuidos.length}`);
-      console.log(`\n   Distribuição detalhada:`);
 
       diasDistribuidos.forEach(dia => {
         const horasDoDia = resultado.distribuicao[dia];
         const cargaTotalDoDia = resultado.novaCargaDiaria[dia];
         const cargaAnterior = cargaDiaria[dia] || 0;
-        console.log(`      ${dia}: ${horasDoDia.toFixed(1)}h alocadas | Carga anterior: ${cargaAnterior.toFixed(1)}h | Nova carga: ${cargaTotalDoDia ? cargaTotalDoDia.toFixed(1) : 'N/A'}h`);
       });
 
-      console.log(`✅ ========================================\n`);
 
       return {
         dataInicio,
@@ -308,7 +263,6 @@ export default function PlanejamentoAtividadeModal({
       const proximoDiaUtil = getNextWorkingDay(new Date());
       const dataFallback = format(proximoDiaUtil, 'yyyy-MM-dd');
 
-      console.warn('⚠️ Usando data fallback:', dataFallback);
 
       return {
         dataInicio: dataFallback,
@@ -321,10 +275,6 @@ export default function PlanejamentoAtividadeModal({
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    console.log('\n📝 ========================================');
-    console.log('🚀 INICIANDO CRIAÇÃO DE PLANEJAMENTO');
-    console.log('📝 ========================================\n');
-    console.log('Dados do formulário:', formData);
 
     if (!formData.permite_multiplas_execucoes) {
       if (!formData.tempo_planejado || parseFloat(formData.tempo_planejado) <= 0) {
@@ -374,7 +324,6 @@ export default function PlanejamentoAtividadeModal({
     setIsLoading(true);
 
     try {
-      console.log('📋 Filtrando folhas com essa atividade específica...');
       
       // **NOVA LÓGICA**: Filtrar folhas que têm essa atividade E não têm executor
       const baseAtividadeId = atividade.id;
@@ -384,7 +333,6 @@ export default function PlanejamentoAtividadeModal({
       const folhasComAtividade = (documentos || []).filter(doc => {
         // Verificar se a folha tem executor
         if (doc.executor_principal) {
-          console.log(`   ⏭️ Folha ${doc.numero}: já tem executor`);
           return false;
         }
 
@@ -393,15 +341,12 @@ export default function PlanejamentoAtividadeModal({
         const subdisciplinaMatch = !subdisciplinaAtiv || (doc.subdisciplinas || []).includes(subdisciplinaAtiv);
         
         if (!disciplinaMatch || !subdisciplinaMatch) {
-          console.log(`   ⏭️ Folha ${doc.numero}: atividade não se aplica (disc/subdisc não match)`);
           return false;
         }
         
-        console.log(`   ✅ Folha ${doc.numero}: tem atividade e sem executor`);
         return true;
       });
 
-      console.log(`\n📊 Folhas com essa atividade (sem executor): ${folhasComAtividade.length}`);
       
       if (folhasComAtividade.length === 0) {
         alert('⚠️ Essa atividade não está disponível em nenhuma folha sem executor.\n\nVerifique se:\n• A atividade já foi planejada em todas as folhas\n• Ou a folha não possui essa disciplina/subdisciplina');
@@ -431,7 +376,6 @@ export default function PlanejamentoAtividadeModal({
       // **NOVA LÓGICA**: Criar planejamento para cada folha disponível
       for (const folha of folhasDisponiveis) {
         try {
-          console.log(`\n📄 Planejando folha ${folha.numero}...`);
 
           const dadosPlanejamento = {
             atividade_id: atividade.id,
@@ -451,21 +395,18 @@ export default function PlanejamentoAtividadeModal({
           const fixedStartDateForDistribution = formData.data_inicio_manual;
 
           if (formData.metodo_data === 'agenda' && !fixedStartDateForDistribution) {
-            console.log('   📅 Calculando data automaticamente (Agenda)...');
             dadosCalculo = await calculateExecutorLoadAndDistribute(
               formData.executor_principal,
               dadosPlanejamento.tempo_planejado,
               null
             );
           } else if (fixedStartDateForDistribution) {
-            console.log('   📅 Calculando distribuição para data fixa...');
             dadosCalculo = await calculateExecutorLoadAndDistribute(
               formData.executor_principal,
               dadosPlanejamento.tempo_planejado,
               fixedStartDateForDistribution
             );
           } else {
-            console.warn('   ⚠️ Usando modo agenda como fallback.');
             dadosCalculo = await calculateExecutorLoadAndDistribute(
               formData.executor_principal,
               dadosPlanejamento.tempo_planejado,
@@ -477,13 +418,6 @@ export default function PlanejamentoAtividadeModal({
           dadosPlanejamento.termino_planejado = dadosCalculo.dataTermino;
           dadosPlanejamento.horas_por_dia = dadosCalculo.horasPorDia;
 
-          console.log('   💾 Criando planejamento:', {
-            folha: folha.numero,
-            executor: dadosPlanejamento.executor_principal,
-            tempo: dadosPlanejamento.tempo_planejado,
-            inicio: dadosPlanejamento.inicio_planejado,
-            termino: dadosPlanejamento.termino_planejado
-          });
 
           await retryWithBackoff(
             () => PlanejamentoAtividade.create(dadosPlanejamento),
@@ -491,15 +425,12 @@ export default function PlanejamentoAtividadeModal({
           );
           
           totalCriados++;
-          console.log('   ✅ Criado com sucesso\n');
 
           // **NOVO**: Marcar a atividade como "planejada"
           try {
             const { Atividade } = await import('@/entities/all');
             await Atividade.update(atividade.id, { status_planejamento: 'planejada' });
-            console.log('   ✅ Atividade marcada como planejada');
           } catch (error) {
-            console.warn('   ⚠️ Erro ao marcar atividade como planejada:', error);
           }
           
         } catch (error) {
@@ -508,11 +439,6 @@ export default function PlanejamentoAtividadeModal({
         }
       }
 
-      console.log('\n✅ ========================================');
-      console.log('🎉 PROCESSO CONCLUÍDO');
-      console.log(`   Sucessos: ${totalCriados}`);
-      console.log(`   Erros: ${totalErros}`);
-      console.log('✅ ========================================\n');
 
       alert(
         `✅ Planejamento concluído!\n\n` +
@@ -538,12 +464,10 @@ export default function PlanejamentoAtividadeModal({
   };
 
   const handleExecutorChange = (value) => {
-    console.log('Executor selecionado:', value);
     setFormData(prev => ({ ...prev, executor_principal: value }));
   };
 
   const handleMultiplosExecutoresChange = (checked) => {
-    console.log('Múltiplos executores:', checked);
     setFormData(prev => ({
       ...prev,
       multiplos_executores: checked,
@@ -552,7 +476,6 @@ export default function PlanejamentoAtividadeModal({
   };
 
   const handlePermiteMultiplasExecucoesChange = (checked) => {
-    console.log('Permite múltiplas execuções:', checked);
     setFormData(prev => ({
       ...prev,
       permite_multiplas_execucoes: checked,
@@ -565,7 +488,6 @@ export default function PlanejamentoAtividadeModal({
   };
 
   const handleRecorrenciaChange = (checked) => {
-    console.log('Recorrência ativada:', checked);
     setFormData(prev => ({
       ...prev,
       recorrencia_ativada: checked,
@@ -576,7 +498,6 @@ export default function PlanejamentoAtividadeModal({
   };
 
   const handleTipoRecorrenciaChange = (value) => {
-    console.log('Tipo de recorrência:', value);
     setFormData(prev => ({
       ...prev,
       tipo_recorrencia: value,
@@ -587,7 +508,6 @@ export default function PlanejamentoAtividadeModal({
 
   const handleAdicionarDataEspecifica = (date) => {
     if (date) {
-      console.log('Adicionando data:', date);
       setFormData(prev => ({
         ...prev,
         datas_especificas: [...prev.datas_especificas, date].sort((a, b) => a.getTime() - b.getTime())
@@ -596,7 +516,6 @@ export default function PlanejamentoAtividadeModal({
   };
 
   const handleRemoverDataEspecifica = (index) => {
-    console.log('Removendo data no índice:', index);
     setFormData(prev => ({
       ...prev,
       datas_especificas: prev.datas_especificas.filter((_, i) => i !== index)
@@ -604,7 +523,6 @@ export default function PlanejamentoAtividadeModal({
   };
 
   const handleExecucaoChange = (index, field, value) => {
-    console.log(`Atualizando execução ${index}, campo ${field}:`, value);
     setFormData(prev => ({
       ...prev,
       execucoes: prev.execucoes.map((exec, i) =>

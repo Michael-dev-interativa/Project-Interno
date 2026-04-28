@@ -21,6 +21,8 @@ import GlobalTimer from "@/components/layout/GlobalTimer";
 import PlaylistTrigger from "@/components/playlist/PlaylistTrigger";
 import NotificacoesOcasionais from "@/components/dashboard/NotificacoesOcasionais";
 import NotificationGenerator from "@/components/utils/NotificationGenerator";
+import NetworkStatusBadge from "@/components/layout/NetworkStatusBadge";
+import OfflineDataBanner from "@/components/layout/OfflineDataBanner";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -91,16 +93,6 @@ const LayoutComponent = ({ children, currentPageName }) => {
       items.push({
         title: "ATA de Reunião",
         url: createPageUrl("AtaPlanejamento"),
-        icon: FileText,
-        show: true
-      });
-    }
-
-    // Checklist de Planejamento: coordenador e consultor
-    if (hasPermission('coordenador') || perfilAtual === 'consultor' || showAll) {
-      items.push({
-        title: "Checklist de Planejamento",
-        url: createPageUrl("ChecklistPlanejamento"),
         icon: FileText,
         show: true
       });
@@ -226,6 +218,7 @@ const LayoutComponent = ({ children, currentPageName }) => {
           </header>
 
           <div className="flex-1 overflow-auto overflow-x-hidden">
+            <OfflineDataBanner />
             {children}
           </div>
         </main>
@@ -240,6 +233,7 @@ const LayoutComponent = ({ children, currentPageName }) => {
         />
         <NotificacoesOcasionais />
         <NotificationGenerator />
+        <NetworkStatusBadge />
       </div>
     </SidebarProvider>
   );

@@ -23,7 +23,7 @@ function qs(obj) {
 function createEntity(path) {
   const base = `/api/${path}`;
   return {
-    list: async (sort = null, limit = 100, offset = 0) => {
+    list: async (sort = null, limit = 5000, offset = 0) => {
       const q = {};
       if (sort) q.sort = sort;
       if (limit) q.limit = limit;

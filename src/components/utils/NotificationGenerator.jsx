@@ -36,7 +36,6 @@ export default function NotificationGenerator() {
         );
 
         if (notificacoesExistentes && notificacoesExistentes.length > 0) {
-          console.log('✅ Notificações já criadas esta semana para', user.email);
           return;
         }
 
@@ -50,7 +49,6 @@ export default function NotificationGenerator() {
         );
 
         if (!atividadesOcasionais || atividadesOcasionais.length === 0) {
-          console.log('ℹ️ Nenhuma atividade ocasional encontrada para o cargo:', user.cargo);
           return;
         }
 
@@ -70,14 +68,12 @@ export default function NotificationGenerator() {
               3, 1000, 'createNotification'
             );
             notificacoesCriadas.push(novaNotificacao);
-            console.log(`✅ Notificação criada: ${atividade.atividade} para ${user.email}`);
           } catch (error) {
             console.error(`❌ Erro ao criar notificação para ${atividade.atividade}:`, error);
           }
         }
 
         if (notificacoesCriadas.length > 0) {
-          console.log(`🔔 ${notificacoesCriadas.length} notificação(ões) criada(s) para ${user.email}`);
         }
 
       } catch (error) {

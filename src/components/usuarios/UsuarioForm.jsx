@@ -2,6 +2,7 @@ import React, { useState, useContext, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X, Save, Users } from "lucide-react";
@@ -22,12 +23,85 @@ export default function UsuarioForm({ usuario, onSubmit, onCancel, allUsers, equ
     perfil: usuario?.perfil || "user",
     senha: "",
     confirmarSenha: "",
+    datas_indisponiveis: Array.isArray(usuario?.datas_indisponiveis) ? usuario.datas_indisponiveis.filter(Boolean) : [],
+    datas_indisponiveis_text: Array.isArray(usuario?.datas_indisponiveis) ? usuario.datas_indisponiveis.join('\n') : String(usuario?.datas_indisponiveis || ''),
+    new_unavailable_date: "",
     usuarios_permitidos_visualizar: usuario?.usuarios_permitidos_visualizar || []
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const parseDateToISO = (value) => {
+    if (!value) return null;
+    const trimmed = String(value).trim();
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) {
+      return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    }
+    const brMatch = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (brMatch) {
+      return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+    }
+    const parsed = new Date(`${trimmed}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return null;
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const formatDateDisplay = (dateValue) => {
+    const iso = parseDateToISO(dateValue);
+    if (!iso) return String(dateValue || '');
+    const [year, month, day] = iso.split('-');
+    return `${day}/${month}/${year}`;
+  };
+
+  const normalizeDateList = (values) => {
+    const normalized = (values || [])
+      .map((item) => parseDateToISO(item))
+      .filter(Boolean);
+    return Array.from(new Set(normalized));
+  };
+
+  const addUnavailableDate = () => {
+    const isoDate = parseDateToISO(formData.new_unavailable_date);
+    if (!isoDate) {
+      alert('Informe uma data válida para adicionar.');
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      datas_indisponiveis: normalizeDateList([...prev.datas_indisponiveis, isoDate]),
+      datas_indisponiveis_text: normalizeDateList([...prev.datas_indisponiveis, isoDate]).join('\n'),
+      new_unavailable_date: '',
+    }));
+  };
+
+  const removeUnavailableDate = (index) => {
+    setFormData((prev) => {
+      const updated = prev.datas_indisponiveis.filter((_, idx) => idx !== index);
+      return {
+        ...prev,
+        datas_indisponiveis: updated,
+        datas_indisponiveis_text: updated.join('\n'),
+      };
+    });
+  };
+
+  const importUnavailableDates = () => {
+    const parsed = normalizeDateList(String(formData.datas_indisponiveis_text || '').split(/\r?\n|,/));
+    setFormData((prev) => {
+      const merged = normalizeDateList([...prev.datas_indisponiveis, ...parsed]);
+      return {
+        ...prev,
+        datas_indisponiveis: merged,
+        datas_indisponiveis_text: merged.join('\n'),
+      };
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -64,9 +138,14 @@ export default function UsuarioForm({ usuario, onSubmit, onCancel, allUsers, equ
 
     setIsSubmitting(true);
     try {
+      const typedDates = normalizeDateList([...(formData.datas_indisponiveis || []), formData.new_unavailable_date]);
+      const pastedDates = normalizeDateList(String(formData.datas_indisponiveis_text || '').split(/\r?\n|,/));
+      const datasIndisponiveis = normalizeDateList([...typedDates, ...pastedDates]);
+
       await onSubmit({
         ...formData,
         email: formData.email.trim().toLowerCase(),
+        datas_indisponiveis: datasIndisponiveis.length > 0 ? datasIndisponiveis : undefined,
         senha: formData.senha || undefined,
         confirmarSenha: undefined,
       });
@@ -295,6 +374,58 @@ export default function UsuarioForm({ usuario, onSubmit, onCancel, allUsers, equ
                     <strong>Direção:</strong> Acesso completo incluindo aba de Gestão nos empreendimentos
                   </p>
                 )}
+              </div>
+
+              <div className="space-y-3">
+                <Label htmlFor="new_unavailable_date">Datas de feriado / férias</Label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+                  <div className="md:col-span-2">
+                    <Input
+                      id="new_unavailable_date"
+                      type="date"
+                      value={formData.new_unavailable_date}
+                      onChange={(e) => handleInputChange('new_unavailable_date', e.target.value)}
+                      placeholder="Selecione uma data"
+                    />
+                  </div>
+                  <Button type="button" onClick={addUnavailableDate} className="w-full md:w-auto">
+                    Adicionar data
+                  </Button>
+                </div>
+
+                {formData.datas_indisponiveis?.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {formData.datas_indisponiveis.map((date, index) => (
+                      <div key={`${date}-${index}`} className="flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-sm">
+                        <span>{formatDateDisplay(date)}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeUnavailableDate(index)}
+                          className="text-gray-500 hover:text-gray-700"
+                          aria-label={`Remover ${formatDateDisplay(date)}`}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <Textarea
+                  id="datas_indisponiveis_text"
+                  value={formData.datas_indisponiveis_text}
+                  onChange={(e) => handleInputChange('datas_indisponiveis_text', e.target.value)}
+                  placeholder="Cole datas em linhas separadas ou separadas por vírgula (Ex: 2026-07-15 ou 15/07/2026)"
+                  rows={3}
+                />
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-gray-500">
+                    Informe as datas de feriado e férias do usuário. Serão bloqueadas no planejamento.
+                  </p>
+                  <Button type="button" variant="outline" onClick={importUnavailableDates}>
+                    Importar datas
+                  </Button>
+                </div>
               </div>
 
               <div className="space-y-2">

@@ -27,7 +27,6 @@ const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000) => {
       if (error.message?.includes("429") || error.message?.includes("Rate limit")) {
         if (attempt === maxRetries) throw error;
         const delayTime = baseDelay * Math.pow(2, attempt - 1) + Math.random() * 1000;
-        console.warn(`Rate limit hit, tentativa ${attempt}. Aguardando ${delayTime}ms...`);
         await delay(delayTime);
       } else {
         throw error;
@@ -121,7 +120,6 @@ export default function Dashboard() {
       setPlanningLoadingStage('Carregando planejamentos...');
       const todosPlanejamentos = await fetchWithRateLimit(PlanejamentoAtividade);
 
-      console.log(`Dados básicos carregados: ${todosPlanejamentos.length} planejamentos`);
 
       // ETAPA 2: Carregar dados relacionados com mais delay
       setPlanningLoadingStage('Carregando atividades...');
@@ -136,7 +134,6 @@ export default function Dashboard() {
       await delay(1500);
       const allDocumentos = await fetchWithRateLimit(Documento);
 
-      console.log(`Dados relacionados carregados: ${allAnaliticos.length} analíticos, ${allAtividades.length} atividades, ${allDocumentos.length} documentos`);
 
       // ETAPA 3: Criar mapas otimizados
       setPlanningLoadingStage('Processando dados...');
@@ -180,13 +177,8 @@ export default function Dashboard() {
       const comAtividade = planejamentosEnriquecidos.filter(p => p.atividade && p.atividade.atividade).length;
       const semAtividade = planejamentosEnriquecidos.filter(p => !p.atividade || !p.atividade.atividade).length;
 
-      console.log(`=== RESULTADO FINAL ===`);
-      console.log(`Total de planejamentos: ${planejamentosEnriquecidos.length}`);
-      console.log(`Com atividade carregada: ${comAtividade}`);
-      console.log(`Sem atividade: ${semAtividade}`);
 
       if (semAtividade > planejamentosEnriquecidos.length * 0.2) {
-        console.warn("Muitas atividades não foram carregadas");
         setPlanningError("Alguns dados podem não ter carregado completamente devido ao limite de requisições.");
       }
 
@@ -242,7 +234,6 @@ export default function Dashboard() {
       } catch (error) {
         console.error("Erro ao carregar dados do dashboard:", error);
         if (error.message?.includes("Rate limit") || error.message?.includes("429")) {
-          console.warn("Rate limit nas estatísticas - dados não carregados");
         }
       } finally {
         setAreStatsLoading(false);

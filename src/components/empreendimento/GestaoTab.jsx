@@ -28,8 +28,6 @@ export default function GestaoTab({ empreendimento, documentos, planejamentos, a
       'Liberado para Obra'
     ];
 
-    console.log('🔍 [GestaoTab] Documentos:', documentos.length);
-    console.log('🔍 [GestaoTab] Atividades totais:', atividades.length);
 
     // Extrair disciplinas únicas dos documentos
     const disciplinasSet = new Set();
@@ -38,7 +36,6 @@ export default function GestaoTab({ empreendimento, documentos, planejamentos, a
     });
     const disciplinas = Array.from(disciplinasSet).sort();
 
-    console.log('📊 [GestaoTab] Disciplinas encontradas:', disciplinas);
 
     // Criar matriz
     const matriz = {};
@@ -74,11 +71,6 @@ export default function GestaoTab({ empreendimento, documentos, planejamentos, a
         areaPavimento = parseFloat(doc.area) || 1;
       }
 
-      console.log(`📄 [GestaoTab] Processando documento ${doc.numero}:`, {
-        disciplina: disciplinaDoc,
-        subdisciplinas: subdisciplinasDoc,
-        areaPavimento
-      });
 
       // Calcular horas totais do catálogo (para colunas de disciplinas)
       const atividadesAplicaveis = atividades.filter(ativ => {
@@ -101,7 +93,6 @@ export default function GestaoTab({ empreendimento, documentos, planejamentos, a
       // Buscar planejamentos efetivos (para coluna TOTAL)
       const planejamentosDoDocumento = planejamentos.filter(p => p.documento_id === doc.id);
       
-      console.log(`  ✅ Planejamentos encontrados: ${planejamentosDoDocumento.length}`);
 
       planejamentosDoDocumento.forEach(plano => {
         const etapa = plano.etapa;
@@ -112,12 +103,10 @@ export default function GestaoTab({ empreendimento, documentos, planejamentos, a
           matriz[disciplinaDoc][etapa].horasPlanejadas += tempoPlanejado;
           matriz[disciplinaDoc][etapa].horasExecutadas += tempoExecutado;
           
-          console.log(`    💡 ${plano.descritivo || 'Atividade'} [${etapa}]: Planejado=${tempoPlanejado.toFixed(1)}h, Executado=${tempoExecutado.toFixed(1)}h`);
         }
       });
     });
 
-    console.log('📊 [GestaoTab] Matriz preenchida:', matriz);
 
     // Calcular totais por disciplina
     const totaisPorDisciplina = {};

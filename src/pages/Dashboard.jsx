@@ -58,7 +58,6 @@ export default function Dashboard() {
     }
 
     if (isLoadingRef.current) {
-      console.log('⏸️ [Dashboard] Carregamento já em andamento, ignorando...');
       return;
     }
 
@@ -67,7 +66,6 @@ export default function Dashboard() {
     setDashboardError(null);
 
     try {
-      console.log("🚀 [Dashboard] Carregando apenas Disciplinas (Atividades sob demanda)...");
 
       const allDisciplinas = await retryWithBackoff(() => Disciplina.list(), 3, 4000, 'Dashboard-Disciplina');
 
@@ -84,7 +82,6 @@ export default function Dashboard() {
 
       setAreStatsLoading(false);
       hasLoadedOnce.current = true;
-      console.log("✅ [Dashboard] Disciplinas carregadas");
 
     } catch (err) {
       console.error("❌ [Dashboard] ERRO ao carregar dados:", err);
@@ -117,15 +114,12 @@ export default function Dashboard() {
 
   const loadAtividadesSeNecessario = useCallback(async () => {
     if (atividades.length > 0) {
-      console.log('✅ Atividades já carregadas');
       return;
     }
 
-    console.log('🔄 Carregando atividades sob demanda...');
     try {
       const allAtividades = await retryWithBackoff(() => Atividade.list(), 3, 4000, 'Dashboard-Atividade-OnDemand');
       setAtividades(allAtividades || []);
-      console.log('✅ Atividades carregadas');
     } catch (error) {
       console.error('❌ Erro ao carregar atividades:', error);
       setAtividades([]);

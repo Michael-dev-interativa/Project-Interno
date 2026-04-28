@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
@@ -13,7 +13,7 @@ import { PlanejamentoAtividade, AtividadeFuncao, PlanejamentoDocumento, Document
 import { Calendar as CalendarIcon, Plus, Users, Clock, FileText, Building2, Activity, Repeat, Search, Filter, BrainCircuit, Loader2, AlertCircle, File } from "lucide-react";
 import { format, addDays, addWeeks, addMonths, startOfDay, isBefore } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { distribuirHorasPorDias, getNextWorkingDay, isWorkingDay, ensureWorkingDay } from '../utils/DateCalculator';
+import { distribuirHorasPorDias, getNextWorkingDay, isWorkingDay, ensureWorkingDay, normalizeUnavailableDates } from '../utils/DateCalculator';
 import { agruparAtividadesPorEtapa } from '../utils/AtividadeOrdering';
 import { motion } from 'framer-motion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -25,6 +25,8 @@ export default function NovoPlanejamentoModal({
   empreendimentos = [],
   usuarios,
   atividades = [],
+  descritivo_inicial = "",
+  tempo_planejado_inicial = null,
   onSuccess
 }) {
   const [planningMode, setPlanningMode] = useState('individual');
@@ -48,6 +50,18 @@ export default function NovoPlanejamentoModal({
   const [isRecorrente, setIsRecorrente] = useState(false);
   const [recorrencia, setRecorrencia] = useState({ tipo: 'semanal', repeticoes: 4 });
   const [activityFilters, setActivityFilters] = useState({ search: "", disciplina: "all" });
+  // Uncontrolled ref for search — debounced via useEffect to update activityFilters without re-rendering on every keystroke
+  const searchRef = useRef(null);
+  const searchDebounceRef = useRef(null);
+  // Uncontrolled ref for descritivo — avoids re-render on every keystroke
+  const descritivoRef = useRef(null);
+  // Tracks only empty/non-empty transition for submit button disabled check (not full string)
+  const [hasDescritivo, setHasDescritivo] = useState(false);
+  // Uncontrolled ref for tempo_planejado — avoids re-render on every keystroke
+  const tempoPlanejadoRef = useRef(null);
+  const [hasTempo, setHasTempo] = useState(false);
+  // Track which planning mode tabs have been mounted (lazy mounting)
+  const [mountedModes, setMountedModes] = useState(new Set(['individual']));
 
   // --- Estados para Planejamento por Função ---
   const [funcaoSelecionada, setFuncaoSelecionada] = useState('');
@@ -73,6 +87,14 @@ export default function NovoPlanejamentoModal({
   const [selectedDocumentoDate, setSelectedDocumentoDate] = useState(null);
 
   // --- Lógica Comum e de Efeitos ---
+
+  // Debounced handler for search ref — called from onChange, no state needed
+  const handleSearchChange = useCallback((value) => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setActivityFilters(prev => ({ ...prev, search: value }));
+    }, 300);
+  }, []);
 
   // **NOVO**: Ordenar empreendimentos alfabeticamente por nome
   const empreendimentosOrdenados = useMemo(() => {
@@ -131,6 +153,17 @@ export default function NovoPlanejamentoModal({
     return Array.from(cargos).sort();
   }, [usuariosOrdenados]);
 
+  const executorUnavailableDatesMap = useMemo(() => {
+    return (usuarios || []).reduce((map, user) => {
+      if (!user || !user.email) return map;
+      const dates = user.datas_indisponiveis || user.unavailable_dates || user.feriados || user.ferias || [];
+      map[user.email] = normalizeUnavailableDates(dates);
+      return map;
+    }, {});
+  }, [usuarios]);
+
+  const getExecutorUnavailableDates = (email) => executorUnavailableDatesMap[email] || new Set();
+
   const funcoesComModelo = useMemo(() => {
     if (!atividadesFuncao) return [];
     const funcoes = new Set(atividadesFuncao.map(af => af.funcao).filter(Boolean));
@@ -143,11 +176,17 @@ export default function NovoPlanejamentoModal({
       tempo_planejado: "", inicio_planejado: "", horario_inicio: "", horario_termino: "",
       status: "nao_iniciado", prioridade: 1
     });
+    if (descritivoRef.current) descritivoRef.current.value = "";
+    setHasDescritivo(false);
+    if (tempoPlanejadoRef.current) tempoPlanejadoRef.current.value = "";
+    setHasTempo(false);
     setSelectedDate(null);
     setSelectedActivityId("");
     setIsRecorrente(false);
     setRecorrencia({ tipo: 'semanal', repeticoes: 4 });
     setActivityFilters({ search: "", disciplina: "all" });
+    if (searchRef.current) searchRef.current.value = "";
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
   };
 
   const resetFuncaoForm = () => {
@@ -178,6 +217,18 @@ export default function NovoPlanejamentoModal({
       resetFuncaoForm();
       resetDocumentoForm();
       setPlanningMode('individual');
+      setMountedModes(new Set(['individual']));
+    } else if (descritivo_inicial || tempo_planejado_inicial) {
+      const desc = descritivo_inicial || "";
+      setFormData(prev => ({
+        ...prev,
+        descritivo: desc || prev.descritivo,
+        tempo_planejado: tempo_planejado_inicial != null ? String(Number(tempo_planejado_inicial)) : prev.tempo_planejado,
+      }));
+      if (desc && descritivoRef.current) {
+        descritivoRef.current.value = desc;
+        setHasDescritivo(true);
+      }
     }
   }, [isOpen]);
 
@@ -208,7 +259,6 @@ export default function NovoPlanejamentoModal({
         setEtapaDocumento(''); // **NOVO**: Limpar etapa
         
         try {
-          console.log(`🔄 [Planejamento Documento] Carregando documentos do empreendimento ${documentoEmpreendimentoId}...`);
           
           // **CORRIGIDO**: Forçar busca fresca do banco sem cache
           const docs = await retryWithBackoff(
@@ -216,24 +266,9 @@ export default function NovoPlanejamentoModal({
             3, 1000, 'loadDocumentos'
           );
           
-          console.log(`✅ [Planejamento Documento] ${docs?.length || 0} documentos carregados`);
           
           if (docs && docs.length > 0) {
             // **NOVO**: Log dos primeiros documentos para verificar dados
-            console.log('📄 [Planejamento Documento] Exemplo de documento carregado:', {
-              id: docs[0].id,
-              numero: docs[0].numero,
-              arquivo: docs[0].arquivo,
-              tempos: {
-                concepcao: docs[0].tempo_concepcao,
-                planejamento: docs[0].tempo_planejamento,
-                estudo_preliminar: docs[0].tempo_estudo_preliminar,
-                ante_projeto: docs[0].tempo_ante_projeto,
-                projeto_basico: docs[0].tempo_projeto_basico,
-                projeto_executivo: docs[0].tempo_projeto_executivo,
-                liberado_obra: docs[0].tempo_liberado_obra
-              }
-            });
           }
           
           setDocumentos(docs || []);
@@ -255,7 +290,6 @@ export default function NovoPlanejamentoModal({
   // **MODIFICADO**: Resetar etapa quando documento muda
   useEffect(() => {
     if (documentoSelecionado && planningMode === 'documento') {
-      console.log(`🔄 [Planejamento Documento] Documento selecionado mudou para: ${documentoSelecionado}`);
       setEtapaDocumento(''); // Reset etapa ao trocar documento
       setDocumentoFormData(prev => ({
         ...prev,
@@ -267,32 +301,15 @@ export default function NovoPlanejamentoModal({
   // **CORRIGIDO**: Recalcular etapas sempre que documentos ou documento selecionado mudar
   const etapasDisponiveis = useMemo(() => {
     if (!documentoSelecionado || !documentos || documentos.length === 0) {
-      console.log('⚠️ [etapasDisponiveis] Documento não selecionado ou lista vazia');
       return [];
     }
     
     const documento = documentos.find(d => d.id === documentoSelecionado);
     if (!documento) {
-      console.warn(`⚠️ [etapasDisponiveis] Documento ${documentoSelecionado} não encontrado na lista de ${documentos.length} documentos`);
       return [];
     }
 
     // NOVO: Log completo do documento para debug
-    console.log('🔍 [etapasDisponiveis] DOCUMENTO COMPLETO:', {
-      id: documento.id,
-      numero: documento.numero,
-      arquivo: documento.arquivo,
-      TODOS_OS_CAMPOS: documento,
-      campos_tempo: {
-        tempo_concepcao: documento.tempo_concepcao,
-        tempo_planejamento: documento.tempo_planejamento,
-        tempo_estudo_preliminar: documento.tempo_estudo_preliminar,
-        tempo_ante_projeto: documento.tempo_ante_projeto,
-        projeto_basico: documento.tempo_projeto_basico,
-        tempo_projeto_executivo: documento.tempo_projeto_executivo,
-        tempo_liberado_obra: documento.tempo_liberado_obra
-      }
-    });
 
     // Mapeamento de etapas com seus respectivos campos e ordem
     const etapasComTempos = [
@@ -312,22 +329,12 @@ export default function NovoPlanejamentoModal({
         const tempo = Number(valorBruto) || 0;
         
         // NOVO: Log detalhado de cada etapa
-        console.log(`📊 [etapasDisponiveis] ${etapa.nome}:`, {
-          campo: etapa.campo,
-          valorBruto: valorBruto,
-          tipo: typeof valorBruto,
-          tempoConvertido: tempo,
-          incluir: tempo > 0
-        });
         
         return { ...etapa, tempo, valorBruto };
       })
       .filter(etapa => etapa.tempo > 0)
       .sort((a, b) => a.ordem - b.ordem);
 
-    console.log(`📋 [etapasDisponiveis] RESULTADO FINAL - ${etapasComAtividades.length} etapas disponíveis:`, 
-      etapasComAtividades.map(e => `${e.nome} (${e.tempo.toFixed(1)}h)`)
-    );
 
     return etapasComAtividades;
   }, [documentoSelecionado, documentos]); // **CORRIGIDO**: Dependências atualizadas
@@ -337,7 +344,6 @@ export default function NovoPlanejamentoModal({
   useEffect(() => {
     // **CORREÇÃO CRÍTICA**: Adicionar verificação para isLoadingDocumentos
     if (isLoadingDocumentos) {
-      console.log('⏳ [Planejamento Documento] Aguardando carregamento dos documentos...');
       return; // Não executar enquanto está carregando
     }
 
@@ -347,7 +353,6 @@ export default function NovoPlanejamentoModal({
 
     // **CORREÇÃO**: Verificar se a lista de documentos não está vazia
     if (!documentos || documentos.length === 0) {
-      console.warn('⚠️ [Planejamento Documento] Lista de documentos está vazia');
       return;
     }
 
@@ -358,21 +363,6 @@ export default function NovoPlanejamentoModal({
       return;
     }
 
-    console.log('🔍 [Planejamento Documento] Documento encontrado:', {
-      id: documento.id,
-      numero: documento.numero,
-      arquivo: documento.arquivo,
-      etapaSelecionada: etapaDocumento,
-      temposDisponiveis: {
-        estudo_preliminar: documento.tempo_estudo_preliminar,
-        ante_projeto: documento.tempo_ante_projeto,
-        projeto_basico: documento.tempo_projeto_basico,
-        projeto_executivo: documento.tempo_projeto_executivo,
-        liberado_obra: documento.tempo_liberado_obra,
-        concepcao: documento.tempo_concepcao,
-        planejamento: documento.tempo_planejamento
-      }
-    });
 
     let tempoEtapa = null; // Initialize with null to distinguish from 0 or empty string
 
@@ -388,27 +378,21 @@ export default function NovoPlanejamentoModal({
     };
 
     const campoTempo = etapaParaCampo[etapaDocumento];
-    console.log(`📊 [Planejamento Documento] Buscando campo '${campoTempo}' para etapa '${etapaDocumento}'`);
 
     if (campoTempo) {
       // **CORREÇÃO**: Verificar se o campo existe e tem um valor numérico válido (incluindo zero)
       const valorCampo = documento[campoTempo];
-      console.log(`📊 [Planejamento Documento] Valor encontrado para '${campoTempo}':`, valorCampo, `(tipo: ${typeof valorCampo})`);
 
       if (typeof valorCampo === 'number' && !isNaN(valorCampo)) {
         tempoEtapa = valorCampo;
-        console.log(`✅ [Planejamento Documento] Tempo válido encontrado: ${tempoEtapa}h`);
       } else if (valorCampo !== undefined && valorCampo !== null) {
         // Tenta converter para número se não for undefined ou null
         const tentativaConversao = Number(valorCampo);
         if (!isNaN(tentativaConversao)) {
           tempoEtapa = tentativaConversao;
-          console.log(`✅ [Planejamento Documento] Tempo convertido para número: ${tempoEtapa}h`);
         } else {
-          console.warn(`⚠️ [Planejamento Documento] Valor '${valorCampo}' não é um número válido para a etapa '${etapaDocumento}'.`);
         }
       } else {
-        console.warn(`⚠️ [Planejamento Documento] Campo '${campoTempo}' está vazio ou não existe para a etapa '${etapaDocumento}'.`);
       }
     } else {
       console.error(`❌ [Planejamento Documento] Etapa '${etapaDocumento}' não tem mapeamento de campo configurado.`);
@@ -419,13 +403,11 @@ export default function NovoPlanejamentoModal({
         ...prev,
         tempo_planejado: tempoEtapa.toString()
       }));
-      console.log(`✅ Tempo da etapa "${etapaDocumento}" preenchido: ${tempoEtapa}h do documento ${documento.numero || documento.arquivo}`);
     } else {
       setDocumentoFormData(prev => ({
         ...prev,
         tempo_planejado: ""
       }));
-      console.warn(`⚠️ Nenhum tempo válido cadastrado para a etapa "${etapaDocumento}" no documento ${documento.numero || documento.arquivo}. Campo de tempo foi limpo.`);
     }
   }, [etapaDocumento, documentoSelecionado, documentos, planningMode, isLoadingDocumentos]); // **CORREÇÃO**: Adicionada dependência isLoadingDocumentos
 
@@ -434,16 +416,29 @@ export default function NovoPlanejamentoModal({
   const handleActivityChange = (activityId) => {
     setSelectedActivityId(activityId);
     if (activityId) {
-      const activity = atividades.find(a => a.id === activityId); // Fix: Changed 'actividades' to 'atividades'
+      const activity = atividades.find(a => a.id === activityId);
       if (activity) {
+        const descritivo = String(activity.atividade || '');
         setFormData(prev => ({
           ...prev,
-          descritivo: String(activity.atividade || '') || prev.descritivo,
+          descritivo: descritivo || prev.descritivo,
           tempo_planejado: activity.tempo?.toString() || prev.tempo_planejado,
         }));
+        if (descritivo && descritivoRef.current) {
+          descritivoRef.current.value = descritivo;
+          setHasDescritivo(true);
+        }
+        if (activity.tempo != null && tempoPlanejadoRef.current) {
+          tempoPlanejadoRef.current.value = activity.tempo.toString();
+          setHasTempo(true);
+        }
       }
     } else {
       setFormData(prev => ({ ...prev, descritivo: "", tempo_planejado: "" }));
+      if (descritivoRef.current) descritivoRef.current.value = "";
+      setHasDescritivo(false);
+      if (tempoPlanejadoRef.current) tempoPlanejadoRef.current.value = "";
+      setHasTempo(false);
     }
   };
 
@@ -479,13 +474,11 @@ export default function NovoPlanejamentoModal({
     }
   };
 
-  const planAndCreateForExecutor = async (executor, isPrincipal, cargaDiariaExistente, dataPartida, descritivo, tempoTotal) => {
-    console.log(`[planAndCreateForExecutor] 📅 Planejando para ${executor} a partir de ${format(dataPartida, 'yyyy-MM-dd')}`);
+  const planAndCreateForExecutor = async (executor, isPrincipal, cargaDiariaExistente, dataPartida, descritivo, tempoTotal, unavailableDates) => {
     const diaDePartidaReal = new Date(dataPartida);
-    const { distribuicao, dataTermino, cargaAtualizada } = distribuirHorasPorDias(diaDePartidaReal, tempoTotal, 8, cargaDiariaExistente);
+    const { distribuicao, dataTermino, cargaAtualizada } = distribuirHorasPorDias(diaDePartidaReal, tempoTotal, 8, cargaDiariaExistente, false, unavailableDates);
 
     if (Object.keys(distribuicao).length === 0) {
-      console.warn(`[planAndCreateForExecutor] ⚠️ Nenhuma hora pôde ser alocada para "${descritivo}" para o executor ${executor}.`);
       return { termino: dataPartida, carga: cargaDiariaExistente };
     }
 
@@ -507,14 +500,16 @@ export default function NovoPlanejamentoModal({
   };
 
   const handleIndividualSubmit = async () => {
-    if (!formData.descritivo || !formData.executor_principal || !formData.tempo_planejado || Number(formData.tempo_planejado) <= 0) {
+    const descritivo = descritivoRef.current?.value || formData.descritivo;
+    const tempoPlanejadoVal = tempoPlanejadoRef.current?.value || formData.tempo_planejado;
+    if (!descritivo || !formData.executor_principal || !tempoPlanejadoVal || Number(tempoPlanejadoVal) <= 0) {
         alert("Por favor, preencha a descrição, executor principal e tempo planejado.");
         return;
     }
 
     setIsSubmitting(true);
     try {
-      const tempoTotal = Number(formData.tempo_planejado);
+      const tempoTotal = Number(tempoPlanejadoVal);
       const allSelectedExecutors = formData.executores;
       const planejamentosExistentes = await PlanejamentoAtividade.filter({ executor_principal: { '$in': allSelectedExecutors } });
 
@@ -530,12 +525,12 @@ export default function NovoPlanejamentoModal({
         }
       });
 
-      let proximaDataDePartida = selectedDate ? startOfDay(selectedDate) : getNextWorkingDay(new Date());
+      let proximaDataDePartida = selectedDate ? startOfDay(selectedDate) : getNextWorkingDay(new Date(), getExecutorUnavailableDates(formData.executor_principal));
       const repeticoes = isRecorrente ? Math.max(1, parseInt(recorrencia.repeticoes, 10) || 1) : 1;
       let createdCount = 0;
 
       for (let i = 0; i < repeticoes; i++) {
-        const descritivoDaOcorrencia = isRecorrente ? `${formData.descritivo} (${i + 1}/${repeticoes})` : formData.descritivo;
+        const descritivoDaOcorrencia = isRecorrente ? `${descritivo} (${i + 1}/${repeticoes})` : descritivo;
         let ultimoTerminoParaEstaOcorrencia = null;
         
         // Guardar a data de início desta ocorrência para calcular a próxima
@@ -544,9 +539,10 @@ export default function NovoPlanejamentoModal({
         const createPlanLoop = async (executorList) => {
           for (const executor of executorList) {
             const cargaDoExecutor = cargaPorExecutor[executor] || {};
+            const unavailableDates = getExecutorUnavailableDates(executor);
             const { termino, carga } = await planAndCreateForExecutor(
               executor, executor === formData.executor_principal, cargaDoExecutor,
-              proximaDataDePartida, descritivoDaOcorrencia, tempoTotal
+              proximaDataDePartida, descritivoDaOcorrencia, tempoTotal, unavailableDates
             );
             cargaPorExecutor[executor] = carga;
             if (!ultimoTerminoParaEstaOcorrencia || (termino && termino > ultimoTerminoParaEstaOcorrencia)) {
@@ -566,12 +562,10 @@ export default function NovoPlanejamentoModal({
         if (isRecorrente && i < repeticoes - 1) {
             if (recorrencia.tipo === 'mesmo_dia') {
                 // Mantém a mesma data para todas as repetições
-                console.log(`🔄 [Recorrência Mesmo Dia] Mantendo data: ${format(proximaDataDePartida, 'yyyy-MM-dd')}`);
             } else if (recorrencia.tipo === 'diaria') {
                 // **CORREÇÃO CRÍTICA**: Para diária, avançar 1 dia e garantir que é dia útil
                 // Usando ensureWorkingDay em vez de getNextWorkingDay para não pular dias
                 proximaDataDePartida = ensureWorkingDay(addDays(inicioDestaOcorrencia, 1));
-                console.log(`📅 [Recorrência Diária] Próxima data: ${format(proximaDataDePartida, 'yyyy-MM-dd')}`);
             } else if (ultimoTerminoParaEstaOcorrencia) {
                 // Para outros tipos (semanal, quinzenal, mensal), avançar a partir do início
                 let proximoPontoDePartida;
@@ -581,14 +575,13 @@ export default function NovoPlanejamentoModal({
                     case 'mensal': proximoPontoDePartida = addMonths(inicioDestaOcorrencia, 1); break;
                     default: proximoPontoDePartida = addWeeks(inicioDestaOcorrencia, 1);
                 }
-                proximaDataDePartida = getNextWorkingDay(proximoPontoDePartida); // Still using getNextWorkingDay here as per original
-                console.log(`📅 [Recorrência ${recorrencia.tipo}] Próxima data: ${format(proximaDataDePartida, 'yyyy-MM-dd')}`);
+                proximaDataDePartida = getNextWorkingDay(proximoPontoDePartida, getExecutorUnavailableDates(formData.executor_principal));
             }
         }
       }
 
       alert(`${createdCount} planejamento${createdCount > 1 ? 's' : ''} criado${createdCount > 1 ? 's' : ''} com sucesso!`);
-      if (onSuccess) onSuccess(true); // Passa flag indicando sucesso
+      if (onSuccess) onSuccess({ executor_principal: formData.executor_principal, executores: formData.executores });
     } catch (error) {
       console.error("Erro ao criar planejamento individual:", error);
       alert("Erro ao criar planejamento. Verifique os dados e tente novamente.");
@@ -641,6 +634,7 @@ export default function NovoPlanejamentoModal({
 
       while (isBefore(dataAtual, startOfDay(periodo.to))) {
         for (const usuario of usuariosParaPlanejar) {
+          const unavailableDates = getExecutorUnavailableDates(usuario.email);
           setGenerationStatus({ message: `Planejando para ${usuario.nome || usuario.email} em ${format(dataAtual, 'dd/MM/yyyy')}...`, error: false });
           let cargaDoExecutor = cargaPorExecutor[usuario.email] || {};
 
@@ -668,10 +662,10 @@ export default function NovoPlanejamentoModal({
                 deveCriar = false;
             }
 
-            if (deveCriar && isWorkingDay(dataAtual)) {
+            if (deveCriar && isWorkingDay(dataAtual, unavailableDates)) {
               for (let i = 0; i < (atividadeModelo.repeticoes || 1); i++) {
                 const { distribuicao, dataTermino, cargaAtualizada } = distribuirHorasPorDias(
-                  dataAtual, atividadeModelo.tempo_estimado, 8, cargaDoExecutor
+                  dataAtual, atividadeModelo.tempo_estimado, 8, cargaDoExecutor, false, unavailableDates
                 );
 
                 if (Object.keys(distribuicao).length > 0) {
@@ -742,16 +736,16 @@ export default function NovoPlanejamentoModal({
         }
       });
 
-      let proximaDataDePartida = selectedDocumentoDate ? startOfDay(selectedDocumentoDate) : getNextWorkingDay(new Date());
+      let proximaDataDePartida = selectedDocumentoDate ? startOfDay(selectedDocumentoDate) : getNextWorkingDay(new Date(), getExecutorUnavailableDates(documentoFormData.executor_principal));
       let createdCount = 0;
 
       for (const executor of allSelectedExecutors) {
         const cargaDoExecutor = cargaPorExecutor[executor] || {};
+        const unavailableDates = getExecutorUnavailableDates(executor);
         const diaDePartidaReal = new Date(proximaDataDePartida);
-        const { distribuicao, dataTermino, cargaAtualizada } = distribuirHorasPorDias(diaDePartidaReal, tempoTotal, 8, cargaDoExecutor);
+        const { distribuicao, dataTermino, cargaAtualizada } = distribuirHorasPorDias(diaDePartidaReal, tempoTotal, 8, cargaDoExecutor, false, unavailableDates);
 
         if (Object.keys(distribuicao).length === 0) {
-          console.warn(`[handleDocumentoSubmit] ⚠️ Nenhuma hora pôde ser alocada para o documento "${documento.arquivo}" para o executor ${executor}.`);
           continue;
         }
 
@@ -795,6 +789,10 @@ export default function NovoPlanejamentoModal({
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    // Sync uncontrolled descritivo input to formData before submitting
+    if (descritivoRef.current) {
+      setFormData(prev => ({ ...prev, descritivo: descritivoRef.current.value }));
+    }
     if (planningMode === 'individual') {
       handleIndividualSubmit();
     } else if (planningMode === 'funcao') {
@@ -816,7 +814,7 @@ export default function NovoPlanejamentoModal({
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs value={planningMode} onValueChange={setPlanningMode} className="w-full mt-4">
+        <Tabs value={planningMode} onValueChange={(mode) => { setPlanningMode(mode); setMountedModes(prev => { prev.add(mode); return new Set(prev); }); }} className="w-full mt-4">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="individual">
               <Users className="w-4 h-4 mr-2" />
@@ -843,7 +841,7 @@ export default function NovoPlanejamentoModal({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <Input placeholder="Buscar atividade..." value={activityFilters.search} onChange={(e) => setActivityFilters(prev => ({ ...prev, search: e.target.value }))} className="pl-10 text-sm" />
+                      <Input ref={searchRef} placeholder="Buscar atividade..." defaultValue="" onChange={(e) => handleSearchChange(e.target.value)} className="pl-10 text-sm" />
                     </div>
                     <Select value={activityFilters.disciplina} onValueChange={(value) => setActivityFilters(prev => ({ ...prev, disciplina: value }))}>
                       <SelectTrigger className="text-sm"><SelectValue placeholder="Todas as disciplinas" /></SelectTrigger>
@@ -879,7 +877,7 @@ export default function NovoPlanejamentoModal({
               </div>
 
               {/* Restante do formulário individual */}
-              <div className="space-y-2"><Label className="flex items-center gap-2"><FileText className="w-4 h-4" />Descrição da Atividade *</Label><Input value={formData.descritivo} onChange={(e) => setFormData(prev => ({ ...prev, descritivo: e.target.value }))} placeholder="Ou descreva uma nova atividade aqui"/></div>
+              <div className="space-y-2"><Label className="flex items-center gap-2"><FileText className="w-4 h-4" />Descrição da Atividade *</Label><Input ref={descritivoRef} defaultValue={formData.descritivo} onChange={(e) => { const filled = e.target.value.length > 0; if (filled !== hasDescritivo) setHasDescritivo(filled); }} onBlur={(e) => setFormData(prev => ({ ...prev, descritivo: e.target.value }))} placeholder="Ou descreva uma nova atividade aqui"/></div>
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <Building2 className="w-4 h-4" />
@@ -933,7 +931,7 @@ export default function NovoPlanejamentoModal({
                 </div>
               )}
               
-              <div className="space-y-2"><Label className="flex items-center gap-2"><Clock className="w-4 h-4" />Tempo Planejado (horas) *</Label><Input type="number" step="0.1" value={formData.tempo_planejado} onChange={(e) => setFormData(prev => ({ ...prev, tempo_planejado: e.target.value }))} placeholder="Ex: 8.5"/></div>
+              <div className="space-y-2"><Label className="flex items-center gap-2"><Clock className="w-4 h-4" />Tempo Planejado (horas) *</Label><Input ref={tempoPlanejadoRef} type="number" step="0.1" defaultValue={formData.tempo_planejado} onChange={(e) => { const filled = e.target.value.length > 0; if (filled !== hasTempo) setHasTempo(filled); }} onBlur={(e) => setFormData(prev => ({ ...prev, tempo_planejado: e.target.value }))} placeholder="Ex: 8.5"/></div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -968,7 +966,7 @@ export default function NovoPlanejamentoModal({
 
           {/* Aba de Planejamento por Função */}
           <TabsContent value="funcao">
-            <Card className="border-none shadow-none">
+            {mountedModes.has('funcao') && <Card className="border-none shadow-none">
               <CardContent className="space-y-6 pt-6">
                  {isLoadingFuncaoData ? (
                    <div className="flex items-center justify-center h-40">
@@ -1047,12 +1045,12 @@ export default function NovoPlanejamentoModal({
                   </>
                  )}
               </CardContent>
-            </Card>
+            </Card>}
           </TabsContent>
 
           {/* Aba de Planejamento por Documento */}
           <TabsContent value="documento">
-            <Card className="border-none shadow-none">
+            {mountedModes.has('documento') && <Card className="border-none shadow-none">
               <CardContent className="space-y-6 pt-6">
                 <div className="space-y-2">
                   <Label htmlFor="documento-empreendimento" className="flex items-center gap-2">
@@ -1287,7 +1285,7 @@ export default function NovoPlanejamentoModal({
                   <p className="text-xs text-gray-500">Se não especificada, será usada a próxima data útil disponível.</p>
                 </div>
               </CardContent>
-            </Card>
+            </Card>}
           </TabsContent>
         </Tabs>
 
@@ -1298,7 +1296,7 @@ export default function NovoPlanejamentoModal({
           <Button
             onClick={handleSubmit}
             disabled={isSubmitting ||
-              (planningMode === 'individual' && (!formData.descritivo || !formData.executor_principal || !formData.tempo_planejado)) ||
+              (planningMode === 'individual' && (!hasDescritivo || !formData.executor_principal || !hasTempo)) ||
               (planningMode === 'funcao' && (!funcaoSelecionada || !usuarioSelecionado || !periodo?.from)) ||
               (planningMode === 'documento' && (!documentoEmpreendimentoId || !documentoSelecionado || !etapaDocumento || !documentoFormData.executor_principal || !documentoFormData.tempo_planejado || Number(documentoFormData.tempo_planejado) < 0 || isNaN(Number(documentoFormData.tempo_planejado)) || etapasDisponiveis.length === 0))
             }
