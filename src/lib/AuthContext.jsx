@@ -286,7 +286,11 @@ export const AuthProvider = ({ children }) => {
       throw new Error(payload?.error || rawBody || `Falha no login (HTTP ${response.status}).`);
     }
 
-    const entityUser = await loadUserEntityByEmail(payload?.user?.email);
+    if (!payload?.user) {
+      throw new Error(payload?.error || 'Usuário ou senha inválidos, ou usuário não cadastrado.');
+    }
+
+    const entityUser = await loadUserEntityByEmail(payload.user.email);
     const mergedUser = mergeSessionUser(payload.user, entityUser);
 
     if (String(mergedUser?.status || '').toLowerCase() === 'inativo') {
