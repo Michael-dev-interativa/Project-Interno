@@ -1,7 +1,4 @@
-// Rota amigável para a raiz da API
-app.get('/', (req, res) => {
-  res.send('API online! Use os endpoints da aplicação.');
-});
+
 require('dotenv').config();
 
 // --- AJUSTE: Usar variáveis padrão do Render ---
@@ -41,7 +38,13 @@ const comercialModel = require('./models/comercial');
 const checklistsModel = require('./models/checklists');
 const checklistItemsModel = require('./models/checklistItems');
 
+
 const app = express();
+
+// Rota amigável para a raiz da API
+app.get('/', (req, res) => {
+  res.send('API online! Use os endpoints da aplicação.');
+});
 
 function getFixedAdminConfig() {
   const email = String(process.env.FIXED_ADMIN_EMAIL || 'admin@interativa.local').trim().toLowerCase();
