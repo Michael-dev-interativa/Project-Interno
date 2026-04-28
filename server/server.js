@@ -262,6 +262,11 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Email ou senha inválidos.' });
     }
 
+    // Bloquear usuário inativo
+    if (String(user.status || '').toLowerCase() === 'inativo') {
+      return res.status(403).json({ error: 'Usuário inativo. Procure o administrador.' });
+    }
+
     const safeUser = toPublicUser(user);
     return res.json({ token: createSessionToken(user), user: safeUser });
   } catch (err) {
