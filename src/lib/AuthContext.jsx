@@ -48,13 +48,24 @@ async function fetchLocalAuth(path, options = {}) {
   const endpoints = envApiUrl
     ? [`${envApiUrl}/api`]
     : ['/api', 'http://localhost:4000/api'];
+
+  console.log('[Auth] VITE_API_URL:', import.meta?.env?.VITE_API_URL);
+  console.log('[Auth] VITE_API_BASE_URL:', import.meta?.env?.VITE_API_BASE_URL);
+  console.log('[Auth] Tentando endpoints:', endpoints);
+
   let lastError = null;
 
   for (const base of endpoints) {
     try {
-      const response = await fetch(`${base}${path}`, options);
+      const url = `${base}${path}`;
+      console.log('[Auth] Chamando:', url);
+      const response = await fetch(url, options);
+      console.log('[Auth] Status HTTP:', response.status, response.statusText);
+      const cloned = response.clone();
+      cloned.text().then(body => console.log('[Auth] Resposta body:', body.slice(0, 300)));
       return response;
     } catch (error) {
+      console.error('[Auth] Erro ao chamar endpoint:', error.message);
       lastError = error;
     }
   }
