@@ -436,7 +436,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
     Object.entries(gruposDocumentacao)
       .sort((a, b) => a[0].localeCompare(b[0]))
       .forEach(([disciplina, subdisciplinas]) => {
-        const temAtividades = Object.values(subdisciplinas).flat().length > 0;
+        const temAtividades = Object.values(subdisciplinas || {}).flat().length > 0;
         if (temAtividades) {
           result.push([disciplina, subdisciplinas]);
         }
@@ -1036,10 +1036,10 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                 {disciplina}
                 <Badge variant="secondary" className="ml-2">
                   {isDocumentacao 
-                    ? Object.values(subdisciplinasMap).flat().length 
+                    ? Object.values(subdisciplinasMap || {}).flat().length 
                     : atividadesList.length
                   } {isDocumentacao 
-                    ? Object.values(subdisciplinasMap).flat().length === 1 ? 'atividade' : 'atividades'
+                    ? Object.values(subdisciplinasMap || {}).flat().length === 1 ? 'atividade' : 'atividades'
                     : atividadesList.length === 1 ? 'atividade' : 'atividades'
                   }
                 </Badge>
