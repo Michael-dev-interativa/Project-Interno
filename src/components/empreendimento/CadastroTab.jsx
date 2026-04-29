@@ -15,6 +15,27 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 const DEFAULT_REVISOES = ["R00", "R01", "R02"];
 
 // Memoized date cell — prevents full grid re-render when one cell changes
+
+// Função utilitária para garantir formato yyyy-MM-dd ou string vazia
+function toISODateString(val) {
+  if (!val) return '';
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  // Tenta converter datas tipo dd/mm/aaaa ou Date
+  if (typeof val === 'string' && val.includes('/')) {
+    const [dia, mes, ano] = val.split('/');
+    if (ano && mes && dia) {
+      return `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+    }
+  }
+  try {
+    const d = new Date(val);
+    if (!isNaN(d)) {
+      return d.toISOString().split('T')[0];
+    }
+  } catch {}
+  return '';
+}
+
 const DateCell = React.memo(function DateCell({ linhaId, etapa, revisao, value, onUpdate, readOnly, onCopy }) {
   const handleChange = useCallback(
     (e) => onUpdate(linhaId, etapa, revisao, e.target.value),
@@ -24,6 +45,7 @@ const DateCell = React.memo(function DateCell({ linhaId, etapa, revisao, value, 
     () => onCopy(linhaId, etapa, revisao),
     [linhaId, etapa, revisao, onCopy]
   );
+  const safeValue = toISODateString(value);
   return (
     <div
       className="border-r border-gray-100 p-0.5 flex-shrink-0 flex items-center relative group"
@@ -31,13 +53,13 @@ const DateCell = React.memo(function DateCell({ linhaId, etapa, revisao, value, 
     >
       <input
         type="date"
-        value={value}
+        value={safeValue}
         onChange={handleChange}
         className="h-8 text-xs w-full px-1 border border-gray-300 rounded cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
-        style={{ color: value ? 'black' : 'transparent' }}
+        style={{ color: safeValue ? 'black' : 'transparent' }}
         disabled={readOnly}
       />
-      {!readOnly && value && (
+      {!readOnly && safeValue && (
         <button
           onClick={handleCopy}
           className="text-purple-600 hover:text-purple-800 p-0.5 absolute right-0 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1473,10 +1495,10 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
                                      >
                                        <input
                                          type="date"
-                                         value={getDataValue(linha, etapa, revisao)}
+                                         value={toISODateString(getDataValue(linha, etapa, revisao))}
                                          onChange={(e) => handleUpdateData(linha.id, etapa, revisao, e.target.value)}
                                          className="h-8 text-xs w-full px-1 border border-gray-300 rounded cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
-                                         style={{ color: getDataValue(linha, etapa, revisao) ? 'black' : 'transparent' }}
+                                         style={{ color: toISODateString(getDataValue(linha, etapa, revisao)) ? 'black' : 'transparent' }}
                                          disabled={readOnly}
                                        />
                                        {!readOnly && getDataValue(linha, etapa, revisao) && (
@@ -1648,12 +1670,12 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">Data</label>
-                <Input
-                  type="date"
-                  value={massEditData}
-                  onChange={(e) => setMassEditData(e.target.value)}
-                  className="w-full"
-                />
+                  <Input
+                    type="date"
+                    value={toISODateString(massEditData)}
+                    onChange={(e) => setMassEditData(e.target.value)}
+                    className="w-full"
+                  />
               </div>
 
               <div className="flex justify-end gap-2 pt-4">
