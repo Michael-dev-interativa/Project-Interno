@@ -1,0 +1,26 @@
+// VirtualizedTable.js
+import React from 'react';
+import { FixedSizeList as List } from 'react-window';
+
+export default function VirtualizedTable({
+  height,
+  itemCount,
+  itemSize,
+  width,
+  renderRow
+}) {
+  return (
+    <List
+      height={height}
+      itemCount={itemCount}
+      itemSize={itemSize}
+      width={width}
+    >
+      {({ index, style }) => (
+        <div style={style}>
+          {renderRow(index)}
+        </div>
+      )}
+    </List>
+  );
+}

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import VirtualizedTable from './VirtualizedTable';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -1447,10 +1448,10 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
                   Nenhum documento cadastrado
                 </div>
               ) : (
-                linhasPorDisciplina.map(([disciplina, linhasDaDisciplina]) => (
-                  <div key={disciplina}>
-                    {/* Cabeçalho da Disciplina - para alinhar com a coluna de folhas */}
-                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-300 flex" style={{ minWidth: `${larguraTotalEtapas}px`, height: '44px' }}>
+                <>
+                  {/* Cabeçalhos das disciplinas (alinham com colunas de folhas) */}
+                  {linhasPorDisciplina.map(([disciplina]) => (
+                    <div key={disciplina} className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-300 flex" style={{ minWidth: `${larguraTotalEtapas}px`, height: '44px' }}>
                       {ETAPAS_VIEW.filter(e => !etapasExcluidas.includes(e)).map((etapa) => {
                         const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
                         const isMinimizada = etapasMinimizadas[etapa];
@@ -1466,17 +1467,21 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
                         );
                       })}
                     </div>
-
-                    {/* Linhas da Disciplina */}
-                    {linhasDaDisciplina.map((linha) => {
+                  ))}
+                  {/* Virtualização das linhas */}
+                  <VirtualizedTable
+                    height={500}
+                    itemCount={linhas.length}
+                    itemSize={48}
+                    width={larguraTotalEtapas}
+                    renderRow={(rowIdx) => {
+                      const linha = linhas[rowIdx];
                       const doc = docMap.get(linha.documento_id);
-                      
                       return (
                         <div key={linha.id} className="flex border-b border-gray-200 hover:bg-gray-50" style={{ minWidth: `${larguraTotalEtapas}px`, height: '48px' }}>
                           {etapasVisiveis.map((etapa) => {
                             const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
                             const isMinimizada = etapasMinimizadas[etapa];
-                            
                             return (
                               <div
                                 key={`${linha.id}-${etapa}`}
@@ -1489,28 +1494,28 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
                                   <div className="flex">
                                     {revisoesEtapa.map((revisao) => (
                                       <div
-                                       key={`${linha.id}-${etapa}-${revisao}`}
+                                        key={`${linha.id}-${etapa}-${revisao}`}
                                         className="border-r border-gray-100 p-0.5 flex-shrink-0 flex items-center relative group"
-                                       style={{ width: '110px', minWidth: '110px' }}
-                                     >
-                                       <input
-                                         type="date"
-                                         value={toISODateString(getDataValue(linha, etapa, revisao))}
-                                         onChange={(e) => handleUpdateData(linha.id, etapa, revisao, e.target.value)}
-                                         className="h-8 text-xs w-full px-1 border border-gray-300 rounded cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
-                                         style={{ color: toISODateString(getDataValue(linha, etapa, revisao)) ? 'black' : 'transparent' }}
-                                         disabled={readOnly}
-                                       />
-                                       {!readOnly && getDataValue(linha, etapa, revisao) && (
-                                         <button
-                                           onClick={() => copiarDataParaBaixo(linha.id, etapa, revisao)}
-                                           className="text-purple-600 hover:text-purple-800 p-0.5 absolute right-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                           title="Preencher todas abaixo"
-                                         >
-                                           <Wand2 className="w-2.5 h-2.5" />
-                                         </button>
-                                       )}
-                                     </div>
+                                        style={{ width: '110px', minWidth: '110px' }}
+                                      >
+                                        <input
+                                          type="date"
+                                          value={toISODateString(getDataValue(linha, etapa, revisao))}
+                                          onChange={(e) => handleUpdateData(linha.id, etapa, revisao, e.target.value)}
+                                          className="h-8 text-xs w-full px-1 border border-gray-300 rounded cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
+                                          style={{ color: toISODateString(getDataValue(linha, etapa, revisao)) ? 'black' : 'transparent' }}
+                                          disabled={readOnly}
+                                        />
+                                        {!readOnly && getDataValue(linha, etapa, revisao) && (
+                                          <button
+                                            onClick={() => copiarDataParaBaixo(linha.id, etapa, revisao)}
+                                            className="text-purple-600 hover:text-purple-800 p-0.5 absolute right-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            title="Preencher todas abaixo"
+                                          >
+                                            <Wand2 className="w-2.5 h-2.5" />
+                                          </button>
+                                        )}
+                                      </div>
                                     ))}
                                     <div className="p-0.5 flex-shrink-0" style={{ width: '40px', minWidth: '40px' }}></div>
                                   </div>
@@ -1520,9 +1525,9 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
                           })}
                         </div>
                       );
-                    })}
-                  </div>
-                ))
+                    }}
+                  />
+                </>
               )}
                 </div>
               </div>
