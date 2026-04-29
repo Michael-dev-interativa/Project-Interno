@@ -1,5 +1,6 @@
 // Cliente simples que mapeia chamadas de entidade para o servidor local (/api)
-const API_BASE = '';
+const PROD_BACKEND = 'https://project-interno-rati.onrender.com';
+const API_BASE = (import.meta?.env?.VITE_API_URL || import.meta?.env?.VITE_API_BASE_URL || (import.meta?.env?.DEV ? '' : PROD_BACKEND)).replace(/\/$/, '');
 const LOCAL_AUTH_TOKEN_KEY = 'project_auth_token';
 const LOCAL_AUTH_USER_KEY = 'project_auth_user';
 
@@ -21,7 +22,7 @@ function qs(obj) {
 }
 
 function createEntity(path) {
-  const base = `/api/${path}`;
+  const base = `${API_BASE}/api/${path}`;
   return {
     list: async (sort = null, limit = 5000, offset = 0) => {
       const q = {};
@@ -136,7 +137,7 @@ export const User = Usuario; // alias
 User.me = async () => {
   const token = typeof window !== 'undefined' ? window.localStorage.getItem(LOCAL_AUTH_TOKEN_KEY) : null;
   try {
-    const res = await fetch('/api/users/me', {
+    const res = await fetch(`${API_BASE}/api/users/me`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     });
     if (res.ok) {
