@@ -54,7 +54,23 @@ export default function EmpreendimentoPage() {
 
   const [activeTab, setActiveTab] = useState('documentos');
   const [mountedTabs, setMountedTabs] = useState(new Set(['documentos']));
-  const [etapaParaPlanejamento, setEtapaParaPlanejamento] = useState('todas');
+  // Persistência da etapa selecionada no localStorage
+  const EMP_KEY = `etapaPlanejamento_${empreendimento?.id || ''}`;
+  const [etapaParaPlanejamento, setEtapaParaPlanejamentoState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(EMP_KEY);
+      return saved || 'todas';
+    }
+    return 'todas';
+  });
+
+  // Wrapper para salvar no localStorage
+  const setEtapaParaPlanejamento = (val) => {
+    setEtapaParaPlanejamentoState(val);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(EMP_KEY, val);
+    }
+  };
 
   const etapasConfiguradas = useMemo(() => {
     const etapas = (empreendimento?.etapas || [])
@@ -73,7 +89,7 @@ export default function EmpreendimentoPage() {
     if (etapasConfiguradas.length === 1 && etapaParaPlanejamento === 'todas') {
       setEtapaParaPlanejamento(etapasConfiguradas[0]);
     }
-  }, [etapasConfiguradas, etapaParaPlanejamento]);
+  }, [etapasConfiguradas, /* não depende mais de setEtapaParaPlanejamento */]);
 
   const empreendimentoQueryId = useMemo(() =>
     new URLSearchParams(location.search).get("id"), [location.search]
