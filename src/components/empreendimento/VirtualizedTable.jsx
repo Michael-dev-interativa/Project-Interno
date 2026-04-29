@@ -1,6 +1,6 @@
-// VirtualizedTable.js
+// VirtualizedTable.jsx
 import React from 'react';
-import { FixedSizeList as List } from 'react-window';
+import { List } from 'react-window';
 
 export default function VirtualizedTable({
   height,
