@@ -46,8 +46,8 @@ function normalizeProfile(raw) {
 const PROD_API_URL = 'https://project-interno-rati.onrender.com';
 
 async function fetchLocalAuth(path, options = {}) {
-  const envApiUrl = (import.meta?.env?.VITE_API_URL || import.meta?.env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
-  const isProd = !import.meta?.env?.DEV;
+  const envApiUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+  const isProd = !import.meta.env.DEV;
   const resolvedBase = envApiUrl || (isProd ? PROD_API_URL : '');
   const endpoints = resolvedBase
     ? [`${resolvedBase}/api`]

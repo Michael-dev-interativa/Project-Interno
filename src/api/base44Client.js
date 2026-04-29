@@ -22,7 +22,7 @@ if (appId && serverUrl) {
 } else {
   // Fallback shim: expose `entities`, `auth`, `integrations` with minimal API
   const PROD_BACKEND = 'https://project-interno-rati.onrender.com';
-  const apiOrigin = (import.meta?.env?.VITE_API_URL || import.meta?.env?.VITE_API_BASE_URL || (import.meta?.env?.DEV ? 'http://localhost:4000' : PROD_BACKEND)).replace(/\/$/, '');
+  const apiOrigin = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:4000' : PROD_BACKEND)).replace(/\/$/, '');
   const LOCAL_AUTH_TOKEN_KEY = 'project_auth_token';
   const LOCAL_AUTH_USER_KEY = 'project_auth_user';
 

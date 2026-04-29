@@ -1,6 +1,6 @@
 // Cliente simples que mapeia chamadas de entidade para o servidor local (/api)
 const PROD_BACKEND = 'https://project-interno-rati.onrender.com';
-const API_BASE = (import.meta?.env?.VITE_API_URL || import.meta?.env?.VITE_API_BASE_URL || (import.meta?.env?.DEV ? '' : PROD_BACKEND)).replace(/\/$/, '');
+const API_BASE = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? '' : PROD_BACKEND)).replace(/\/$/, '');
 const LOCAL_AUTH_TOKEN_KEY = 'project_auth_token';
 const LOCAL_AUTH_USER_KEY = 'project_auth_user';
 
