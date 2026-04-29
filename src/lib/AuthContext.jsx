@@ -43,10 +43,14 @@ function normalizeProfile(raw) {
   return ALLOWED_PROFILES.has(normalized) ? normalized : 'user';
 }
 
+const PROD_API_URL = 'https://project-interno-rati.onrender.com';
+
 async function fetchLocalAuth(path, options = {}) {
   const envApiUrl = (import.meta?.env?.VITE_API_URL || import.meta?.env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
-  const endpoints = envApiUrl
-    ? [`${envApiUrl}/api`]
+  const isProd = !import.meta?.env?.DEV;
+  const resolvedBase = envApiUrl || (isProd ? PROD_API_URL : '');
+  const endpoints = resolvedBase
+    ? [`${resolvedBase}/api`]
     : ['/api', 'http://localhost:4000/api'];
 
   console.log('[Auth] VITE_API_URL:', import.meta?.env?.VITE_API_URL);
