@@ -258,7 +258,7 @@ export default function ControleOSTab({ empreendimento, atividades }) {
             </TabsList>
 
             {/* Gestão Geral */}
-            <TabsContent value="gestao" className="space-y-4">
+            <TabsContent value="gestao" className="space-y-4" forceMount>
               <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Gestão Geral</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 <div>
@@ -308,7 +308,7 @@ export default function ControleOSTab({ empreendimento, atividades }) {
             </TabsContent>
 
             {/* ART */}
-            <TabsContent value="art" className="space-y-4">
+            <TabsContent value="art" className="space-y-4" forceMount>
               <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">ART</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
@@ -326,7 +326,7 @@ export default function ControleOSTab({ empreendimento, atividades }) {
             </TabsContent>
 
             {/* Concessionárias */}
-            <TabsContent value="concessionarias" className="space-y-4">
+            <TabsContent value="concessionarias" className="space-y-4" forceMount>
               <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Concessionárias</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 {[
@@ -346,7 +346,7 @@ export default function ControleOSTab({ empreendimento, atividades }) {
             </TabsContent>
 
             {/* Monitoramento */}
-            <TabsContent value="monitoramento" className="space-y-4">
+            <TabsContent value="monitoramento" className="space-y-4" forceMount>
               <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Monitoramento</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
@@ -367,7 +367,7 @@ export default function ControleOSTab({ empreendimento, atividades }) {
             </TabsContent>
 
             {/* Planejamento — todas as disciplinas */}
-            <TabsContent value="planejamento" className="space-y-4">
+            <TabsContent value="planejamento" className="space-y-4" forceMount>
               <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Planejamento por Disciplina</h3>
               {DISCIPLINAS_PLANEJAMENTO.map(({ key, label }) => (
                 <DisciplinaSection
@@ -380,7 +380,7 @@ export default function ControleOSTab({ empreendimento, atividades }) {
             </TabsContent>
 
             {/* Memorial */}
-            <TabsContent value="memorial" className="space-y-4">
+            <TabsContent value="memorial" className="space-y-4" forceMount>
               <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Memorial / Especificação / Mark-up</h3>
               <div className="grid grid-cols-3 gap-4">
                 <div>
@@ -406,7 +406,7 @@ export default function ControleOSTab({ empreendimento, atividades }) {
 
             {/* Atividades Vinculadas */}
             {atividadesVinculadas.length > 0 && (
-              <TabsContent value="atividades" className="space-y-4">
+              <TabsContent value="atividades" className="space-y-4" forceMount>
                 <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Atividades do Empreendimento</h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {atividadesVinculadas.map(ativ => (
