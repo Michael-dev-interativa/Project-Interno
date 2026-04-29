@@ -1198,8 +1198,8 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                             {usuarios
                                               .filter(u => u.status === 'ativo')
                                               .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
-                                              .map(u => (
-                                                <SelectItem key={u.email} value={u.email} className="text-xs">
+                                              .map((u, idx) => (
+                                                <SelectItem key={u.email + '-' + (u.id ?? idx)} value={u.email} className="text-xs">
                                                   {u.nome || u.email}
                                                 </SelectItem>
                                               ))}
@@ -1560,8 +1560,8 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                       {usuarios
                                         .filter(u => u.status === 'ativo')
                                         .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
-                                        .map(u => (
-                                          <SelectItem key={u.email} value={u.email} className="text-xs">
+                                        .map((u, idx) => (
+                                          <SelectItem key={u.email + '-' + (u.id ?? idx)} value={u.email} className="text-xs">
                                             {u.nome || u.email}
                                           </SelectItem>
                                         ))}
