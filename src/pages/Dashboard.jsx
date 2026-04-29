@@ -84,8 +84,6 @@ export default function Dashboard() {
       hasLoadedOnce.current = true;
 
     } catch (err) {
-      console.error("❌ [Dashboard] ERRO ao carregar dados:", err);
-
       if (err.message && (err.message.includes('Rate limit') || err.message.includes('Too Many Requests') || err.message.includes('429'))) {
         setDashboardError("⚠️ Limite de requisições atingido. Por favor, aguarde 1 minuto antes de tentar novamente.");
       } else {
@@ -120,8 +118,7 @@ export default function Dashboard() {
     try {
       const allAtividades = await retryWithBackoff(() => Atividade.list(), 3, 4000, 'Dashboard-Atividade-OnDemand');
       setAtividades(allAtividades || []);
-    } catch (error) {
-      console.error('❌ Erro ao carregar atividades:', error);
+    } catch {
       setAtividades([]);
     }
   }, [atividades.length]);

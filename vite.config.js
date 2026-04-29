@@ -45,9 +45,10 @@ export default defineConfig({
           },
           {
             urlPattern: ({ request }) => ['style', 'script', 'worker'].includes(request.destination),
-            handler: 'StaleWhileRevalidate',
+            handler: 'NetworkFirst',
             options: {
               cacheName: 'assets-cache',
+              networkTimeoutSeconds: 5,
               expiration: {
                 maxEntries: 80,
                 maxAgeSeconds: 60 * 60 * 24 * 7

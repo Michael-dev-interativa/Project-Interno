@@ -90,8 +90,7 @@ export default function CurvaSPlanejamento({ isLoading: isDashboardLoading, onRe
         };
         
         
-    } catch (error) {
-        console.error("❌ Erro ao carregar dados para a Curva S:", error);
+    } catch {
         setPlanejamentos([]);
         setExecucoes([]);
         setDataLoaded(true);

@@ -13,11 +13,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 
 registerSW({
   immediate: true,
-  onRegisteredSW(swUrl) {
-    console.info('[PWA] Service Worker registrado:', swUrl)
-  },
-  onRegisterError(error) {
-    console.error('[PWA] Falha ao registrar Service Worker:', error)
+  onRegisteredSW(_swUrl) {},
+  onRegisterError(_error) {
+    // Log removido para produção
   }
 })
 

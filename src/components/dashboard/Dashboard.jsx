@@ -185,7 +185,6 @@ export default function Dashboard() {
       setPlanejamentos(planejamentosEnriquecidos);
 
     } catch (err) {
-      console.error("Erro detalhado ao carregar planejamentos:", err);
       if (err.message?.includes("Rate limit") || err.message?.includes("429")) {
         setPlanningError("Sistema com muitas requisições simultâneas. Aguarde 30 segundos e recarregue a página.");
       } else {
@@ -232,7 +231,6 @@ export default function Dashboard() {
           ativos: empData.filter(e => e.status === "ativo").length,
         });
       } catch (error) {
-        console.error("Erro ao carregar dados do dashboard:", error);
         if (error.message?.includes("Rate limit") || error.message?.includes("429")) {
         }
       } finally {

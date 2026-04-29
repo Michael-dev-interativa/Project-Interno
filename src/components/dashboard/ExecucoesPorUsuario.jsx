@@ -125,8 +125,7 @@ export default function ExecucoesPorUsuario() {
 
             processarDados(execsDoDia || []);
 
-        } catch (error) {
-            console.error("Erro ao carregar execuções:", error);
+        } catch {
             setExecucoesPorUsuario({});
         } finally {
             setIsLoading(false);

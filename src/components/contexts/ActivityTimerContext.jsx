@@ -11,37 +11,14 @@ export const ActivityTimerContext = createContext({});
 const calculateElapsedTime = (startDateString, endDate) => {
     try {
         const startDate = typeof startDateString === 'string' ? parseISO(startDateString) : startDateString;
-
-        if (!isValid(startDate)) {
-            console.error('❌ [calculateElapsedTime] Data de início inválida:', startDateString);
-            return 0;
-        }
-
-        if (!isValid(endDate)) {
-            console.error('❌ [calculateElapsedTime] Data de término inválida:', endDate);
-            return 0;
-        }
-
+        if (!isValid(startDate)) return 0;
+        if (!isValid(endDate)) return 0;
         const diffMs = endDate.getTime() - startDate.getTime();
-
-        if (diffMs < 0) {
-            console.error('❌ [calculateElapsedTime] Tempo negativo detectado!', {
-                inicio: startDate.toISOString(),
-                fim: endDate.toISOString(),
-                diferenca: diffMs
-            });
-            return 0;
-        }
-
+        if (diffMs < 0) return 0;
         const hours = diffMs / (1000 * 60 * 60);
-
-        if (hours > 24) {
-            return 8;
-        }
-
+        if (hours > 24) return 8;
         return hours;
     } catch (error) {
-        console.error('❌ [calculateElapsedTime] Erro ao calcular tempo:', error);
         return 0;
     }
 };
@@ -80,9 +57,9 @@ export const ActivityTimerProvider = ({ children }) => {
     }, []);
 
     const { perfilAtual, nivelUsuario, isAdmin, isColaborador, isGestao, isCoordenador } = useMemo(() => {
-        const perfil = userProfile?.perfil || user?.perfil || 'user';
+        const perfil = (userProfile && userProfile.perfil) ? userProfile.perfil : (user && user.perfil) ? user.perfil : 'user';
         const nivel = PERFIS_HIERARQUIA[perfil] || 1;
-        const admin = user?.role === 'admin';
+        const admin = user && user.role === 'admin';
         return {
             perfilAtual: perfil,
             nivelUsuario: nivel,
@@ -91,7 +68,7 @@ export const ActivityTimerProvider = ({ children }) => {
             isGestao: perfil === 'gestao',
             isCoordenador: perfil === 'coordenador',
         };
-    }, [user?.role, user?.perfil, userProfile?.perfil]);
+    }, [user, userProfile]);
 
     const hasPermission = useCallback((nivelMinimo) => {
         return isAdmin || nivelUsuario >= PERFIS_HIERARQUIA[nivelMinimo];
@@ -135,7 +112,6 @@ export const ActivityTimerProvider = ({ children }) => {
             return null;
 
         } catch (error) {
-            console.error(`Erro ao buscar planejamento ${id}:`, error);
             return null;
         }
     }, []);
@@ -174,7 +150,6 @@ export const ActivityTimerProvider = ({ children }) => {
             }
 
             if (!planejamento) {
-                console.error(`❌ [updatePlanejamento] Planejamento ${planejamentoId} NÃO ENCONTRADO`);
                 return;
             }
 
@@ -229,14 +204,11 @@ export const ActivityTimerProvider = ({ children }) => {
                 3, 1000, 'updatePlanejamento.update'
             );
 
-            if (updatedPlano.status !== updateData.status) {
-                console.error(`❌ [updatePlanejamento] Status não atualizado. Esperado: ${updateData.status}, Recebido: ${updatedPlano.status}`);
-            }
+            // Mantido para compatibilidade, mas sem log
 
             triggerUpdate();
         } catch (error) {
-            console.error("❌ [updatePlanejamento] ERRO AO ATUALIZAR:", error);
-            console.error("   Stack:", error.stack);
+            // Mantido para compatibilidade, mas sem log
         }
     }, [triggerUpdate]);
 
@@ -293,7 +265,7 @@ export const ActivityTimerProvider = ({ children }) => {
 
             return execucoesAtivas && execucoesAtivas.length > 0 ? execucoesAtivas[0] : null;
         } catch (error) {
-            console.error('❌ Erro ao limpar execuções duplicadas:', error);
+            // Log removido para produção
             return null;
         }
     }, [updatePlanejamento]);
@@ -331,7 +303,7 @@ export const ActivityTimerProvider = ({ children }) => {
 
     const startExecution = useCallback(async (executionData) => {
         if (!user) {
-            console.error("Tentando iniciar execução sem usuário logado");
+            // Log removido para produção
             return;
         }
 
@@ -415,7 +387,7 @@ export const ActivityTimerProvider = ({ children }) => {
             triggerUpdate();
 
         } catch (error) {
-            console.error('❌ Erro ao iniciar execução:', error);
+            // Log removido para produção
             let userMessage = 'Não foi possível iniciar a atividade. ';
             if (error.message?.includes('Network Error') || error.message?.includes('Failed to fetch')) {
                 userMessage += 'Verifique sua conexão com a internet e tente novamente.';
@@ -455,7 +427,7 @@ export const ActivityTimerProvider = ({ children }) => {
             );
 
             if (!execution) {
-                console.error('❌ [pauseExecution] Execução não encontrada no banco de dados');
+                // Log removido para produção
                 throw new Error('Execução não encontrada. Pode ter sido removida.');
             }
 
@@ -489,7 +461,7 @@ export const ActivityTimerProvider = ({ children }) => {
 
             triggerUpdate();
         } catch (error) {
-            console.error('❌ [pauseExecution] Erro ao pausar execução:', error);
+            // Log removido para produção
 
             // Sempre restaura o activeExecution em caso de falha para manter consistência com o DB
             setActiveExecution(executionToPause);
@@ -524,7 +496,7 @@ export const ActivityTimerProvider = ({ children }) => {
             await retryWithBackoff(() => User.updateMyUserData({ playlist_atividades: newPlaylist }), 3, 1000, 'removeFromPlaylist');
             setPlaylist(newPlaylist);
         } catch (error) {
-            console.error("Erro ao remover da playlist:", error);
+            // Log removido para produção
             alert("Não foi possível remover da playlist. Tente novamente.");
         }
     }, [playlist, user]);
@@ -547,7 +519,7 @@ export const ActivityTimerProvider = ({ children }) => {
             const execution = await retryWithExtendedBackoff(() => Execucao.get(executionToFinish.id), 'finishExecution.get');
 
             if (!execution) {
-                console.error('❌ [finishExecution] Execução não encontrada no banco de dados');
+                // Log removido para produção
                 throw new Error('Execução não encontrada. Pode ter sido removida.');
             }
 
@@ -579,8 +551,8 @@ export const ActivityTimerProvider = ({ children }) => {
             triggerUpdate();
 
         } catch (error) {
-            console.error('❌ [finishExecution] Erro ao finalizar execução:', error);
-            console.error('❌ [finishExecution] Stack trace:', error.stack);
+            // Log removido para produção
+            // Log removido para produção
             setActiveExecution(executionToFinish);
 
             let userMessage = 'Não foi possível finalizar a atividade. ';
@@ -614,7 +586,7 @@ export const ActivityTimerProvider = ({ children }) => {
             await retryWithBackoff(() => User.updateMyUserData({ playlist_atividades: newPlaylist }), 3, 1000, 'addToPlaylist');
             setPlaylist(newPlaylist);
         } catch (error) {
-            console.error("Erro ao adicionar à playlist:", error);
+            // Log removido para produção
             alert("Não foi possível adicionar à playlist. Tente novamente.");
         }
     }, [playlist, user]);
@@ -690,7 +662,7 @@ export const ActivityTimerProvider = ({ children }) => {
 
                         }
                     } catch (e) {
-                        console.error("❌ Falha ao reavaliar status do planejamento após exclusão", e);
+                        // Log removido para produção
                     }
                 }, 1000);
             }
@@ -698,7 +670,7 @@ export const ActivityTimerProvider = ({ children }) => {
             triggerUpdate();
 
         } catch (error) {
-            console.error("❌ Erro ao excluir execução:", error);
+            // Log removido para produção
             let errorMessage = "Erro ao excluir atividade.";
             if (error.message?.includes("Rate limit") || error.message?.includes("429")) {
                 errorMessage = "Muitas solicitações simultâneas. Tente novamente.";
@@ -758,7 +730,7 @@ export const ActivityTimerProvider = ({ children }) => {
                     setUserProfile(null);
                 }
             } catch (error) {
-                console.error('❌ Erro ao carregar perfil do usuário:', error);
+                // Log removido para produção
                 if (isMounted) {
                     setUserProfile(null);
                 }
@@ -800,7 +772,7 @@ export const ActivityTimerProvider = ({ children }) => {
                 }
 
             } catch (error) {
-                console.error("❌ [Contexto] Erro ao carregar dados essenciais:", error);
+                // Log removido para produção
 
                 if (isMounted) {
                     setAtividadesGenericas([]);

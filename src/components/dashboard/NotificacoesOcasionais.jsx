@@ -45,8 +45,7 @@ export default function NotificacoesOcasionais() {
         setCurrentNotification(notificacoes[0]);
         setShowModal(true);
       }
-    } catch (error) {
-      console.error('Erro ao verificar notificações:', error);
+    } catch {
     }
   };
 
@@ -135,7 +134,6 @@ export default function NotificacoesOcasionais() {
         setCurrentNotification(null);
       }
     } catch (error) {
-      console.error('Erro ao agendar atividade:', error);
       alert('Erro ao agendar atividade: ' + error.message);
     } finally {
       setIsProcessing(false);
@@ -165,8 +163,7 @@ export default function NotificacoesOcasionais() {
         setNotificacoesPendentes([]);
         setCurrentNotification(null);
       }
-    } catch (error) {
-      console.error('Erro ao ignorar notificação:', error);
+    } catch {
       alert('Erro ao ignorar notificação');
     } finally {
       setIsProcessing(false);

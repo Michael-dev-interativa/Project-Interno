@@ -522,7 +522,7 @@ export default function PlanejamentoDocumentoEtapaModal({
           multiplos_executores: multiExecutores,
         });
       } catch (docErr) {
-        console.warn('[PlanejamentoDocumentoEtapaModal] Erro ao atualizar documento:', docErr);
+        // silently ignore document update error — não bloqueia o fluxo principal
       }
 
       const etapaInfo = etapaParaPlanejamento !== 'todas' 

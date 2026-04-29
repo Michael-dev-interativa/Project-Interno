@@ -151,20 +151,12 @@ export default function AnaliseConcepcaoPlanejamentoTab({
 
     // CORRIGIDO: Mostrar todas as atividades disponíveis de documentação (não apenas as planejadas)
     const filteredData = useMemo(() => {
-        // console.log('🔍 Filtrando atividades de documentação...');
-        // console.log('📊 Total de atividades disponíveis:', atividades.length);
-        
         // 1. Filtrar atividades GERAIS (sem empreendimento_id) com subdisciplinas de documentação
         let atividadesDocumentacao = (atividades || []).filter(atividade => {
-            const isGeneral = !atividade.empreendimento_id; // Apenas atividades gerais
+            const isGeneral = !atividade.empreendimento_id;
             const hasDocSubdisciplina = SUBDISCIPLINAS_DOCUMENTACAO.includes(atividade.subdisciplina);
-            
-            // console.log(`Atividade "${atividade.atividade}": geral=${isGeneral}, subdisciplina="${atividade.subdisciplina}", inclui=${hasDocSubdisciplina}`);
-            
             return isGeneral && hasDocSubdisciplina;
         });
-
-        // console.log('📋 Atividades de documentação encontradas:', atividadesDocumentacao.length);
 
         // 2. Aplicar filtros de busca
         if (debouncedSearchTerm) {
@@ -207,7 +199,6 @@ export default function AnaliseConcepcaoPlanejamentoTab({
             return nomeA.localeCompare(nomeB, 'pt-BR', { sensitivity: 'base' });
         });
 
-        // console.log('✅ Atividades filtradas finais:', atividadesDocumentacao.length);
         return atividadesDocumentacao;
     }, [atividades, debouncedSearchTerm, subdisciplinaFilter, statusFilter, planejamentosPorAtividadeMap]);
 

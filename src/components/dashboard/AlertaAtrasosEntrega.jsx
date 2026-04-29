@@ -32,8 +32,7 @@ const parseLocalDate = (dateString) => {
       if (!isNaN(parsedDate.getTime())) {
         return new Date(parsedDate.getTime() + parsedDate.getTimezoneOffset() * 60000);
       }
-    } catch (e) {
-      console.error('Erro ao parsear data:', dateString, e);
+    } catch {
     }
   }
   return null;
@@ -130,9 +129,8 @@ export default function AlertaAtrasosEntrega({ planejamentos, isLoading, user, i
       } else {
         alert("Simulação concluída, mas nenhuma mudança foi proposta. As atividades podem já estar otimizadas ou não haver impacto de datas.");
       }
-    } catch (error) {
-      console.error("Erro ao simular reagendamento:", error);
-      alert("Ocorreu um erro inesperado durante a simulação. Verifique o console.");
+    } catch {
+      alert("Ocorreu um erro inesperado durante a simulação.");
     } finally {
       setIsSimulating(false);
     }
@@ -151,8 +149,7 @@ export default function AlertaAtrasosEntrega({ planejamentos, isLoading, user, i
       } else {
         alert(`Falha ao aplicar o reagendamento: ${result.message}`);
       }
-    } catch (error) {
-      console.error("Erro ao aplicar reagendamento:", error);
+    } catch {
       alert("Ocorreu um erro inesperado ao salvar as mudanças.");
     } finally {
       setIsFinishing(false);

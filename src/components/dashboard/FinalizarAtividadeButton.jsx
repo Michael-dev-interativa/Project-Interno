@@ -106,8 +106,7 @@ export default function FinalizarAtividadeButton({ plano, displayName, onSuccess
       
       alert(mensagem);
       
-    } catch (error) {
-      console.error('❌ Erro ao finalizar atividade:', error);
+    } catch {
       alert('Erro ao finalizar atividade. Tente novamente.');
     } finally {
       setIsProcessing(false);

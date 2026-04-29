@@ -129,19 +129,13 @@ export default function PropostasPage() {
 
   useEffect(() => { loadPropostas(); }, []);
 
-  // debug: indicate that the effect ran
-  useEffect(() => { console.debug('[Propostas] useEffect inicializado'); }, []);
-
   const loadPropostas = async () => {
     setIsLoading(true);
-    console.debug('[Propostas] loadPropostas: iniciando (setIsLoading true)');
     try {
-      console.debug('[Propostas] loadPropostas: chamando Comercial.list via localRetry');
       const data = await localRetry(
         () => Comercial.list('-updated_date'),
         3, 2000, 'loadPropostas'
       );
-      console.debug('[Propostas] loadPropostas: recebido data length=', data?.length);
       const sorted = (data || []).reverse().sort((a, b) =>
         (b.numero || '').localeCompare(a.numero || '', 'pt-BR')
       );

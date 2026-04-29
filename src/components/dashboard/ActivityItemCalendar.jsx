@@ -154,8 +154,7 @@ export default function ActivityItemCalendar({
       }
       
       if (onDelete) onDelete();
-    } catch (error) {
-      console.error("Erro ao excluir:", error);
+    } catch {
       alert("Erro ao excluir atividade.");
     } finally {
       setIsDeleting(false);
@@ -186,8 +185,7 @@ export default function ActivityItemCalendar({
         empreendimento_id: plano.empreendimento_id,
         tipo_planejamento: plano.tipo_planejamento 
       });
-    } catch (error) {
-      console.error("Erro ao iniciar:", error);
+    } catch {
       alert("Não foi possível iniciar a atividade.");
     } finally {
       setIsStarting(false);
@@ -233,8 +231,7 @@ export default function ActivityItemCalendar({
       setAdjustedTime('');
 
       if (onDelete) onDelete();
-    } catch (error) {
-      console.error("Erro ao ajustar:", error);
+    } catch {
       alert("Erro ao ajustar tempo.");
     }
   };
@@ -283,8 +280,7 @@ export default function ActivityItemCalendar({
       
       setShowEditModal(false);
       if (onDelete) onDelete();
-    } catch (error) {
-      console.error("Erro ao editar:", error);
+    } catch {
       alert("Erro ao editar descrição.");
     }
   };

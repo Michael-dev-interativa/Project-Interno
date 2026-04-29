@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState, useMemo, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useContext, useCallback, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -56,7 +56,7 @@ const parseLocalDate = (dateString) => {
         return localDate;
       }
     } catch (e) {
-      console.error('Erro ao parsear data:', dateString, e);
+      // Log removido para otimização de desempenho
     }
   }
 
@@ -400,7 +400,7 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
         onDelete();
       }
     } catch (error) {
-      console.error("❌ Erro ao excluir atividade:", error);
+      // Log removido para otimização de desempenho
 
       const is404 = error.message?.includes("404") || (error.response && error.response.status === 404);
 
@@ -424,11 +424,7 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
         }
 
         alert(errorMessage);
-        console.error("📋 Detalhes completos do erro:", {
-          message: error.message,
-          response: error.response,
-          stack: error.stack
-        });
+        // Log removido para otimização de desempenho
       }
     } finally {
       setIsDeleting(false);
@@ -470,7 +466,7 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
         tipo_planejamento: plano.tipo_planejamento
       });
     } catch (error) {
-      console.error("Erro ao iniciar atividade:", error);
+      // Log removido para otimização de desempenho
       alert("Não foi possível iniciar a atividade. Verifique o console para mais detalhes.");
     } finally {
       setIsStarting(false);
@@ -528,7 +524,7 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
         onDelete();
       }
     } catch (error) {
-      console.error("Erro ao ajustar tempo:", error);
+      // Log removido para otimização de desempenho
       alert("Erro ao ajustar tempo. Tente novamente.");
     }
   };
@@ -585,7 +581,7 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
         onDelete();
       }
     } catch (error) {
-      console.error('Erro ao salvar descrição:', error);
+      // Log removido para otimização de desempenho
       alert('Erro ao atualizar descrição: ' + (error.message || 'Tente novamente.'));
     } finally {
       setIsEditLoading(false);
@@ -1660,7 +1656,7 @@ const DayView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShowP
 
 // --- Componente Principal ---
 export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefresh, isDashboardRefreshing }) {
-  const { user, userProfile, isColaborador, isGestao, hasPermission, triggerUpdate, perfilAtual, updateKey } = useContext(ActivityTimerContext);
+  const { user, userProfile, isColaborador, isGestao, hasPermission, triggerUpdate, perfilAtual, updateKey, allUsers } = useContext(ActivityTimerContext);
 
   const [currentDate, setCurrentDate] = useState(() => startOfWeek(new Date(), { locale: ptBR }));
   const [viewMode, setViewMode] = useState('week');
@@ -1698,12 +1694,15 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
     }
   }, [user?.email, filters.user]);
 
+  // Preferir allUsers do contexto (carrega no startup) em vez da prop usuarios (carrega com delays)
+  const effectiveUsuarios = (allUsers && allUsers.length > 0) ? allUsers : (usuarios || []);
+
   const executorMap = useMemo(() => {
-    return usuarios.reduce((acc, u) => {
+    return effectiveUsuarios.reduce((acc, u) => {
       if (u.email) acc[u.email] = u;
       return acc;
     }, {});
-  }, [usuarios]);
+  }, [effectiveUsuarios]);
 
   // **NOVO**: Estado para seleção múltipla
   const [selectedActivities, setSelectedActivities] = useState(new Set());
@@ -1825,7 +1824,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       setEnrichedData(finalData);
 
     } catch (error) {
-      console.error("❌ Erro ao carregar dados do calendário:", error);
+      // Log removido para otimização de desempenho
       setEnrichedData([]);
       alert("Erro ao carregar as atividades do calendário. Tente atualizar a página.");
     } finally {
@@ -1833,7 +1832,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
     }
   }, []);
 
-  // Disparar carregamento quando o filtro de usuário mudar ou quando updateKey mudar
+  // Disparar carregamento imediato quando o filtro de usuário mudar
   useEffect(() => {
     if (filters.user) {
       loadCalendarData(filters.user);
@@ -1841,7 +1840,20 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       setEnrichedData([]);
       setIsCalendarLoading(false);
     }
-  }, [filters.user, updateKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filters.user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Recarregar quando updateKey mudar, mas com debounce de 3s para evitar reloads
+  // causados por ações de timer (start/stop/pause) que disparam updateKey frequentemente
+  const prevUpdateKeyRef = useRef(updateKey);
+  useEffect(() => {
+    if (updateKey === prevUpdateKeyRef.current) return;
+    prevUpdateKeyRef.current = updateKey;
+    if (!filters.user) return;
+    const timer = setTimeout(() => {
+      loadCalendarData(filters.user);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [updateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleActivityDelete = useCallback(() => {
     if (hasSelectedUser) {
@@ -1941,7 +1953,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       }
 
     } catch (error) {
-      console.error("❌ Erro ao reprogramar atividade:", error);
+      // Log removido para otimização de desempenho
       alert(`Erro ao reprogramar atividade: ${error.message}`);
       throw error; // Re-throw to allow catch in onDragEnd for bulk operations
     } finally {
@@ -2017,7 +2029,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
             }
           } catch (error) {
             errorCount++;
-            console.error(`   ❌ Erro ao mover atividade:`, error);
+            // Log removido para otimização de desempenho
           }
         }
 
@@ -2082,7 +2094,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
             await new Promise(resolve => setTimeout(resolve, 500));
           } catch (error) {
             errorCount++;
-            console.error("Erro ao mover atividade do grupo:", error);
+            // Log removido para otimização de desempenho
           }
         }
 
@@ -2130,7 +2142,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
           await new Promise(resolve => setTimeout(resolve, 500));
         } catch (error) {
           errorCount++;
-          console.error("Erro ao mover atividade:", error);
+          // Log removido para otimização de desempenho
         }
       }
 
@@ -2610,7 +2622,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
           </div>
         </CardHeader>
         <CalendarFilters
-          users={usuarios}
+          users={effectiveUsuarios}
           disciplines={disciplinas}
           viewMode={viewMode}
           onViewModeChange={setViewMode}

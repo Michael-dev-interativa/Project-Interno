@@ -7,9 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Printer, Save, FileText, Loader2, Upload, X, File, ZoomIn, CalendarPlus, FileUp, Download } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ItemPRE, Disciplina, Usuario, PlanejamentoAtividade } from "@/entities/all";
-import NovoPlanejamentoModal from "@/components/planejamento/NovoPlanejamentoModal";
 import { format } from "date-fns";
 import { retryWithBackoff } from "@/components/utils/apiUtils";
 import { base44 } from "@/api/base44Client";
@@ -92,6 +91,8 @@ export default function PRETab({ empreendimento, readOnly = false }) {
   const [lightboxImg, setLightboxImg] = useState(null);
   const [showPlanejamentoModal, setShowPlanejamentoModal] = useState(false);
   const [itemParaPlanejar, setItemParaPlanejar] = useState(/** @type {any} */ (null));
+  const [planejamentoForm, setPlanejamentoForm] = useState({ executor: '', data: '' });
+  const [isSavingPlanejamento, setIsSavingPlanejamento] = useState(false);
   const [usuarios, setUsuarios] = useState(/** @type {any[]} */ ([]));
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -163,8 +164,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
         ]);
         setDisciplinas(discs || []);
         setUsuarios(users || []);
-      } catch (error) {
-        console.error('Erro ao carregar dados iniciais:', error);
+      } catch {
       }
     };
     loadInitialData();
@@ -198,9 +198,75 @@ export default function PRETab({ empreendimento, readOnly = false }) {
         return 0;
       });
       setItems(sortedItems);
-    } catch (error) {
-      console.error('Erro ao carregar itens:', error);
+    } catch {
       setItems([]);
+    }
+  };
+
+  const handleConfirmarPlanejamento = async () => {
+    if (!itemParaPlanejar || !planejamentoForm.executor) return;
+    setIsSavingPlanejamento(true);
+    try {
+      const descritivo = [
+        empreendimento?.num_proposta ? `OS ${empreendimento.num_proposta}` : null,
+        `Item ${itemParaPlanejar.item}`,
+        itemParaPlanejar.de || null,
+        itemParaPlanejar.assunto || itemParaPlanejar.descritiva || null,
+      ].filter(Boolean).join(' - ');
+
+      const tempoPlanejado = Number(itemParaPlanejar.tempo_atendimento) || 0;
+      const horasPorDia = planejamentoForm.data && tempoPlanejado > 0
+        ? { [planejamentoForm.data]: tempoPlanejado }
+        : {};
+
+      await retryWithBackoff(() => PlanejamentoAtividade.create({
+        descritivo,
+        executor_principal: planejamentoForm.executor,
+        executores: [planejamentoForm.executor],
+        inicio_planejado: planejamentoForm.data || null,
+        termino_planejado: planejamentoForm.data || null,
+        tempo_planejado: tempoPlanejado,
+        horas_por_dia: horasPorDia,
+        empreendimento_id: empreendimento?.id || null,
+        status: 'nao_iniciado',
+        tipo_planejamento: 'atividade',
+      }), 3, 2000, 'PRE-Criar-Planejamento');
+
+      const usuarioEncontrado = usuarios.find(u => u.email === planejamentoForm.executor);
+      const nomeExecutor = usuarioEncontrado?.nome || usuarioEncontrado?.full_name || planejamentoForm.executor;
+
+      if (!itemParaPlanejar.id.toString().startsWith('temp-')) {
+        await retryWithBackoff(() => ItemPRE.update(itemParaPlanejar.id, {
+          empreendimento_id: itemParaPlanejar.empreendimento_id,
+          item: itemParaPlanejar.item,
+          data: itemParaPlanejar.data,
+          de: itemParaPlanejar.de,
+          descritiva: itemParaPlanejar.descritiva,
+          localizacao: itemParaPlanejar.localizacao,
+          assunto: itemParaPlanejar.assunto,
+          comentario: itemParaPlanejar.comentario,
+          disciplina: itemParaPlanejar.disciplina,
+          status: itemParaPlanejar.status || '',
+          resposta: itemParaPlanejar.resposta,
+          imagens: itemParaPlanejar.imagens || [],
+          tempo_atendimento: itemParaPlanejar.tempo_atendimento ?? null,
+          planejamento_executor: planejamentoForm.executor,
+          planejamento_executor_nome: nomeExecutor,
+        }), 3, 2000, 'PRE-Update-Executor');
+      }
+
+      setItems(prev => prev.map(it =>
+        it.id === itemParaPlanejar.id
+          ? { ...it, planejamento_executor: planejamentoForm.executor, planejamento_executor_nome: nomeExecutor }
+          : it
+      ));
+      setShowPlanejamentoModal(false);
+      setItemParaPlanejar(null);
+      setPlanejamentoForm({ executor: '', data: '' });
+    } catch {
+      alert('Erro ao salvar planejamento. Tente novamente.');
+    } finally {
+      setIsSavingPlanejamento(false);
     }
   };
 
@@ -239,8 +305,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
         await retryWithBackoff(() => ItemPRE.delete(id), 3, 2000, `PRE-Delete-${id}`);
       }
       setItems(prev => prev.filter(item => item.id !== id));
-    } catch (error) {
-      console.error('Erro ao excluir item:', error);
+    } catch {
       alert('Erro ao excluir item.');
     }
   };
@@ -286,8 +351,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
       }
       
       setLastSaved(new Date());
-    } catch (error) {
-      console.error('Erro ao fazer upload da imagem:', error);
+    } catch {
       alert('Erro ao fazer upload da imagem.');
     } finally {
       setIsSaving(false);
@@ -350,8 +414,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
       }));
 
       setLastSaved(new Date());
-    } catch (error) {
-      console.error('Erro ao salvar:', error);
+    } catch {
     } finally {
       setIsSaving(false);
     }
@@ -463,8 +526,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
 
       setItems(prev => [...prev, ...novosItens]);
       alert(`${novosItens.length} item(s) importado(s)! Clique em Salvar para persistir.`);
-    } catch (e) {
-      console.error(e);
+    } catch {
       alert('Erro ao importar arquivo.');
     } finally {
       setIsImporting(false);
@@ -551,54 +613,90 @@ export default function PRETab({ empreendimento, readOnly = false }) {
         </div>
       )}
 
-      {showPlanejamentoModal && itemParaPlanejar && (
-        <NovoPlanejamentoModal
-          isOpen={showPlanejamentoModal}
-          onClose={() => { setShowPlanejamentoModal(false); setItemParaPlanejar(null); }}
-          empreendimentos={empreendimento ? [empreendimento] : /** @type {any[]} */ ([])}
-          usuarios={usuarios}
-          atividades={[]}
-          descritivo_inicial={[
-            empreendimento?.num_proposta ? `OS ${empreendimento.num_proposta}` : null,
-            empreendimento?.nome || null,
-            `Item ${itemParaPlanejar.item}`,
-            itemParaPlanejar.de || null,
-            itemParaPlanejar.assunto || itemParaPlanejar.descritiva || null,
-          ].filter(Boolean).join(' - ')}
-          tempo_planejado_inicial={itemParaPlanejar.tempo_atendimento || null}
-          onSuccess={async (result) => {
-            if (result?.executor_principal && itemParaPlanejar?.id) {
-              const executorEmail = result.executor_principal;
-              const usuarioEncontrado = usuarios.find(u => u.email === executorEmail);
-              const nomeExecutor = usuarioEncontrado?.nome || executorEmail;
-              const updatedItem = { ...itemParaPlanejar, planejamento_executor: executorEmail, planejamento_executor_nome: nomeExecutor };
-              // Salva no banco
-              if (!itemParaPlanejar.id.toString().startsWith('temp-')) {
-                await retryWithBackoff(() => ItemPRE.update(itemParaPlanejar.id, {
-                  empreendimento_id: itemParaPlanejar.empreendimento_id,
-                  item: itemParaPlanejar.item,
-                  data: itemParaPlanejar.data,
-                  de: itemParaPlanejar.de,
-                  descritiva: itemParaPlanejar.descritiva,
-                  localizacao: itemParaPlanejar.localizacao,
-                  assunto: itemParaPlanejar.assunto,
-                  comentario: itemParaPlanejar.comentario,
-                  disciplina: itemParaPlanejar.disciplina,
-                  status: itemParaPlanejar.status || '',
-                  resposta: itemParaPlanejar.resposta,
-                  imagens: itemParaPlanejar.imagens || [],
-                  tempo_atendimento: itemParaPlanejar.tempo_atendimento ?? null,
-                  planejamento_executor: executorEmail,
-                  planejamento_executor_nome: nomeExecutor,
-                }), 3, 2000, 'PRE-Update-Executor');
-              }
-              setItems(prev => prev.map(it => it.id === itemParaPlanejar.id ? updatedItem : it));
-            }
-            setShowPlanejamentoModal(false);
-            setItemParaPlanejar(null);
-          }}
-        />
-      )}
+      <Dialog
+        open={showPlanejamentoModal && !!itemParaPlanejar}
+        onOpenChange={(open) => {
+          if (!open) { setShowPlanejamentoModal(false); setItemParaPlanejar(null); setPlanejamentoForm({ executor: '', data: '' }); }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <CalendarPlus className="w-4 h-4 text-blue-600" />
+              Planejar Item
+            </DialogTitle>
+          </DialogHeader>
+
+          {itemParaPlanejar && (
+            <div className="space-y-4">
+              {/* Info do item */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1">
+                {empreendimento?.num_proposta && (
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">OS {empreendimento.num_proposta}</p>
+                )}
+                <p className="text-sm text-gray-800 leading-snug">
+                  {[
+                    `Item ${itemParaPlanejar.item}`,
+                    itemParaPlanejar.de || null,
+                    itemParaPlanejar.assunto || itemParaPlanejar.descritiva || null,
+                  ].filter(Boolean).join(' - ')}
+                </p>
+                {itemParaPlanejar.tempo_atendimento && (
+                  <p className="text-xs text-gray-400">{itemParaPlanejar.tempo_atendimento}h estimadas</p>
+                )}
+              </div>
+
+              {/* Executor */}
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-gray-700">Executor *</label>
+                <Select
+                  value={planejamentoForm.executor}
+                  onValueChange={(v) => setPlanejamentoForm(f => ({ ...f, executor: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o executor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[...new Map(usuarios.map(u => [u.email, u])).values()].map(u => (
+                      <SelectItem key={u.email} value={u.email}>
+                        {u.nome || u.full_name || u.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Data de início */}
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-gray-700">Data de Início</label>
+                <Input
+                  type="date"
+                  value={planejamentoForm.data}
+                  onChange={(e) => setPlanejamentoForm(f => ({ ...f, data: e.target.value }))}
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="mt-2">
+            <Button
+              variant="outline"
+              onClick={() => { setShowPlanejamentoModal(false); setItemParaPlanejar(null); setPlanejamentoForm({ executor: '', data: '' }); }}
+              disabled={isSavingPlanejamento}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmarPlanejamento}
+              disabled={!planejamentoForm.executor || isSavingPlanejamento}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {isSavingPlanejamento ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
         <DialogContent className="max-w-lg">
@@ -1017,9 +1115,21 @@ export default function PRETab({ empreendimento, readOnly = false }) {
                     <div className="pt-4 no-print space-y-2">
                       {item.planejamento_executor ? (
                         <div className="space-y-1">
-                          <div className="w-full flex items-center gap-1 px-3 py-2 rounded-md border border-green-200 bg-green-50 text-green-700 text-sm">
-                            <CalendarPlus className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate font-medium text-xs">{item.planejamento_executor_nome || item.planejamento_executor}</span>
+                          <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 space-y-1">
+                            {empreendimento?.num_proposta && (
+                              <p className="text-xs font-semibold text-green-600 uppercase tracking-wide">OS {empreendimento.num_proposta}</p>
+                            )}
+                            <p className="text-xs text-green-800 leading-snug line-clamp-3">
+                              {[
+                                `Item ${item.item}`,
+                                item.de || null,
+                                item.assunto || item.descritiva || null,
+                              ].filter(Boolean).join(' - ')}
+                            </p>
+                            <div className="flex items-center gap-1 pt-1 border-t border-green-200">
+                              <CalendarPlus className="w-3 h-3 flex-shrink-0 text-green-600" />
+                              <span className="truncate font-medium text-xs text-green-700">{item.planejamento_executor_nome || item.planejamento_executor}</span>
+                            </div>
                           </div>
                           <Button
                             variant="ghost"
