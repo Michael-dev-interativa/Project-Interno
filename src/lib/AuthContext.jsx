@@ -44,7 +44,10 @@ function normalizeProfile(raw) {
 }
 
 async function fetchLocalAuth(path, options = {}) {
-  const endpoints = ['/api', 'http://localhost:4000/api'];
+  const envApiUrl = (import.meta?.env?.VITE_API_URL || import.meta?.env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
+  const endpoints = envApiUrl
+    ? [`${envApiUrl}/api`]
+    : ['/api', 'http://localhost:4000/api'];
   let lastError = null;
 
   for (const base of endpoints) {

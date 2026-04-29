@@ -201,8 +201,9 @@ async function resolveResponsavelId(value) {
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   const isLocalhost = origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+  const isOnrender = origin && /\.onrender\.com$/i.test(origin);
   const isExplicitlyAllowed = origin && allowedOrigins.includes(origin);
-  if (isLocalhost || isExplicitlyAllowed) {
+  if (isLocalhost || isOnrender || isExplicitlyAllowed) {
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Vary', 'Origin');
   }
