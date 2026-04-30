@@ -1,7 +1,5 @@
-// @ts-nocheck
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Atividade, Disciplina, PlanejamentoAtividade, Documento, AlteracaoEtapa, Empreendimento, Usuario, AtividadesDoProjeto } from '@/entities/all';
-import { base44 } from '@/api/base44Client';
 
 const PlanejamentoDocumento = base44.entities.PlanejamentoDocumento;
 import { Button } from '@/components/ui/button';
@@ -13,12 +11,12 @@ import { Label } from '@/components/ui/label';
 import { EtapaEditModal, EditarEtapaEmFolhasModal, ExcluirDeFolhasModal } from './AnaliticoModais';
 import { PlusCircle, Search, Filter, MoreHorizontal, Edit, Trash2, Loader2, PackageOpen, Layers, XCircle, FileX, RefreshCw, Edit2, ChevronRight, ChevronDown, Calendar, CheckCircle2, Users2, CheckCircle } from 'lucide-react';
 import PlanejamentoAtividadeModal from './PlanejamentoAtividadeModal';
-import { formatHoras } from '../utils/formatHours';
 import AtividadeFormModal from './AtividadeFormModal';
 import { debounce } from 'lodash';
 import { Badge } from '@/components/ui/badge';
 import { retryWithBackoff, retryWithExtendedBackoff } from '../utils/apiUtils';
 import { Checkbox } from "@/components/ui/checkbox";
+import { base44 } from '@/api/base44Client';
 import PDFListaDesenvolvimento from '../configuracoes/PDFListaDesenvolvimento';
 import { getNextWorkingDay, distribuirHorasPorDias, isWorkingDay, calculateEndDate, ensureWorkingDay } from '../utils/DateCalculator';
 import { format, isValid, parseISO, addDays } from 'date-fns';
@@ -436,7 +434,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
     Object.entries(gruposDocumentacao)
       .sort((a, b) => a[0].localeCompare(b[0]))
       .forEach(([disciplina, subdisciplinas]) => {
-        const temAtividades = Object.values(subdisciplinas || {}).flat().length > 0;
+        const temAtividades = Object.values(subdisciplinas).flat().length > 0;
         if (temAtividades) {
           result.push([disciplina, subdisciplinas]);
         }
@@ -659,6 +657,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
     setIsDeletingActivity(prev => ({ ...prev, [genericAtividadeIdToExclude]: true }));
 
     try {
+      console.log(`🗑️ Marcando atividade genérica ${genericAtividadeIdToExclude} como excluída para empreendimento ${empreendimentoId}`);
       
       const existingMarkers = await retryWithBackoff(
         () => Atividade.filter({ 
@@ -699,6 +698,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
         3, 500, `createExclusionMarker-${genericAtividadeIdToExclude}`
       );
 
+      console.log(`✅ Marcador de exclusão criado com sucesso para atividade genérica ${genericAtividadeIdToExclude}`);
       
       // Registrar exclusão em AtividadesEmpreendimento
       try {
@@ -721,7 +721,9 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
             3, 500, `updateAtividadeEmpExclusao-${atividadeEmp.id}`
           );
         }
+        console.log(`   📋 ${atividadesEmp.length} registro(s) marcado(s) como excluído(s) em AtividadesEmpreendimento`);
       } catch (error) {
+        console.warn(`   ⚠️ Erro ao atualizar AtividadesEmpreendimento:`, error);
       }
       
       await fetchData();
@@ -803,6 +805,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
         try {
           const grupo = atividadesAgrupadas.find(g => g.baseAtividade.uniqueId === uniqueId);
           if (!grupo || !grupo.baseAtividade.isEditable) {
+            console.warn('Atividade não editável ou não encontrada:', uniqueId);
             continue;
           }
 
@@ -853,6 +856,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
     setIsRestoringGlobal(true);
 
     try {
+      console.log("🔄 Buscando marcadores de exclusão global...");
       
       const marcadoresGlobais = await retryWithBackoff(
         () => Atividade.filter({
@@ -868,6 +872,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
         return;
       }
 
+      console.log(`✅ Encontrados ${marcadoresGlobais.length} marcadores globais a serem removidos:`, marcadoresGlobais);
 
       let deletados = 0;
       let erros = 0;
@@ -879,12 +884,16 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
             3, 500, `deleteMarcadorGlobal-${marcador.id}`
           );
           deletados++;
+          console.log(`✅ Marcador ${marcador.id} deletado (atividade "${marcador.atividade}")`);
         } catch (error) {
           erros++;
           console.error(`❌ Erro ao deletar marcador ${marcador.id}:`, error);
         }
       }
 
+      console.log(`\n✅ Processo concluído:`);
+      console.log(`   Deletados: ${deletados}`);
+      console.log(`   Erros: ${erros}`);
 
       if (erros === 0) {
         alert(`✅ Sucesso! ${deletados} atividade(s) foram restauradas e agora estão disponíveis em todos os documentos.`);
@@ -1036,10 +1045,10 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                 {disciplina}
                 <Badge variant="secondary" className="ml-2">
                   {isDocumentacao 
-                    ? Object.values(subdisciplinasMap || {}).flat().length 
+                    ? Object.values(subdisciplinasMap).flat().length 
                     : atividadesList.length
                   } {isDocumentacao 
-                    ? Object.values(subdisciplinasMap || {}).flat().length === 1 ? 'atividade' : 'atividades'
+                    ? Object.values(subdisciplinasMap).flat().length === 1 ? 'atividade' : 'atividades'
                     : atividadesList.length === 1 ? 'atividade' : 'atividades'
                   }
                 </Badge>
@@ -1049,7 +1058,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
               {isDocumentacao ? (
                 // Mostrar subdisciplinas para disciplinas de documentação
                 <div className="space-y-4 p-4">
-                  {Object.entries(subdisciplinasMap || {})
+                  {Object.entries(subdisciplinasMap)
                     .sort((a, b) => a[0].localeCompare(b[0]))
                     .map(([subdisciplina, atividadesSubgrupo]) => (
                     <div key={subdisciplina} className="border rounded-lg overflow-hidden">
@@ -1101,8 +1110,8 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                             const isDeleting = isDeletingActivity[genericAtividadeIdToExclude];
 
                             return (
-                              <React.Fragment key={key}>
-                                <TableRow className="hover:bg-gray-50">
+                              <>
+                                <TableRow key={key} className="hover:bg-gray-50">
                                    {hasCheckboxColumn && (
                                      <TableCell>
                                        {ativ.isEditable && (
@@ -1198,8 +1207,8 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                             {usuarios
                                               .filter(u => u.status === 'ativo')
                                               .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
-                                              .map((u, idx) => (
-                                                <SelectItem key={u.email + '-' + (u.id ?? idx)} value={u.email} className="text-xs">
+                                              .map(u => (
+                                                <SelectItem key={u.email} value={u.email} className="text-xs">
                                                   {u.nome || u.email}
                                                 </SelectItem>
                                               ))}
@@ -1286,10 +1295,10 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                           <span className="text-xs text-gray-400">-</span>
                                         )}
                                       </TableCell>
-                                      <TableCell className="text-sm">{ativ.tempo ? `${parseFloat(Number(ativ.tempo).toFixed(1))}h` : '-'}</TableCell>
+                                      <TableCell className="text-sm">{ativ.tempo ? `${Number(ativ.tempo).toFixed(1)}h` : '-'}</TableCell>
                                       <TableCell className="text-sm font-semibold text-blue-600">
                                     {grupo.folhas.length > 0 
-                                      ? `${parseFloat(grupo.folhas.reduce((sum, f) => sum + (Number(f.tempo) || 0), 0).toFixed(1))}h`
+                                      ? `${grupo.folhas.reduce((sum, f) => sum + (Number(f.tempo) || 0), 0).toFixed(1)}h`
                                       : '-'}
                                   </TableCell>
                                   <TableCell className="text-center">
@@ -1412,8 +1421,8 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                         <span className="text-xs text-gray-400">-</span>
                                       )}
                                     </TableCell>
-                                    <TableCell className="text-sm">{folha.tempo ? formatHoras(folha.tempo) : '-'}</TableCell>
-                                      <TableCell className="text-sm">{folha.tempo ? formatHoras(folha.tempo) : '-'}</TableCell>
+                                    <TableCell className="text-sm">{folha.tempo ? `${Number(folha.tempo).toFixed(1)}h` : '-'}</TableCell>
+                                      <TableCell className="text-sm">{folha.tempo ? `${Number(folha.tempo).toFixed(1)}h` : '-'}</TableCell>
                                       <TableCell>
                                         <Checkbox
                                           checked={atividadesSelecionadasParaExcluir.has(folha.base_atividade_id || folha.id)}
@@ -1434,7 +1443,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                       <TableCell></TableCell>
                                     </TableRow>
                                     ))}
-                                    </React.Fragment>
+                                    </>
                                     );
                                     })}
                                     </TableBody>
@@ -1487,8 +1496,8 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                     const isDeleting = isDeletingActivity[uniqueKey] || isDeletingActivity[genericAtividadeIdToExclude];
 
                     return (
-                      <React.Fragment key={key}>
-                        <TableRow className="hover:bg-gray-50">
+                      <>
+                        <TableRow key={key} className="hover:bg-gray-50">
                           {hasCheckboxColumn && (<TableCell>{ativ.isEditable && (<Checkbox checked={selectedIds.has(ativ.uniqueId)} onCheckedChange={() => handleSelectItem(ativ.uniqueId)} disabled={isDeletingMultiple} />)}</TableCell>)}
                           <TableCell>{!ativ.isEditable && <Checkbox checked={atividadesSelecionadasParaExcluir.has(ativ.base_atividade_id || ativ.id)} onCheckedChange={(checked) => { setAtividadesSelecionadasParaExcluir(prev => { const ns = new Set(prev); const id = ativ.base_atividade_id || ativ.id; if (checked) ns.add(id); else ns.delete(id); return ns; }); }} />}</TableCell>
                           <TableCell>{grupo.folhas.length > 0 && (<Button variant="ghost" size="icon" onClick={() => toggleAtividadeExpansion(key)} className="h-8 w-8">{isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</Button>)}</TableCell>
@@ -1560,8 +1569,8 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                       {usuarios
                                         .filter(u => u.status === 'ativo')
                                         .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
-                                        .map((u, idx) => (
-                                          <SelectItem key={u.email + '-' + (u.id ?? idx)} value={u.email} className="text-xs">
+                                        .map(u => (
+                                          <SelectItem key={u.email} value={u.email} className="text-xs">
                                             {u.nome || u.email}
                                           </SelectItem>
                                         ))}
@@ -1693,13 +1702,13 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                   className="text-blue-600 hover:text-blue-800 hover:underline font-medium cursor-pointer"
                                   title="Clique para editar o tempo padrão"
                                 >
-                                  {ativ.tempo ? `${parseFloat(Number(ativ.tempo).toFixed(1))}h` : '-'}
+                                  {ativ.tempo ? `${Number(ativ.tempo).toFixed(1)}h` : '-'}
                                 </button>
                               )}
                             </TableCell>
                             <TableCell className="font-semibold text-blue-600">
                             {grupo.folhas.length > 0 
-                              ? `${parseFloat(grupo.folhas.reduce((sum, f) => sum + (Number(f.tempo) || 0), 0).toFixed(1))}h`
+                              ? `${grupo.folhas.reduce((sum, f) => sum + (Number(f.tempo) || 0), 0).toFixed(1)}h`
                               : '-'}
                           </TableCell>
                           <TableCell className="text-center">
@@ -1823,13 +1832,13 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                 <span className="text-xs text-gray-400">-</span>
                               )}
                             </TableCell>
-                            <TableCell className="text-sm">{folha.tempo ? formatHoras(folha.tempo) : '-'}</TableCell>
-                            <TableCell className="text-sm">{folha.tempo ? formatHoras(folha.tempo) : '-'}</TableCell>
+                            <TableCell className="text-sm">{folha.tempo ? `${Number(folha.tempo).toFixed(1)}h` : '-'}</TableCell>
+                            <TableCell className="text-sm">{folha.tempo ? `${Number(folha.tempo).toFixed(1)}h` : '-'}</TableCell>
                             <TableCell></TableCell>
                             <TableCell></TableCell>
                           </TableRow>
                         ))}
-                        </React.Fragment>
+                        </>
                         );
                         })}
                         </TableBody>
@@ -1853,6 +1862,12 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
     setIsConcluindo(prev => ({ ...prev, [atividadeId]: true }));
     
     try {
+      console.log(`\n✅ ========================================`);
+      console.log(`✅ CONCLUINDO ATIVIDADE EM TODAS AS FOLHAS`);
+      console.log(`✅ ========================================`);
+      console.log(`   Atividade ID: ${atividadeId}`);
+      console.log(`   Atividade: ${atividade.atividade}`);
+      console.log(`   Empreendimento: ${empreendimentoId}`);
       
       // Buscar todos os planejamentos desta atividade
       const planejamentos = await retryWithBackoff(
@@ -1863,6 +1878,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
         3, 500, `getConcluirPlanejamentos-${atividadeId}`
       );
       
+      console.log(`   📊 Total de planejamentos encontrados: ${planejamentos.length}`);
       
       const hoje = format(new Date(), 'yyyy-MM-dd');
       let concluidos = 0;
@@ -1870,6 +1886,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
       
       // Se não há planejamentos, criar um para cada folha com status concluído
       if (planejamentos.length === 0) {
+        console.log(`   ℹ️ Nenhum planejamento encontrado. Criando planejamentos concluídos para cada folha...`);
         
         const atividadeOriginalArr = await retryWithBackoff(
           () => Atividade.filter({ id: atividadeId }),
@@ -1888,6 +1905,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
           return disciplinaMatch && subdisciplinaMatch;
         });
         
+        console.log(`   📋 Criando planejamentos para ${documentosComAtividade.length} folha(s)...`);
         
         for (const doc of documentosComAtividade) {
           await retryWithBackoff(
@@ -1905,12 +1923,14 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
             3, 500, `createConcludedPlan-${doc.id}-${atividadeId}`
           );
           concluidos++;
+          console.log(`   ✅ Planejamento concluído criado para folha ${doc.numero}`);
         }
       } else {
         // Atualizar planejamentos existentes
         for (const plano of planejamentos) {
           if (plano.status === 'concluido') {
             jaFinalizados++;
+            console.log(`   ⏭️ Planejamento ${plano.id} já estava concluído`);
             continue;
           }
           
@@ -1923,9 +1943,16 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
           );
           
           concluidos++;
+          console.log(`   ✅ Planejamento ${plano.id} concluído`);
         }
       }
       
+      console.log(`\n✅ ========================================`);
+      console.log(`✅ CONCLUSÃO FINALIZADA`);
+      console.log(`✅ ========================================`);
+      console.log(`   Concluídos agora: ${concluidos}`);
+      console.log(`   Já finalizados: ${jaFinalizados}`);
+      console.log(`✅ ========================================\n`);
       
       // Registrar conclusão em AtividadesEmpreendimento
       try {
@@ -1953,8 +1980,10 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
               3, 500, `updateAtividadeEmpConclusao-${atividadeEmp.id}`
             );
           }
+          console.log(`   📋 ${atividadesEmp.length} registro(s) atualizado(s) em AtividadesEmpreendimento`);
         }
       } catch (error) {
+        console.warn(`   ⚠️ Erro ao atualizar AtividadesEmpreendimento:`, error);
       }
       
       await fetchData();
@@ -1980,6 +2009,15 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
   const handleSaveExecutor = async (atividade, executorEmail, dataInicioCustom = null) => {
     const atividadeId = atividade.base_atividade_id || atividade.id;
     
+    console.log(`\n🎯 ========================================`);
+    console.log(`🎯 SALVAR EXECUTOR`);
+    console.log(`🎯 ========================================`);
+    console.log(`   Atividade ID: ${atividadeId}`);
+    console.log(`   Atividade: ${atividade.atividade}`);
+    console.log(`   Executor Email: "${executorEmail}"`);
+    console.log(`   Executor vazio?: ${!executorEmail}`);
+    console.log(`   Data início custom: ${dataInicioCustom ? format(dataInicioCustom, 'dd/MM/yyyy') : 'não definida'}`);
+    console.log(`🎯 ========================================\n`);
     
     setIsSavingExecutor(prev => ({ ...prev, [atividadeId]: true }));
     
@@ -1995,6 +2033,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
       }
       
       const atividadeOriginal = atividadeOriginalArr[0];
+      console.log(`✅ Atividade original encontrada:`, atividadeOriginal);
       
       // Verificar se já existe override global para esta atividade
       const existingOverrides = await retryWithBackoff(
@@ -2008,11 +2047,14 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
       );
       
       if (existingOverrides && existingOverrides.length > 0) {
+        console.log(`📝 Atualizando override existente: ${existingOverrides[0].id}`);
         await retryWithBackoff(
           () => Atividade.update(existingOverrides[0].id, { executor_principal: executorEmail || null }),
           3, 500, `updateExecutorOverride-${existingOverrides[0].id}`
         );
+        console.log(`✅ Override atualizado`);
       } else if (executorEmail) {
+        console.log(`📝 Criando novo override com executor`);
         await retryWithBackoff(
           () => Atividade.create({
             ...atividadeOriginal,
@@ -2024,6 +2066,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
           }),
           3, 500, `createExecutorOverride-${atividadeId}`
         );
+        console.log(`✅ Override criado`);
       }
       
       // Se não há executor, remover planejamentos existentes
@@ -2070,12 +2113,14 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
           ).then(planejamentosAtualizados => {
             setPlanejamentos(planejamentosAtualizados || []);
           }).catch(err => {
+            console.warn("Erro ao atualizar planejamentos após remoção:", err);
           });
         }, 100);
         return;
       }
       
       // Buscar carga diária completa do executor
+      console.log(`\n🔄 Buscando agenda completa do executor ${executorEmail}...`);
       const [planosAtividade, planosDocumento] = await Promise.all([
         retryWithExtendedBackoff(
           () => PlanejamentoAtividade.filter({ executor_principal: executorEmail }),
@@ -2106,13 +2151,19 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                 }
               }
             } catch (erro) {
+              console.warn(`Erro ao processar data ${data}:`, erro);
             }
           });
         }
       });
       
+      console.log(`📊 Carga diária do executor:`, cargaDiaria);
       
       // Buscar documentos que têm esta atividade
+      console.log(`\n🔍 Buscando documentos compatíveis...`);
+      console.log(`   Disciplina necessária: ${atividadeOriginal.disciplina}`);
+      console.log(`   Subdisciplina necessária: ${atividadeOriginal.subdisciplina}`);
+      console.log(`   Total de documentos no empreendimento: ${documentos.length}`);
       
       const documentosComAtividade = documentos.filter(doc => {
         const disciplinaMatch = doc.disciplina === atividadeOriginal.disciplina;
@@ -2121,17 +2172,20 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
         const matches = disciplinaMatch && subdisciplinaMatch;
         
         if (matches) {
+          console.log(`   ✅ Documento compatível: ${doc.numero} - ${doc.arquivo}`);
         }
         
         return matches;
       });
       
+      console.log(`\n📊 Total de documentos compatíveis: ${documentosComAtividade.length}`);
       
       // Criar planejamentos para cada documento (ou um planejamento geral se não houver documentos)
       let planejamentosCriados = 0;
       let planejamentosJaExistentes = 0;
       
       if (documentosComAtividade.length === 0) {
+        console.warn(`⚠️ Nenhum documento compatível encontrado, criando planejamento geral vinculado ao empreendimento...`);
         
         // Verificar se já existe planejamento geral
         const planejamentosExistentes = await retryWithBackoff(
@@ -2145,6 +2199,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
         
         if (planejamentosExistentes && planejamentosExistentes.length > 0) {
           // Atualizar executor do planejamento existente
+          console.log(`   ✏️ Planejamento geral já existe (ID: ${planejamentosExistentes[0].id}), atualizando executor...`);
           await retryWithBackoff(
             () => PlanejamentoAtividade.update(planejamentosExistentes[0].id, {
               executor_principal: executorEmail,
@@ -2152,18 +2207,24 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
             }),
             3, 500, `updateGeneralPlanExecutor-${planejamentosExistentes[0].id}`
           );
+          console.log(`   ✅ Executor atualizado no planejamento geral`);
           planejamentosJaExistentes++;
         } else {
+          console.log(`   📝 Criando novo planejamento geral...`);
           
           const tempoCalculado = atividadeOriginal.tempo || 0;
+          console.log(`   ⏱️ Tempo: ${tempoCalculado.toFixed(1)}h`);
           
           // Buscar primeiro dia disponível na agenda do executor
+          console.log(`   🔍 Procurando primeiro dia útil disponível na agenda...`);
           let dataInicio = dataInicioCustom ? new Date(dataInicioCustom) : new Date(hojeMidnight);
           
           // Se data custom foi fornecida, garantir que seja dia útil
           if (dataInicioCustom) {
+            console.log(`   📅 Data de início personalizada: ${format(dataInicio, 'dd/MM/yyyy')}`);
             if (!isWorkingDay(dataInicio)) {
               dataInicio = getNextWorkingDay(dataInicio);
+              console.log(`   ⚠️ Data ajustada para próximo dia útil: ${format(dataInicio, 'dd/MM/yyyy')}`);
             }
           } else {
             let tentativas = 0;
@@ -2176,6 +2237,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                 const disponivel = 8 - cargaDoDia;
                 
                 if (disponivel >= 0.5) {
+                  console.log(`   ✅ Primeiro dia disponível: ${format(dataInicio, 'dd/MM/yyyy')} (${disponivel.toFixed(1)}h livres)`);
                   break;
                 }
               }
@@ -2220,15 +2282,18 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
             status: 'nao_iniciado'
           };
           
+          console.log(`   💾 Salvando planejamento geral no banco...`);
           await retryWithBackoff(
             () => PlanejamentoAtividade.create(dadosPlanejamento),
             3, 500, `createGeneralPlan-${atividadeId}`
           );
+          console.log(`   ✅ Planejamento geral criado`);
           planejamentosCriados++;
         }
       } else {
         // Processar documentos normalmente
         for (const doc of documentosComAtividade) {
+        console.log(`\n📋 Processando documento: ${doc.numero}`);
         
         // Verificar se já existe planejamento
         const planejamentosExistentes = await retryWithBackoff(
@@ -2242,6 +2307,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
         
         if (planejamentosExistentes && planejamentosExistentes.length > 0) {
           // Atualizar executor do planejamento existente
+          console.log(`   ✏️ Planejamento já existe (ID: ${planejamentosExistentes[0].id}), atualizando executor...`);
           await retryWithBackoff(
             () => PlanejamentoAtividade.update(planejamentosExistentes[0].id, {
               executor_principal: executorEmail,
@@ -2249,21 +2315,27 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
             }),
             3, 500, `updatePlanExecutor-${planejamentosExistentes[0].id}`
           );
+          console.log(`   ✅ Executor atualizado no planejamento`);
           planejamentosJaExistentes++;
         } else {
+          console.log(`   📝 Criando novo planejamento...`);
           
           // Criar novo planejamento
           const fatorDificuldade = doc.fator_dificuldade || 1;
           const tempoCalculado = (atividadeOriginal.tempo || 0) * fatorDificuldade;
           
+          console.log(`   ⏱️ Tempo calculado: ${tempoCalculado.toFixed(1)}h (fator: ${fatorDificuldade})`);
           
           // Buscar primeiro dia disponível na agenda do executor
+          console.log(`   🔍 Procurando primeiro dia útil disponível na agenda...`);
           let dataInicio = dataInicioCustom ? new Date(dataInicioCustom) : new Date(hojeMidnight);
           
           // Se data custom foi fornecida, garantir que seja dia útil
           if (dataInicioCustom) {
+            console.log(`   📅 Data de início personalizada: ${format(dataInicio, 'dd/MM/yyyy')}`);
             if (!isWorkingDay(dataInicio)) {
               dataInicio = getNextWorkingDay(dataInicio);
+              console.log(`   ⚠️ Data ajustada para próximo dia útil: ${format(dataInicio, 'dd/MM/yyyy')}`);
             }
           } else {
             let tentativas = 0;
@@ -2276,6 +2348,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                 const disponivel = 8 - cargaDoDia;
                 
                 if (disponivel >= 0.5) {
+                  console.log(`   ✅ Primeiro dia disponível: ${format(dataInicio, 'dd/MM/yyyy')} (${disponivel.toFixed(1)}h livres)`);
                   break;
                 }
               }
@@ -2289,6 +2362,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
           }
           
           // Distribuir horas pelos dias disponíveis
+          console.log(`   🔄 Distribuindo ${tempoCalculado.toFixed(1)}h a partir de ${format(dataInicio, 'dd/MM/yyyy')}...`);
           
           const resultadoDistribuicao = distribuirHorasPorDias(
             dataInicio,
@@ -2307,6 +2381,11 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
           const inicioPlanejado = diasUtilizados[0];
           const terminoPlanejado = format(dataTermino, 'yyyy-MM-dd');
           
+          console.log(`   📊 Distribuição criada:`);
+          console.log(`      Início: ${inicioPlanejado}`);
+          console.log(`      Término: ${terminoPlanejado}`);
+          console.log(`      Dias: ${Object.keys(distribuicao).length}`);
+          console.log(`      Horas por dia:`, distribuicao);
           
           const dadosPlanejamento = {
             empreendimento_id: empreendimentoId,
@@ -2323,10 +2402,12 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
             status: 'nao_iniciado'
           };
           
+          console.log(`   💾 Salvando planejamento no banco...`);
           const planejamentoCriado = await retryWithBackoff(
             () => PlanejamentoAtividade.create(dadosPlanejamento),
             3, 500, `createPlan-${doc.id}-${atividadeId}`
           );
+          console.log(`   ✅ Planejamento criado com ID: ${planejamentoCriado.id}`);
           planejamentosCriados++;
           
           // Registrar em AtividadesEmpreendimento
@@ -2358,8 +2439,10 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                 }),
                 3, 500, `createAtividadeEmp-${doc.id}-${atividadeId}`
               );
+              console.log(`   📋 Atividade registrada em AtividadesEmpreendimento`);
             }
           } catch (error) {
+            console.warn(`   ⚠️ Erro ao registrar em AtividadesEmpreendimento:`, error);
           }
           
           // Atualizar carga diária para próximos planejamentos
@@ -2368,6 +2451,12 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
       }
       }
       
+      console.log(`\n✅ ========================================`);
+      console.log(`✅ PLANEJAMENTO CONCLUÍDO`);
+      console.log(`✅ ========================================`);
+      console.log(`   Criados: ${planejamentosCriados}`);
+      console.log(`   Atualizados: ${planejamentosJaExistentes}`);
+      console.log(`✅ ========================================\n`);
       
       // Atualizar combinedActivities de forma otimista e completa
       setCombinedActivities(prev => {
@@ -2391,6 +2480,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
         ).then(planejamentosAtualizados => {
           setPlanejamentos(planejamentosAtualizados || []);
         }).catch(err => {
+          console.warn("Erro ao atualizar planejamentos em background:", err);
         });
       }, 100);
       
@@ -2416,6 +2506,13 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
 
     if (!confirmacao) return;
 
+    console.log(`\n🎯 ========================================`);
+    console.log(`🎯 PLANEJAR MÚLTIPLAS ATIVIDADES`);
+    console.log(`🎯 ========================================`);
+    console.log(`   Quantidade: ${atividadesParaPlanejar.length}`);
+    console.log(`   Executor: ${executorEmail}`);
+    console.log(`   Data início: ${dataInicioCustom ? format(dataInicioCustom, 'dd/MM/yyyy') : 'automática'}`);
+    console.log(`🎯 ========================================\n`);
 
     // Marcar todas como "salvando"
     const savingState = {};
@@ -2436,10 +2533,12 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
           );
 
           if (!atividadeEncontrada) {
+            console.warn(`⚠️ Atividade ${atividadeId} não encontrada`);
             erros++;
             continue;
           }
 
+          console.log(`▶️ Planejando: ${atividadeEncontrada.atividade}`);
           await handleSaveExecutor(atividadeEncontrada, executorEmail, dataInicioCustom);
           planejadosComSucesso++;
           
@@ -2451,6 +2550,12 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
         }
       }
 
+      console.log(`\n✅ ========================================`);
+      console.log(`✅ PLANEJAMENTO EM LOTE CONCLUÍDO`);
+      console.log(`✅ ========================================`);
+      console.log(`   Planejadas: ${planejadosComSucesso}`);
+      console.log(`   Erros: ${erros}`);
+      console.log(`✅ ========================================\n`);
 
       // Limpar seleção
       setAtividadesSelecionadasParaPlanejar(new Set());
@@ -2491,6 +2596,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
 
     // Se não há planejamentos, criar planejamentos concluídos para todas as atividades da etapa
     if (todosPlanejamentos.length === 0) {
+      console.log(`   ℹ️ Nenhum planejamento encontrado para etapa "${etapa}". Criando planejamentos concluídos...`);
       
       // Deduplicate by base_atividade_id
       const atividadesEtapaDedup = new Map();
@@ -2520,6 +2626,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
       }
       
       todosPlanejamentos = novosPlanejamentos;
+      console.log(`   ✅ ${novosPlanejamentos.length} planejamento(s) concluído(s) criado(s)`);
     }
 
     // Atividades sem planejamento (Disponível) também precisam ser concluídas
@@ -2589,6 +2696,11 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
     setIsRevertendoEtapa(true);
 
     try {
+      console.log(`\n🔄 ========================================`);
+      console.log(`🔄 REVERTER CONCLUSÃO DE ETAPA: ${etapa}`);
+      console.log(`🔄 ========================================`);
+      console.log(`   Total de atividades: ${atividadesDaEtapa.length}`);
+      console.log(`   Empreendimento: ${empreendimentoId}`);
 
       let totalPlanejamentosRevertidos = 0;
 
@@ -2618,6 +2730,10 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
         }
       }
 
+      console.log(`✅ ========================================`);
+      console.log(`✅ CONCLUSÃO DA ETAPA "${etapa}" REVERTIDA`);
+      console.log(`   Planejamentos revertidos: ${totalPlanejamentosRevertidos}`);
+      console.log(`✅ ========================================\n`);
 
       await fetchData();
       if (onUpdate) onUpdate();
@@ -2657,6 +2773,12 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
     }
 
     try {
+      console.log(`\n⏱️ ========================================`);
+      console.log(`⏱️ ATUALIZAR TEMPO PADRÃO`);
+      console.log(`⏱️ ========================================`);
+      console.log(`   Atividade ID: ${atividadeId}`);
+      console.log(`   Atividade: ${atividade.atividade}`);
+      console.log(`   Novo Tempo: ${novoTempo}h`);
       
       // Buscar atividade original
       const atividadeOriginalArr = await retryWithBackoff(
@@ -2682,6 +2804,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
       );
       
       if (existingOverrides && existingOverrides.length > 0) {
+        console.log(`📝 Atualizando ${existingOverrides.length} override(s) global com novo tempo`);
         await Promise.all(
           existingOverrides.map(override =>
             retryWithBackoff(
@@ -2691,6 +2814,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
           )
         );
       } else {
+        console.log(`📝 Criando novo override com tempo customizado`);
         await retryWithBackoff(
           () => Atividade.create({
             ...atividadeOriginal,
@@ -2705,6 +2829,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
       }
 
       // Atualizar também overrides específicos de documento para a mesma atividade
+      console.log(`📝 Buscando overrides específicos de documento...`);
       const documentOverrides = await retryWithBackoff(
         () => Atividade.filter({
           empreendimento_id: empreendimentoId,
@@ -2716,6 +2841,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
       );
 
       if (documentOverrides && documentOverrides.length > 0) {
+        console.log(`📝 Atualizando ${documentOverrides.length} override(s) de documento com novo tempo`);
         await Promise.all(
           documentOverrides.map(override =>
             retryWithBackoff(
@@ -2726,6 +2852,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
         );
       }
       
+      console.log(`✅ Tempo padrão atualizado com sucesso`);
 
       // Fechar edição
       setEditandoTempo(prev => ({ ...prev, [atividadeId]: false }));
@@ -2913,6 +3040,11 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
     setIsMudandoEtapaGlobal(true);
 
     try {
+      console.log(`\n🔀 ========================================`);
+      console.log(`🔀 MOVER ETAPA GLOBAL: ${etapaMudancaGlobal} → ${novaEtapa}`);
+      console.log(`🔀 ========================================`);
+      console.log(`   Empreendimento: ${empreendimentoId}`);
+      console.log(`   Atividades: ${totalAtividades}`);
 
       const user = await base44.auth.me();
       let atividadesMudadas = 0;
@@ -2946,6 +3078,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
           );
 
           if (!atividadeOriginalArr || atividadeOriginalArr.length === 0) {
+            console.warn(`⚠️ Atividade original ${atividadeId} não encontrada, pulando...`);
             continue;
           }
 
@@ -2967,11 +3100,13 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
         );
 
         if (existingOverrides && existingOverrides.length > 0) {
+          console.log(`   ✏️ Atualizando override global existente para ${atividadeId}`);
           await retryWithBackoff(
             () => Atividade.update(existingOverrides[0].id, { etapa: novaEtapa }),
             3, 500, `updateOverrideGlobal-${existingOverrides[0].id}`
           );
         } else {
+          console.log(`   📝 Criando novo override global para ${atividadeId}`);
           await retryWithBackoff(
             () => Atividade.create({
               ...atividadeOriginal,
@@ -3003,12 +3138,20 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
           );
           await Promise.all(updatePromises);
           planejamentosMudados += planejamentosAtividade.length;
+          console.log(`   ✅ ${planejamentosAtividade.length} planejamento(s) atualizado(s)`);
         } else {
+          console.log(`   ℹ️ Nenhum planejamento encontrado para esta atividade`);
         }
 
         atividadesMudadas++;
+        console.log(`   ✅ Atividade ${atividadeId} movida para "${novaEtapa}"`);
       }
 
+      console.log(`\n🔀 ========================================`);
+      console.log(`🔀 MUDANÇA CONCLUÍDA`);
+      console.log(`   Atividades movidas: ${atividadesMudadas}`);
+      console.log(`   Planejamentos atualizados: ${planejamentosMudados}`);
+      console.log(`🔀 ========================================\n`);
 
       // Recarregar dados silenciosamente (sem chamar onUpdate para não recarregar a página)
       await fetchData();
