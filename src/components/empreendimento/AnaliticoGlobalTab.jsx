@@ -104,7 +104,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
       ]);
 
       setDocumentos(documentosData || []);
-      setEmpreendimentoNome((empreendimentoData && empreendimentoData[0]?.nome) || "");
+      setEmpreendimentoNome((empreendimentoData && empreendimentoData.length > 0 && empreendimentoData[0]?.nome) || "");
       setAlteracoesEtapa(alteracoesData || []);
       setUsuarios(usuariosData || []);
       setPlanejamentos(planejamentosData || []);
@@ -152,7 +152,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
       const planejamentosMap = new Map((planejamentosData || []).map(p => [`${(p.documento_id === undefined || p.documento_id === null || p.documento_id === 'null') ? 'null' : p.documento_id}-${p.atividade_id}`, p]));
 
       // Buscar etapas cadastradas no empreendimento
-      const empreendimento = (empreendimentoData && empreendimentoData[0]) || null;
+      const empreendimento = (empreendimentoData && empreendimentoData.length > 0 && empreendimentoData[0]) || null;
       const etapasCadastradas = empreendimento?.etapas || [];
       
       const normalizedProjectActivities = (activitiesToProcess || [])
