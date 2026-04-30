@@ -334,7 +334,7 @@ export default function PlanejamentoModal({
           isStrictStartDate // Passa a nova flag para respeitar data manual
         );
 
-        const horasDistribuidas = Object.values(distribuicao).reduce((sum, h) => sum + (Number(h) || 0), 0);
+        const horasDistribuidas = Object.values(distribuicao || {}).reduce((sum, h) => sum + (Number(h) || 0), 0);
         if (Math.abs(horasDistribuidas - tempoPlanejado) > 0.01) {
           logExecution(`   ❌ [ERRO] Distribuição incorreta para "${atividade.atividade}"! Esperado: ${tempoPlanejado}h, Distribuído: ${horasDistribuidas}h`);
         } else {

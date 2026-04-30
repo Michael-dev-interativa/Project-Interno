@@ -484,6 +484,8 @@ const TEMPLATE_BASE = CHECKLIST_TEMPLATES.map((template) => ({
 /** @type {Map<string, ChecklistState>} */
 const TEMPLATE_BASE_BY_KEY = new Map(TEMPLATE_BASE.map((template) => [template.key, template]));
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 function ChecklistCadastroContent({
   outerClassName = DEFAULT_OUTER_CLASS,
   innerClassName = DEFAULT_INNER_CLASS,
@@ -536,7 +538,7 @@ function ChecklistCadastroContent({
 
   const loadSavedChecklists = useCallback(async () => {
     try {
-      const response = await fetch('/api/checklists');
+      const response = await fetch(`${API_BASE}/api/checklists`);
       if (!response.ok) {
         console.error('Falha ao carregar checklists salvos', await response.text());
         return;
@@ -548,7 +550,7 @@ function ChecklistCadastroContent({
         const template = CHECKLIST_TEMPLATES.find(t => t.label === checklist.tipo);
         const templateKey = template?.key || checklist.section || "eletrica";
         if (savedItemsByTemplate.has(templateKey)) return;
-        const itemsRes = await fetch(`/api/checklist_items?checklist_id=${checklist.id}`);
+        const itemsRes = await fetch(`${API_BASE}/api/checklist_items?checklist_id=${checklist.id}`);
         const itensRaw = itemsRes.ok ? await itemsRes.json() : [];
         const fallbackTemplate = TEMPLATE_BASE_BY_KEY.get(templateKey);
         const savedItems = Array.isArray(itensRaw) ? itensRaw.map(mapSavedItemToForm) : [];
@@ -622,7 +624,7 @@ function ChecklistCadastroContent({
     let cancelled = false;
     const loadEmpreendimentos = async () => {
       try {
-        const response = await fetch('/api/empreendimentos');
+        const response = await fetch(`${API_BASE}/api/empreendimentos`);
         if (!response.ok) {
           console.error('Falha ao carregar empreendimentos', await response.text());
           return;
@@ -778,7 +780,7 @@ function ChecklistCadastroContent({
     );
     if (removedItem?.id) {
       try {
-        await fetch(`/api/checklist_items/${removedItem.id}`, { method: "DELETE" });
+        await fetch(`${API_BASE}/api/checklist_items/${removedItem.id}`, { method: "DELETE" });
       } catch (err) {
         console.error("Erro ao excluir item do checklist", err);
       }
@@ -788,12 +790,12 @@ function ChecklistCadastroContent({
   const [isSavingChecklist, setIsSavingChecklist] = useState(false);
 
   const deleteExistingItems = async (checklistId) => {
-    const response = await fetch(`/api/checklist_items?checklist_id=${checklistId}`);
+    const response = await fetch(`${API_BASE}/api/checklist_items?checklist_id=${checklistId}`);
     if (!response.ok) return;
     const items = await response.json();
     await Promise.all(
       (items || []).map((item) =>
-        fetch(`/api/checklist_items/${item.id}`, {
+        fetch(`${API_BASE}/api/checklist_items/${item.id}`, {
           method: 'DELETE'
         })
       )
@@ -807,7 +809,7 @@ function ChecklistCadastroContent({
     if (isSavingChecklist) return;
     setIsSavingChecklist(true);
     try {
-      const response = await fetch('/api/checklists', {
+      const response = await fetch(`${API_BASE}/api/checklists`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -840,7 +842,7 @@ function ChecklistCadastroContent({
         await deleteExistingItems(savedChecklist.id);
         await Promise.all(
           checklist.itens.map((item, index) =>
-            fetch('/api/checklist_items', {
+            fetch(`${API_BASE}/api/checklist_items`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
