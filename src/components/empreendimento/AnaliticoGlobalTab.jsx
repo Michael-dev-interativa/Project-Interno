@@ -1049,7 +1049,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
               {isDocumentacao ? (
                 // Mostrar subdisciplinas para disciplinas de documentação
                 <div className="space-y-4 p-4">
-                  {Object.entries(subdisciplinasMap)
+                  {Object.entries(subdisciplinasMap || {})
                     .sort((a, b) => a[0].localeCompare(b[0]))
                     .map(([subdisciplina, atividadesSubgrupo]) => (
                     <div key={subdisciplina} className="border rounded-lg overflow-hidden">
