@@ -341,7 +341,7 @@ export default function PlanejamentoModal({
           logExecution(`   ✅ [RESULTADO] Distribuição gerada para "${atividade.atividade}": ` + JSON.stringify(distribuicao));
         }
 
-        if (Object.keys(distribuicao).length === 0) {
+        if (!distribuicao || Object.keys(distribuicao).length === 0) {
           logExecution(`⚠️ [SIMULAÇÃO] Nenhuma distribuição gerada para "${atividade.atividade}". Pulando.`);
           continue;
         }
