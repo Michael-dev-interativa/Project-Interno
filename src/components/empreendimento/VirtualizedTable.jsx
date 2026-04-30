@@ -15,6 +15,7 @@ export default function VirtualizedTable({
       itemCount={itemCount}
       itemSize={itemSize}
       width={width}
+      rowProps={{}}
     >
       {({ index, style }) => (
         <div style={style}>
