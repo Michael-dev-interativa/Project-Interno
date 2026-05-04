@@ -896,7 +896,7 @@ export default function DocumentosTab({
           ) : (
             <div className="space-y-6">
               {documentosPorDisciplina.map(([disciplina, docs]) => {
-                const defaultMinimizado = localDocumentos.length > 200;
+                const defaultMinimizado = false;
                 const isMinimizado = disciplinasMinimizadas[disciplina] !== undefined
                   ? disciplinasMinimizadas[disciplina]
                   : defaultMinimizado;
@@ -904,8 +904,7 @@ export default function DocumentosTab({
                   <div key={disciplina} className="border rounded-lg overflow-hidden">
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 border-b flex items-center justify-between cursor-pointer hover:from-blue-100 hover:to-indigo-100 transition-colors"
                       onClick={() => setDisciplinasMinimizadas(prev => {
-                        const defaultMinimizado = localDocumentos.length > 200;
-                        const current = prev[disciplina] !== undefined ? prev[disciplina] : defaultMinimizado;
+                        const current = prev[disciplina] !== undefined ? prev[disciplina] : false;
                         return { ...prev, [disciplina]: !current };
                       })}>
                       <h3 className="font-semibold text-lg text-gray-800 flex items-center gap-2">
