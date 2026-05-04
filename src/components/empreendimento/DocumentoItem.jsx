@@ -122,7 +122,25 @@ function DocumentoItem({
     return temSingular || temArray;
   };
 
+  // Cheap check: used only for showing the expand button. Uses .some() to stop at first match.
+  const hasActivities = useMemo(() => {
+    const subdisciplinasDoc = doc.subdisciplinas || [];
+    const disciplinasDoc = doc.disciplinas?.length > 0 ? doc.disciplinas : [doc.disciplina].filter(Boolean);
+    if ((atividadesEmpCache || []).some(pa => pa.tempo !== -999 && vinculadaAoDoc(pa))) return true;
+    if ((allAtividades || []).some(pa => pa.empreendimento_id != null && pa.tempo !== -999 && vinculadaAoDoc(pa))) return true;
+    if (subdisciplinasDoc.length > 0 && disciplinasDoc.length > 0) {
+      return (allAtividades || []).some(a =>
+        !a.empreendimento_id && a.tempo !== -999 &&
+        disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina)
+      );
+    }
+    return false;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allAtividades, atividadesEmpCache, doc.id, doc.disciplinas, doc.disciplina, doc.subdisciplinas]);
+
+  // Full computation: only runs when the row is expanded to avoid freezing on bulk mount.
   const { atividadesDoc, atividadesDocAll } = useMemo(() => {
+  if (!isExpanded) return { atividadesDoc: [], atividadesDocAll: [] };
   // 1. Separar genéricas das específicas do projeto
   const allGenericActivitiesMap = new Map(
     (allAtividades || []).filter(a => !a.empreendimento_id).map(a => [a.id, a])
@@ -217,7 +235,7 @@ function DocumentoItem({
 
   return { atividadesDoc: _atividadesDoc, atividadesDocAll: _atividadesDocAll };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allAtividades, atividadesEmpCache, doc.id, doc.disciplinas, doc.disciplina, doc.subdisciplinas, etapaParaPlanejamento]);
+  }, [isExpanded, allAtividades, atividadesEmpCache, doc.id, doc.disciplinas, doc.disciplina, doc.subdisciplinas, etapaParaPlanejamento]);
 
   const executorAtual = doc.executor_principal;
   const executorNome = (usuariosOrdenados || []).find(u => u.email === executorAtual)?.nome
@@ -269,7 +287,7 @@ function DocumentoItem({
     <>
       <tr className="border-b hover:bg-gray-50 transition-colors">
         <td className="w-[50px] p-3">
-          {atividadesDoc.length > 0 && (
+          {hasActivities && (
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleRow(doc.id)}>
               {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
             </Button>
