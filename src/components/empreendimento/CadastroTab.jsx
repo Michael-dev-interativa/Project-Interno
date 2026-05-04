@@ -1,6 +1,5 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import VirtualizedTable from './VirtualizedTable.jsx';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -1449,35 +1448,27 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
                 </div>
               ) : (
                 <>
-                  {/* Cabeçalhos das disciplinas (alinham com colunas de folhas) */}
-                  {linhasPorDisciplina.map(([disciplina]) => (
-                    <div key={disciplina} className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-300 flex" style={{ minWidth: `${larguraTotalEtapas}px`, height: '44px' }}>
-                      {ETAPAS_VIEW.filter(e => !etapasExcluidas.includes(e)).map((etapa) => {
-                        const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
-                        const isMinimizada = etapasMinimizadas[etapa];
-                        return (
-                          <div
-                            key={`${disciplina}-${etapa}`}
-                            className="border-r border-gray-200 flex-shrink-0"
-                            style={{ 
-                              width: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`,
-                              minWidth: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`
-                            }}
-                          ></div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                  {/* Virtualização das linhas */}
-                  <VirtualizedTable
-                    height={500}
-                    itemCount={linhas.length}
-                    itemSize={48}
-                    width={larguraTotalEtapas}
-                    renderRow={(rowIdx) => {
-                      const linha = linhas[rowIdx];
-                      const doc = docMap.get(linha.documento_id);
-                      return (
+                  {linhasPorDisciplina.map(([disciplina, linhasDaDisciplina]) => (
+                    <div key={disciplina}>
+                      {/* Cabeçalho da disciplina */}
+                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-300 flex" style={{ minWidth: `${larguraTotalEtapas}px`, height: '44px' }}>
+                        {ETAPAS_VIEW.filter(e => !etapasExcluidas.includes(e)).map((etapa) => {
+                          const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
+                          const isMinimizada = etapasMinimizadas[etapa];
+                          return (
+                            <div
+                              key={`${disciplina}-${etapa}`}
+                              className="border-r border-gray-200 flex-shrink-0"
+                              style={{
+                                width: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`,
+                                minWidth: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`
+                              }}
+                            ></div>
+                          );
+                        })}
+                      </div>
+                      {/* Linhas da disciplina */}
+                      {linhasDaDisciplina.map((linha) => (
                         <div key={linha.id} className="flex border-b border-gray-200 hover:bg-gray-50" style={{ minWidth: `${larguraTotalEtapas}px`, height: '48px' }}>
                           {etapasVisiveis.map((etapa) => {
                             const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
@@ -1524,9 +1515,9 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
                             );
                           })}
                         </div>
-                      );
-                    }}
-                  />
+                      ))}
+                    </div>
+                  ))}
                 </>
               )}
                 </div>
