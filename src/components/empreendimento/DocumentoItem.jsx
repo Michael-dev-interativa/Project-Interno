@@ -34,6 +34,7 @@ const ETAPA_TEMPO_MAP = {
 function DocumentoItem({
   doc,
   isExpanded,
+  hasActivities,
   allAtividades,
   handleEdit,
   handleDelete,
@@ -60,6 +61,7 @@ function DocumentoItem({
   setExecutorPreSelecionado,
   handleRemoveExecutor,
   registerLoadingSetter,
+  sortedDocOptionsList,
 }) {
   const [isLoading, setIsLoading] = useState(false);
 
@@ -122,21 +124,8 @@ function DocumentoItem({
     return temSingular || temArray;
   };
 
-  // Cheap check: used only for showing the expand button. Uses .some() to stop at first match.
-  const hasActivities = useMemo(() => {
-    const subdisciplinasDoc = doc.subdisciplinas || [];
-    const disciplinasDoc = doc.disciplinas?.length > 0 ? doc.disciplinas : [doc.disciplina].filter(Boolean);
-    if ((atividadesEmpCache || []).some(pa => pa.tempo !== -999 && vinculadaAoDoc(pa))) return true;
-    if ((allAtividades || []).some(pa => pa.empreendimento_id != null && pa.tempo !== -999 && vinculadaAoDoc(pa))) return true;
-    if (subdisciplinasDoc.length > 0 && disciplinasDoc.length > 0) {
-      return (allAtividades || []).some(a =>
-        !a.empreendimento_id && a.tempo !== -999 &&
-        disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina)
-      );
-    }
-    return false;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allAtividades, atividadesEmpCache, doc.id, doc.disciplinas, doc.disciplina, doc.subdisciplinas]);
+  // Cheap check: used only for showing the expand button — pre-computed by parent.
+  // (hasActivities prop replaces the useMemo that scanned allAtividades for each item)
 
   // Full computation: only runs when the row is expanded to avoid freezing on bulk mount.
   const { atividadesDoc, atividadesDocAll } = useMemo(() => {
@@ -243,15 +232,14 @@ function DocumentoItem({
     || '—';
 
   const predecessoraOptions = useMemo(() =>
-    (localDocumentos || [])
+    (sortedDocOptionsList || [])
       .filter(d => d.id !== doc.id)
-      .sort((a, b) => (a.numero || '').localeCompare(b.numero || ''))
       .map(d => (
         <option key={d.id} value={String(d.id)}>
-          {d.numero} — {d.arquivo || d.titulo || ''}
+          {d.label}
         </option>
       )),
-    [localDocumentos, doc.id]
+    [sortedDocOptionsList, doc.id]
   );
 
   const campTempo = ETAPA_TEMPO_MAP[etapaParaPlanejamento];

@@ -807,6 +807,46 @@ export default function DocumentosTab({
     });
   }, [usuarios]);
 
+  // Pre-compute which doc IDs have activities (single pass — avoids O(N×M) per item on mount)
+  const docIdsWithActivities = useMemo(() => {
+    const result = new Set();
+    const catalogPairs = new Set();
+    (allAtividades || []).forEach(a => {
+      if (!a.empreendimento_id && a.tempo !== -999 && a.disciplina && a.subdisciplina)
+        catalogPairs.add(`${a.disciplina}|${a.subdisciplina}`);
+    });
+    (allAtividades || []).forEach(a => {
+      if (a.empreendimento_id != null && a.tempo !== -999) {
+        if (a.documento_id != null) result.add(String(a.documento_id));
+        if (Array.isArray(a.documento_ids)) a.documento_ids.forEach(id => result.add(String(id)));
+      }
+    });
+    (atividadesEmpCache || []).forEach(a => {
+      if (a.tempo !== -999) {
+        if (a.documento_id != null) result.add(String(a.documento_id));
+        if (Array.isArray(a.documento_ids)) a.documento_ids.forEach(id => result.add(String(id)));
+      }
+    });
+    if (catalogPairs.size > 0) {
+      (localDocumentos || []).forEach(doc => {
+        const subs = doc.subdisciplinas || [];
+        const discs = doc.disciplinas?.length > 0 ? doc.disciplinas : [doc.disciplina].filter(Boolean);
+        if (subs.length > 0 && discs.length > 0 && discs.some(d => subs.some(s => catalogPairs.has(`${d}|${s}`)))) {
+          result.add(String(doc.id));
+        }
+      });
+    }
+    return result;
+  }, [allAtividades, atividadesEmpCache, localDocumentos]);
+
+  // Pre-compute sorted doc options once — avoids O(N log N) sort inside every DocumentoItem
+  const sortedDocOptionsList = useMemo(() =>
+    [...localDocumentos]
+      .sort((a, b) => (a.numero || '').localeCompare(b.numero || ''))
+      .map(d => ({ id: d.id, label: `${d.numero} — ${d.arquivo || d.titulo || ''}` })),
+    [localDocumentos]
+  );
+
   const sharedProps = useMemo(() => ({
     localDocumentos,
     setLocalPlanejamentos,
@@ -823,7 +863,8 @@ export default function DocumentosTab({
     handleRemoveExecutor,
     setExecutorPreSelecionado,
     registerLoadingSetter,
-  }), [localDocumentos, setLocalPlanejamentos, handleLocalUpdate, setCargaDiariaCache, getCargaDiariaExecutor, handleCascadingUpdate, autoPlanejarAtividades, toggleRow, usuariosOrdenados, pavimentos, handleEditAtividade, atividadesEmpCache, handleRemoveExecutor, setExecutorPreSelecionado, registerLoadingSetter]);
+    sortedDocOptionsList,
+  }), [localDocumentos, setLocalPlanejamentos, handleLocalUpdate, setCargaDiariaCache, getCargaDiariaExecutor, handleCascadingUpdate, autoPlanejarAtividades, toggleRow, usuariosOrdenados, pavimentos, handleEditAtividade, atividadesEmpCache, handleRemoveExecutor, setExecutorPreSelecionado, registerLoadingSetter, sortedDocOptionsList]);
 
   return (
     <div className="space-y-6">
@@ -950,6 +991,7 @@ export default function DocumentosTab({
                                 key={doc.id}
                                 doc={doc}
                                 isExpanded={!!expandedRows[doc.id]}
+                                hasActivities={docIdsWithActivities.has(String(doc.id))}
                                 allAtividades={allAtividades}
                                 handleEdit={handleEdit}
                                 handleDelete={handleDelete}
