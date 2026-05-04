@@ -2696,6 +2696,7 @@ startServer().catch((err) => {
   try {
     await pool.query("ALTER TABLE planejamento_atividades ADD COLUMN IF NOT EXISTS inicio_real DATE;");
     await pool.query("ALTER TABLE planejamento_atividades ADD COLUMN IF NOT EXISTS termino_real DATE;");
+    await pool.query("ALTER TABLE planejamento_atividades ADD COLUMN IF NOT EXISTS is_quick_activity BOOLEAN DEFAULT false;");
     await pool.query("ALTER TABLE planejamento_documentos ADD COLUMN IF NOT EXISTS inicio_real DATE;");
     await pool.query("ALTER TABLE planejamento_documentos ADD COLUMN IF NOT EXISTS termino_real DATE;");
     console.log('✅ ensured inicio_real/termino_real on planejamento tables');

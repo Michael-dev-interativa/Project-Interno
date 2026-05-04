@@ -1189,7 +1189,9 @@ const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKe
       }
 
       // Para atividades normais, verificar se tem horas significativas
-      return horasAlocadas >= 0.05 || horasExecutadas >= 0.05;
+      // Fallback: atividades concluídas com 0h (ex: planos fantasmas de atividades rápidas sem is_quick_activity)
+      return horasAlocadas >= 0.05 || horasExecutadas >= 0.05 ||
+        (atividade.status === 'concluido' && !atividade.atividade_id);
     });
 
     return (
@@ -2328,6 +2330,18 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
                 diasParaExibir.add(dayKey);
               }
             });
+          }
+
+          // Fallback: se nenhum dia foi adicionado (todas as horas são 0), usar termino_real || inicio_planejado
+          // Cobre atividades rápidas concluídas em < 1 segundo que ficam com 0h
+          if (diasParaExibir.size === 0) {
+            const dataRef = plano.termino_real || plano.inicio_planejado;
+            if (dataRef) {
+              const parsed = parseLocalDate(dataRef);
+              if (parsed && isValid(parsed)) {
+                diasParaExibir.add(format(parsed, 'yyyy-MM-dd'));
+              }
+            }
           }
         } else {
           // Atividade não concluída: mostrar nos dias planejados e executados
