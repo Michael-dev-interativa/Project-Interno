@@ -115,6 +115,10 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
   const dataScrollRef = useRef(null);
   const linhasRef = useRef([]);
   linhasRef.current = linhas; // always current, without useEffect
+  const isSyncingFolhas = useRef(false);
+  const isSyncingData = useRef(false);
+  const scrollRafFolhas = useRef(null);
+  const scrollRafData = useRef(null);
 
   useEffect(() => {
     if (!empreendimento?.id) return;
@@ -1249,9 +1253,16 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
               ref={folhasScrollRef}
               className="flex-1 overflow-y-auto"
               onScroll={(e) => {
-                if (dataScrollRef.current) {
-                  dataScrollRef.current.scrollTop = e.target.scrollTop;
-                }
+                if (isSyncingFolhas.current) return;
+                const scrollTop = e.currentTarget.scrollTop;
+                if (scrollRafData.current) cancelAnimationFrame(scrollRafData.current);
+                scrollRafData.current = requestAnimationFrame(() => {
+                  if (dataScrollRef.current) {
+                    isSyncingData.current = true;
+                    dataScrollRef.current.scrollTop = scrollTop;
+                    isSyncingData.current = false;
+                  }
+                });
               }}
             >
               {linhas.length === 0 ? (
@@ -1274,7 +1285,7 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
 
                     {/* Folhas da Disciplina */}
                     {linhasDaDisciplina.map((linha) => {
-                      const doc = documentos.find(d => d.id === linha.documento_id);
+                      const doc = docMap.get(linha.documento_id);
                       return (
                         <div
                           key={linha.id}
@@ -1316,9 +1327,16 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
               ref={dataScrollRef}
               className="flex-1 overflow-x-auto overflow-y-auto"
               onScroll={(e) => {
-                if (folhasScrollRef.current && e.target.scrollTop !== folhasScrollRef.current.scrollTop) {
-                  folhasScrollRef.current.scrollTop = e.target.scrollTop;
-                }
+                if (isSyncingData.current) return;
+                const scrollTop = e.currentTarget.scrollTop;
+                if (scrollRafFolhas.current) cancelAnimationFrame(scrollRafFolhas.current);
+                scrollRafFolhas.current = requestAnimationFrame(() => {
+                  if (folhasScrollRef.current) {
+                    isSyncingFolhas.current = true;
+                    folhasScrollRef.current.scrollTop = scrollTop;
+                    isSyncingFolhas.current = false;
+                  }
+                });
               }}
             >
               <div style={{ width: `${larguraTotalEtapas}px` }}>
