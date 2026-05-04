@@ -102,15 +102,20 @@ export default function DocumentosTab({
     }
   }, []);
   const [disciplinasMinimizadas, setDisciplinasMinimizadas] = useState({});
-  const [defaultExpanded, setDefaultExpanded] = useState(false);
+  const hasAutoExpanded = useRef(false);
 
-  // Expand sections after initial render to avoid blocking the page load
+  // Expand sections one at a time after initial render so the page loads fast
   useEffect(() => {
-    const id = setTimeout(() => {
-      startTransition(() => setDefaultExpanded(true));
-    }, 50);
-    return () => clearTimeout(id);
-  }, []);
+    if (hasAutoExpanded.current || !documentosPorDisciplina?.length) return;
+    hasAutoExpanded.current = true;
+    documentosPorDisciplina.forEach(([disciplina], index) => {
+      setTimeout(() => {
+        startTransition(() => {
+          setDisciplinasMinimizadas(prev => ({ ...prev, [disciplina]: false }));
+        });
+      }, 50 + index * 250);
+    });
+  }, [documentosPorDisciplina]);
 
   // Recarregar planejamentos quando triggerUpdate for chamado (ex: após execução/pause/finish)
   const reloadPlanejamentos = useCallback(async () => {
@@ -905,15 +910,12 @@ export default function DocumentosTab({
           ) : (
             <div className="space-y-6">
               {documentosPorDisciplina.map(([disciplina, docs]) => {
-                const defaultMinimizado = !defaultExpanded;
-                const isMinimizado = disciplinasMinimizadas[disciplina] !== undefined
-                  ? disciplinasMinimizadas[disciplina]
-                  : defaultMinimizado;
+                const isMinimizado = disciplinasMinimizadas[disciplina] !== false;
                 return (
                   <div key={disciplina} className="border rounded-lg overflow-hidden">
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 border-b flex items-center justify-between cursor-pointer hover:from-blue-100 hover:to-indigo-100 transition-colors"
                       onClick={() => setDisciplinasMinimizadas(prev => {
-                        const current = prev[disciplina] !== undefined ? prev[disciplina] : !defaultExpanded;
+                        const current = prev[disciplina] !== false;
                         return { ...prev, [disciplina]: !current };
                       })}>
                       <h3 className="font-semibold text-lg text-gray-800 flex items-center gap-2">
