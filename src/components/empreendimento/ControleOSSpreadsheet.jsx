@@ -59,7 +59,10 @@ const StatusCell = ({ status, editable, onUpdate, customOptions }) => {
           onUpdate(e.target.value);
           setIsEditing(false);
         }}
-        onBlur={() => setIsEditing(false)}
+        onBlur={(e) => {
+          // Only close if no value was just selected (target still has focus or it was a keyboard dismiss)
+          if (e.relatedTarget === null) setIsEditing(false);
+        }}
         autoFocus
         className="w-full px-2 py-1 text-xs font-medium rounded border-2 border-blue-500"
         style={{ backgroundColor: getStatusBgColor(status), color: '#1f2937' }}
@@ -521,21 +524,21 @@ export default function ControleOSSpreadsheet({ controlesOS, empreendimentos, se
                             <StatusCell 
                               status={value} 
                               editable={editable}
-                              onUpdate={(newValue) => onUpdate && onUpdate(row.id, col.key, newValue)}
+                              onUpdate={(newValue) => onUpdate && onUpdate(row.empreendimento_id, col.key, newValue)}
                               customOptions={col.statusOptions}
                             />
                           ) : col.type === 'gestao' ? (
                             <GestaoCell 
                               value={value === 'NA' ? '' : value}
                               editable={editable}
-                              onUpdate={(newValue) => onUpdate && onUpdate(row.id, col.key, newValue)}
+                              onUpdate={(newValue) => onUpdate && onUpdate(row.empreendimento_id, col.key, newValue)}
                               usuarios={usuarios}
                             />
                           ) : col.type === 'formalizacao' ? (
                             <FormalizacaoCell 
                               value={value}
                               editable={editable}
-                              onUpdate={(newValue) => onUpdate && onUpdate(row.id, col.key, newValue)}
+                              onUpdate={(newValue) => onUpdate && onUpdate(row.empreendimento_id, col.key, newValue)}
                             />
                           ) : value}
                         </td>
