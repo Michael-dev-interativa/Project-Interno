@@ -79,8 +79,9 @@ export default function AlocacaoEquipeTab({
   const documentos = documentosProp?.length > 0 ? documentosProp : documentosLocal;
   const equipes = equipesProp?.length > 0 ? equipesProp : equipesLocal;
   
-  // Para usuários, mesclar props com atualizações locais
-  const usuariosBase = usuariosProp?.length > 0 ? usuariosProp : usuariosLocal;
+  // Para usuários: sempre preferir dados locais (frescos do servidor com equipe_id atualizado)
+  // Props servem apenas como fallback enquanto o fetch inicial não termina
+  const usuariosBase = usuariosLocal.length > 0 ? usuariosLocal : (usuariosProp || []);
   const [usuariosEditados, setUsuariosEditados] = useState({});
   const [osManuais, setOsManuais] = useState({}); // { [usuario_email]: { [dataStr]: [{ label, cor, empNome, os }] } }
   const [showPreencherMassaModal, setShowPreencherMassaModal] = useState(false);
@@ -102,7 +103,7 @@ export default function AlocacaoEquipeTab({
     const needsEmpreendimentos = !empreendimentosProp?.length;
     const needsDocumentos = !documentosProp?.length;
     const needsEquipes = !equipesProp?.length;
-    const needsUsuarios = !usuariosProp?.length;
+    const needsUsuarios = true; // Sempre buscar usuários frescos para ter equipe_id atualizado
 
     if (!needsPlanejamentos && !needsEmpreendimentos && !needsDocumentos && !needsEquipes && !needsUsuarios) {
       // Apenas carrega OS manuais, que não são passados via props
