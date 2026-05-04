@@ -45,7 +45,8 @@ const DateCell = React.memo(function DateCell({ linhaId, etapa, revisao, value, 
     () => onCopy(linhaId, etapa, revisao),
     [linhaId, etapa, revisao, onCopy]
   );
-  const safeValue = toISODateString(value);
+  const cleanValue = (!value || value === '0001-01-01' || (typeof value === 'string' && value.includes('dd/mm/aaaa'))) ? '' : value;
+  const safeValue = toISODateString(cleanValue);
   return (
     <div
       className="border-r border-gray-100 p-0.5 flex-shrink-0 flex items-center relative group"
@@ -68,6 +69,45 @@ const DateCell = React.memo(function DateCell({ linhaId, etapa, revisao, value, 
           <Wand2 className="w-2.5 h-2.5" />
         </button>
       )}
+    </div>
+  );
+});
+
+const DataRow = React.memo(function DataRow({ linha, etapasVisiveis, revisoesPorEtapa, etapasMinimizadas, larguraTotalEtapas, readOnly, onUpdate, onCopy }) {
+  return (
+    <div className="flex border-b border-gray-200 hover:bg-gray-50" style={{ minWidth: `${larguraTotalEtapas}px`, height: '48px' }}>
+      {etapasVisiveis.map((etapa) => {
+        const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
+        const isMinimizada = etapasMinimizadas[etapa];
+        const colWidth = isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`;
+        return (
+          <div
+            key={`${linha.id}-${etapa}`}
+            className="border-r border-gray-200 last:border-r-0 flex-shrink-0"
+            style={{ width: colWidth, minWidth: colWidth }}
+          >
+            {isMinimizada ? (
+              <div className="h-full flex items-center justify-center p-0.5 bg-gray-50"></div>
+            ) : (
+              <div className="flex">
+                {revisoesEtapa.map((revisao) => (
+                  <DateCell
+                    key={`${linha.id}-${etapa}-${revisao}`}
+                    linhaId={linha.id}
+                    etapa={etapa}
+                    revisao={revisao}
+                    value={linha.datas?.[etapa]?.[revisao] || ''}
+                    onUpdate={onUpdate}
+                    readOnly={readOnly}
+                    onCopy={onCopy}
+                  />
+                ))}
+                <div className="p-0.5 flex-shrink-0" style={{ width: '40px', minWidth: '40px' }}></div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 });
@@ -1487,52 +1527,17 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
                       </div>
                       {/* Linhas da disciplina */}
                       {linhasDaDisciplina.map((linha) => (
-                        <div key={linha.id} className="flex border-b border-gray-200 hover:bg-gray-50" style={{ minWidth: `${larguraTotalEtapas}px`, height: '48px' }}>
-                          {etapasVisiveis.map((etapa) => {
-                            const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
-                            const isMinimizada = etapasMinimizadas[etapa];
-                            return (
-                              <div
-                                key={`${linha.id}-${etapa}`}
-                                className="border-r border-gray-200 last:border-r-0 flex-shrink-0"
-                                style={{ width: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`, minWidth: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px` }}
-                              >
-                                {isMinimizada ? (
-                                  <div className="h-full flex items-center justify-center p-0.5 bg-gray-50"></div>
-                                ) : (
-                                  <div className="flex">
-                                    {revisoesEtapa.map((revisao) => (
-                                      <div
-                                        key={`${linha.id}-${etapa}-${revisao}`}
-                                        className="border-r border-gray-100 p-0.5 flex-shrink-0 flex items-center relative group"
-                                        style={{ width: '110px', minWidth: '110px' }}
-                                      >
-                                        <input
-                                          type="date"
-                                          value={toISODateString(getDataValue(linha, etapa, revisao))}
-                                          onChange={(e) => handleUpdateData(linha.id, etapa, revisao, e.target.value)}
-                                          className="h-8 text-xs w-full px-1 border border-gray-300 rounded cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
-                                          style={{ color: toISODateString(getDataValue(linha, etapa, revisao)) ? 'black' : 'transparent' }}
-                                          disabled={readOnly}
-                                        />
-                                        {!readOnly && getDataValue(linha, etapa, revisao) && (
-                                          <button
-                                            onClick={() => copiarDataParaBaixo(linha.id, etapa, revisao)}
-                                            className="text-purple-600 hover:text-purple-800 p-0.5 absolute right-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            title="Preencher todas abaixo"
-                                          >
-                                            <Wand2 className="w-2.5 h-2.5" />
-                                          </button>
-                                        )}
-                                      </div>
-                                    ))}
-                                    <div className="p-0.5 flex-shrink-0" style={{ width: '40px', minWidth: '40px' }}></div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
+                        <DataRow
+                          key={linha.id}
+                          linha={linha}
+                          etapasVisiveis={etapasVisiveis}
+                          revisoesPorEtapa={revisoesPorEtapa}
+                          etapasMinimizadas={etapasMinimizadas}
+                          larguraTotalEtapas={larguraTotalEtapas}
+                          readOnly={readOnly}
+                          onUpdate={handleUpdateData}
+                          onCopy={copiarDataParaBaixo}
+                        />
                       ))}
                     </div>
                   ))}
