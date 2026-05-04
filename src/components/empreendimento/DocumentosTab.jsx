@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState, useEffect, useMemo, useCallback, useRef, useContext } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, useContext, startTransition } from 'react';
 import { ActivityTimerContext } from '@/components/contexts/ActivityTimerContext';
 import { Documento, Disciplina, Atividade, Execucao, Usuario, PlanejamentoAtividade, PlanejamentoDocumento, DataCadastro } from "@/entities/all";
 import { base44 } from '@/api/base44Client';
@@ -102,6 +102,15 @@ export default function DocumentosTab({
     }
   }, []);
   const [disciplinasMinimizadas, setDisciplinasMinimizadas] = useState({});
+  const [defaultExpanded, setDefaultExpanded] = useState(false);
+
+  // Expand sections after initial render to avoid blocking the page load
+  useEffect(() => {
+    const id = setTimeout(() => {
+      startTransition(() => setDefaultExpanded(true));
+    }, 50);
+    return () => clearTimeout(id);
+  }, []);
 
   // Recarregar planejamentos quando triggerUpdate for chamado (ex: após execução/pause/finish)
   const reloadPlanejamentos = useCallback(async () => {
@@ -896,7 +905,7 @@ export default function DocumentosTab({
           ) : (
             <div className="space-y-6">
               {documentosPorDisciplina.map(([disciplina, docs]) => {
-                const defaultMinimizado = false;
+                const defaultMinimizado = !defaultExpanded;
                 const isMinimizado = disciplinasMinimizadas[disciplina] !== undefined
                   ? disciplinasMinimizadas[disciplina]
                   : defaultMinimizado;
@@ -904,7 +913,7 @@ export default function DocumentosTab({
                   <div key={disciplina} className="border rounded-lg overflow-hidden">
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 border-b flex items-center justify-between cursor-pointer hover:from-blue-100 hover:to-indigo-100 transition-colors"
                       onClick={() => setDisciplinasMinimizadas(prev => {
-                        const current = prev[disciplina] !== undefined ? prev[disciplina] : false;
+                        const current = prev[disciplina] !== undefined ? prev[disciplina] : !defaultExpanded;
                         return { ...prev, [disciplina]: !current };
                       })}>
                       <h3 className="font-semibold text-lg text-gray-800 flex items-center gap-2">
