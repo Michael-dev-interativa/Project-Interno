@@ -2279,11 +2279,27 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
               hasSignificantExecutionHours = true;
             }
           });
+          // Fallback adicional: se a atividade está concluída/em andamento mas com 0h registradas,
+          // usar o dia com a entrada mais recente do horas_executadas_por_dia
+          if (!hasSignificantExecutionHours && (plano.status === 'concluido' || plano.status === 'em_andamento')) {
+            const dias = Object.keys(plano.horas_executadas_por_dia);
+            if (dias.length > 0) {
+              // Usar o último dia registrado
+              const ultimoDia = dias.sort().pop();
+              const parsedUltimo = parseLocalDate(ultimoDia);
+              diasParaExibir.add((parsedUltimo && isValid(parsedUltimo)) ? format(parsedUltimo, 'yyyy-MM-dd') : ultimoDia);
+              hasSignificantExecutionHours = true;
+            }
+          }
         }
         // Fallback: se não há horas executadas significativas, usar o dia planejado
         // Garante que atividades muito breves (início e fim imediato) ainda apareçam no calendário
         if (!hasSignificantExecutionHours && plano.inicio_planejado) {
-          diasParaExibir.add(plano.inicio_planejado);
+          const parsedInicio = parseLocalDate(plano.inicio_planejado);
+          const diaFallback = (parsedInicio && isValid(parsedInicio))
+            ? format(parsedInicio, 'yyyy-MM-dd')
+            : plano.inicio_planejado;
+          diasParaExibir.add(diaFallback);
         }
         // NÃO usar horas_por_dia para atividades rápidas - esse campo pode conter dados incorretos
       } else {
