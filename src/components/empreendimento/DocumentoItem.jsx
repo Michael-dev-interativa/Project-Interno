@@ -33,7 +33,7 @@ const ETAPA_TEMPO_MAP = {
 
 function DocumentoItem({
   doc,
-  planejamentos,
+  isExpanded,
   allAtividades,
   handleEdit,
   handleDelete,
@@ -46,14 +46,12 @@ function DocumentoItem({
   readOnly,
   // sharedProps
   localDocumentos,
-  localPlanejamentos,
   setLocalPlanejamentos,
   handleLocalUpdate,
   setCargaDiariaCache,
   getCargaDiariaExecutor,
   handleCascadingUpdate,
   autoPlanejarAtividades,
-  expandedRows,
   toggleRow,
   usuariosOrdenados,
   pavimentos,
@@ -63,7 +61,6 @@ function DocumentoItem({
   handleRemoveExecutor,
   registerLoadingSetter,
 }) {
-  const isExpanded = expandedRows[doc.id];
   const [isLoading, setIsLoading] = useState(false);
 
   // Register this item's loading setter so the parent can target only this item
@@ -227,6 +224,18 @@ function DocumentoItem({
     || executorAtual
     || '—';
 
+  const predecessoraOptions = useMemo(() =>
+    (localDocumentos || [])
+      .filter(d => d.id !== doc.id)
+      .sort((a, b) => (a.numero || '').localeCompare(b.numero || ''))
+      .map(d => (
+        <option key={d.id} value={String(d.id)}>
+          {d.numero} — {d.arquivo || d.titulo || ''}
+        </option>
+      )),
+    [localDocumentos, doc.id]
+  );
+
   const campTempo = ETAPA_TEMPO_MAP[etapaParaPlanejamento];
   const tempoExibido = campTempo
     ? (doc[campTempo] ?? null)
@@ -367,14 +376,7 @@ function DocumentoItem({
                   className="h-7 w-full text-xs border border-gray-300 rounded px-1 bg-white text-gray-700 focus:border-blue-400 focus:outline-none cursor-pointer"
                 >
                   <option value="">Predecessora</option>
-                  {(localDocumentos || [])
-                    .filter(d => d.id !== doc.id)
-                    .sort((a, b) => (a.numero || '').localeCompare(b.numero || ''))
-                    .map(d => (
-                      <option key={d.id} value={String(d.id)}>
-                        {d.numero} — {d.arquivo || d.titulo || ''}
-                      </option>
-                    ))}
+                  {predecessoraOptions}
                 </select>
                 <div className="flex items-center gap-1">
                   <Button

@@ -88,6 +88,7 @@ export default function DocumentosTab({
   }, []);
   const [localDocumentos, setLocalDocumentos] = useState(documentos);
   const localDocumentosRef = useRef(documentos);
+  const localPlanejamentosRef = useRef(planejamentos);
   const autoPlanejarRef = useRef(null);
   const [atividadesEmpCache, setAtividadesEmpCache] = useState([]);
   const [localPlanejamentos, setLocalPlanejamentos] = useState(planejamentos);
@@ -170,6 +171,7 @@ export default function DocumentosTab({
   useEffect(() => { setLocalDocumentos(documentos); }, [documentos]);
   useEffect(() => { localDocumentosRef.current = localDocumentos; }, [localDocumentos]);
   useEffect(() => { setLocalPlanejamentos(planejamentos); }, [planejamentos]);
+  useEffect(() => { localPlanejamentosRef.current = localPlanejamentos; }, [localPlanejamentos]);
 
   // Carregar AtividadesEmpreendimento UMA VEZ para o empreendimento inteiro
   useEffect(() => {
@@ -353,12 +355,12 @@ export default function DocumentosTab({
       }, 0);
 
       // Remover planejamentos antigos
-      const planejamentosAtividadeAntigos = localPlanejamentos.filter(p => p.documento_id === documento.id && p.etapa === etapa && p.tipo_plano === 'atividade');
+      const planejamentosAtividadeAntigos = localPlanejamentosRef.current.filter(p => p.documento_id === documento.id && p.etapa === etapa && p.tipo_plano === 'atividade');
       if (planejamentosAtividadeAntigos.length > 0) {
         await Promise.all(planejamentosAtividadeAntigos.map(p => retryWithBackoff(() => PlanejamentoAtividade.delete(p.id), 3, 1000, `deleteOldAtiv-${p.id}`)));
         setLocalPlanejamentos(prev => prev.filter(p => !(p.documento_id === documento.id && p.etapa === etapa && p.tipo_plano === 'atividade')));
       }
-      const planejamentosDocumentoAntigos = localPlanejamentos.filter(p => p.documento_id === documento.id && p.etapa === etapa && p.tipo_plano === 'documento');
+      const planejamentosDocumentoAntigos = localPlanejamentosRef.current.filter(p => p.documento_id === documento.id && p.etapa === etapa && p.tipo_plano === 'documento');
       if (planejamentosDocumentoAntigos.length > 0) {
         await Promise.all(planejamentosDocumentoAntigos.map(p => retryWithBackoff(() => PlanejamentoDocumento.delete(p.id), 3, 1000, `deleteOldDocPlan-${p.id}`)));
         setLocalPlanejamentos(prev => prev.filter(p => !(p.documento_id === documento.id && p.etapa === etapa && p.tipo_plano === 'documento')));
@@ -408,7 +410,7 @@ export default function DocumentosTab({
       // Buscar predecessora_id do planejamento da predecessora (para ordenação correta no calendário)
       let predecessoraPlanejamentoId = null;
       if (documento.predecessora_id) {
-        const planoPredecessora = localPlanejamentos.find(p =>
+        const planoPredecessora = localPlanejamentosRef.current.find(p =>
           String(p.documento_id) === String(documento.predecessora_id) &&
           (p.etapa || '').toLowerCase() === (etapa || '').toLowerCase() &&
           p.tipo_plano === 'documento'
@@ -445,7 +447,7 @@ export default function DocumentosTab({
     } finally {
       setDocLoading(documento.id, false);
     }
-  }, [allAtividades, empreendimento, handleLocalUpdate, localPlanejamentos, setLocalPlanejamentos, getCargaDiariaExecutor, handleCascadingUpdate, setDocLoading]);
+  }, [allAtividades, empreendimento, handleLocalUpdate, setLocalPlanejamentos, getCargaDiariaExecutor, handleCascadingUpdate, setDocLoading]);
 
   // Mantém o ref sempre atualizado para o cascade usar sem criar dependência circular
   autoPlanejarRef.current = autoPlanejarAtividades;
@@ -693,7 +695,7 @@ export default function DocumentosTab({
 
     setDocLoading(documentoId, true);
     try {
-      const planejamentosExistentes = localPlanejamentos.filter(p => p.documento_id === documentoId);
+      const planejamentosExistentes = localPlanejamentosRef.current.filter(p => p.documento_id === documentoId);
       if (planejamentosExistentes.length > 0) {
         await Promise.all(planejamentosExistentes.map(p =>
           p.tipo_plano === 'atividade'
@@ -722,7 +724,7 @@ export default function DocumentosTab({
     } finally {
       setDocLoading(documentoId, false);
     }
-  }, [handleLocalUpdate, setCargaDiariaCache, localPlanejamentos, setDocLoading]);
+  }, [handleLocalUpdate, setCargaDiariaCache, setDocLoading]);
 
   const handleDataInicioChange = useCallback(async (documentoId, novaDataStr) => {
     setDocLoading(documentoId, true);
@@ -755,7 +757,7 @@ export default function DocumentosTab({
       setCargaDiariaCache({});
 
       if (updatedDocFromAPI.executor_principal && !updatedDocFromAPI.multiplos_executores) {
-        const planejamentosDoDoc = localPlanejamentos.filter(p => p.documento_id === documentoId);
+        const planejamentosDoDoc = localPlanejamentosRef.current.filter(p => p.documento_id === documentoId);
         const etapasComPlanejamento = [...new Set(planejamentosDoDoc.map(p => p.etapa))];
         for (const etapa of etapasComPlanejamento) {
           await autoPlanejarAtividades(updatedDocFromAPI, etapa, updatedDocFromAPI.executor_principal, 'manual', novaDataStr);
@@ -766,13 +768,13 @@ export default function DocumentosTab({
     } finally {
       setDocLoading(documentoId, false);
     }
-  }, [handleLocalUpdate, setCargaDiariaCache, localPlanejamentos, autoPlanejarAtividades, setDocLoading]);
+  }, [handleLocalUpdate, setCargaDiariaCache, autoPlanejarAtividades, setDocLoading]);
 
   const handleRemoveExecutor = useCallback(async (doc) => {
     if (!doc?.id) return;
     setDocLoading(doc.id, true);
     try {
-      const planejamentosDoDoc = localPlanejamentos.filter(p => p.documento_id === doc.id);
+      const planejamentosDoDoc = localPlanejamentosRef.current.filter(p => p.documento_id === doc.id);
       if (planejamentosDoDoc.length > 0) {
         await Promise.all(planejamentosDoDoc.map(p =>
           p.tipo_plano === 'atividade'
@@ -792,7 +794,7 @@ export default function DocumentosTab({
     } finally {
       setDocLoading(doc.id, false);
     }
-  }, [localPlanejamentos, handleLocalUpdate, setCargaDiariaCache, setDocLoading]);
+  }, [handleLocalUpdate, setCargaDiariaCache, setDocLoading]);
 
   const etapasDisponiveis = ['Estudo Preliminar', 'Ante-Projeto', 'Projeto Básico', 'Projeto Executivo', 'Liberado para Obra'];
 
@@ -807,14 +809,12 @@ export default function DocumentosTab({
 
   const sharedProps = useMemo(() => ({
     localDocumentos,
-    localPlanejamentos,
     setLocalPlanejamentos,
     handleLocalUpdate,
     setCargaDiariaCache,
     getCargaDiariaExecutor,
     handleCascadingUpdate,
     autoPlanejarAtividades,
-    expandedRows,
     toggleRow,
     usuariosOrdenados,
     pavimentos,
@@ -823,7 +823,7 @@ export default function DocumentosTab({
     handleRemoveExecutor,
     setExecutorPreSelecionado,
     registerLoadingSetter,
-  }), [localDocumentos, localPlanejamentos, setLocalPlanejamentos, handleLocalUpdate, setCargaDiariaCache, getCargaDiariaExecutor, handleCascadingUpdate, autoPlanejarAtividades, expandedRows, toggleRow, usuariosOrdenados, pavimentos, handleEditAtividade, atividadesEmpCache, handleRemoveExecutor, setExecutorPreSelecionado, registerLoadingSetter]);
+  }), [localDocumentos, setLocalPlanejamentos, handleLocalUpdate, setCargaDiariaCache, getCargaDiariaExecutor, handleCascadingUpdate, autoPlanejarAtividades, toggleRow, usuariosOrdenados, pavimentos, handleEditAtividade, atividadesEmpCache, handleRemoveExecutor, setExecutorPreSelecionado, registerLoadingSetter]);
 
   return (
     <div className="space-y-6">
@@ -949,7 +949,7 @@ export default function DocumentosTab({
                               <DocumentoItem
                                 key={doc.id}
                                 doc={doc}
-                                planejamentos={localPlanejamentos}
+                                isExpanded={!!expandedRows[doc.id]}
                                 allAtividades={allAtividades}
                                 handleEdit={handleEdit}
                                 handleDelete={handleDelete}
