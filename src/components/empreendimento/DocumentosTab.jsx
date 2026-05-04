@@ -104,6 +104,27 @@ export default function DocumentosTab({
   const [disciplinasMinimizadas, setDisciplinasMinimizadas] = useState({});
   const hasAutoExpanded = useRef(false);
 
+  const filteredDocumentos = useMemo(() => {
+    let filtered = localDocumentos.filter(doc =>
+      (doc.numero?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
+      (doc.arquivo?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
+      (doc.descritivo?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()))
+    );
+    if (filtroArea !== "todas") filtered = filtered.filter(doc => doc.pavimento_id === filtroArea);
+    return filtered.sort((a, b) => (a.arquivo || '').trim().toLowerCase().localeCompare((b.arquivo || '').trim().toLowerCase(), 'pt-BR', { numeric: true, sensitivity: 'base' }));
+  }, [localDocumentos, debouncedSearchTerm, filtroArea]);
+
+  const documentosPorDisciplina = useMemo(() => {
+    const grupos = {};
+    filteredDocumentos.forEach(doc => {
+      const disciplinasArr = Array.isArray(doc.disciplinas) ? doc.disciplinas : [];
+      const disciplina = disciplinasArr.length > 0 ? disciplinasArr[0] : (doc.disciplina || 'Sem Disciplina');
+      if (!grupos[disciplina]) grupos[disciplina] = [];
+      grupos[disciplina].push(doc);
+    });
+    return Object.entries(grupos).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filteredDocumentos]);
+
   // Expand sections one at a time after initial render so the page loads fast
   useEffect(() => {
     if (hasAutoExpanded.current || !documentosPorDisciplina?.length) return;
@@ -772,27 +793,6 @@ export default function DocumentosTab({
       setDocLoading(doc.id, false);
     }
   }, [localPlanejamentos, handleLocalUpdate, setCargaDiariaCache, setDocLoading]);
-
-  const filteredDocumentos = useMemo(() => {
-    let filtered = localDocumentos.filter(doc =>
-      (doc.numero?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
-      (doc.arquivo?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
-      (doc.descritivo?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()))
-    );
-    if (filtroArea !== "todas") filtered = filtered.filter(doc => doc.pavimento_id === filtroArea);
-    return filtered.sort((a, b) => (a.arquivo || '').trim().toLowerCase().localeCompare((b.arquivo || '').trim().toLowerCase(), 'pt-BR', { numeric: true, sensitivity: 'base' }));
-  }, [localDocumentos, debouncedSearchTerm, filtroArea]);
-
-  const documentosPorDisciplina = useMemo(() => {
-    const grupos = {};
-    filteredDocumentos.forEach(doc => {
-      const disciplinasArr = Array.isArray(doc.disciplinas) ? doc.disciplinas : [];
-      const disciplina = disciplinasArr.length > 0 ? disciplinasArr[0] : (doc.disciplina || 'Sem Disciplina');
-      if (!grupos[disciplina]) grupos[disciplina] = [];
-      grupos[disciplina].push(doc);
-    });
-    return Object.entries(grupos).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filteredDocumentos]);
 
   const etapasDisponiveis = ['Estudo Preliminar', 'Ante-Projeto', 'Projeto Básico', 'Projeto Executivo', 'Liberado para Obra'];
 
