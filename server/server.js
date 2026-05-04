@@ -876,7 +876,28 @@ app.get('/api/planejamentos', async (req, res) => {
       }
     };
 
-    addNumericFilter('id', req.query.id);
+    // Use table-qualified column names to avoid ambiguity with the LEFT JOIN on atividades
+    const addNumericFilterQualified = (qualifiedColumn, rawValue) => {
+      if (rawValue === undefined) return;
+      const parsed = parseFilterValue(rawValue);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const inValues = normalizeArray(parsed.$in)
+          .map((v) => Number(v))
+          .filter((v) => Number.isFinite(v));
+        if (inValues.length > 0) {
+          values.push(inValues);
+          where.push(`${qualifiedColumn} = ANY($${values.length}::int[])`);
+        }
+        return;
+      }
+      const n = Number(parsed);
+      if (Number.isFinite(n)) {
+        values.push(n);
+        where.push(`${qualifiedColumn} = $${values.length}`);
+      }
+    };
+
+    addNumericFilterQualified('pa.id', req.query.id);
     // empreendimento_id: match directly OR via atividade join (for legacy records with NULL empreendimento_id)
     const rawEmpId = req.query.empreendimento_id;
     if (rawEmpId !== undefined) {
@@ -886,8 +907,8 @@ app.get('/api/planejamentos', async (req, res) => {
         where.push(`(pa.empreendimento_id = $${values.length} OR (pa.empreendimento_id IS NULL AND EXISTS (SELECT 1 FROM atividades a WHERE a.id = pa.atividade_id AND a.empreendimento_id = $${values.length})))`);
       }
     }
-    addNumericFilter('atividade_id', req.query.atividade_id);
-    addNumericFilter('executor_id', req.query.executor_id);
+    addNumericFilterQualified('pa.atividade_id', req.query.atividade_id);
+    addNumericFilterQualified('pa.executor_id', req.query.executor_id);
     addTextFilter('executor_principal', req.query.executor_principal);
     addTextFilter('status', req.query.status);
 

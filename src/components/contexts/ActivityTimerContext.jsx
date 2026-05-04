@@ -162,7 +162,12 @@ export const ActivityTimerProvider = ({ children }) => {
             };
 
             // Registrar horas APENAS no dia da execução, NUNCA redistribuir
-            const horasExecutadasPorDia = planejamento.horas_executadas_por_dia || {};
+            let horasExecRaw = planejamento.horas_executadas_por_dia;
+            // Garantir que é um objeto (às vezes o servidor retorna string JSON)
+            if (typeof horasExecRaw === 'string') {
+                try { horasExecRaw = JSON.parse(horasExecRaw); } catch (_) { horasExecRaw = {}; }
+            }
+            const horasExecutadasPorDia = (horasExecRaw && typeof horasExecRaw === 'object') ? horasExecRaw : {};
             horasExecutadasPorDia[diaParaRegistrar] = (horasExecutadasPorDia[diaParaRegistrar] || 0) + tempoAdicional;
             updateData.horas_executadas_por_dia = horasExecutadasPorDia;
 
@@ -208,7 +213,7 @@ export const ActivityTimerProvider = ({ children }) => {
 
             triggerUpdate();
         } catch (error) {
-            // Mantido para compatibilidade, mas sem log
+            console.error('[updatePlanejamento] Erro ao atualizar planejamento:', planejamentoId, error?.message || error);
         }
     }, [triggerUpdate]);
 
@@ -542,6 +547,18 @@ export const ActivityTimerProvider = ({ children }) => {
             if (execution.planejamento_id) {
                 const diaExecucao = format(new Date(), 'yyyy-MM-dd');
                 await updatePlanejamento(execution.planejamento_id, tempoDecorridoHoras, 'concluido', observacao, diaExecucao);
+
+                // Safety net: garantir que o status sempre seja 'concluido' mesmo que updatePlanejamento falhe silenciosamente
+                try {
+                    const entityToUpdate = execution.tipo_planejamento === 'documento' ? PlanejamentoDocumento : PlanejamentoAtividade;
+                    await retryWithBackoff(
+                        () => entityToUpdate.update(execution.planejamento_id, {
+                            status: 'concluido',
+                            termino_real: diaExecucao,
+                        }),
+                        3, 1000, 'finishExecution.statusFallback'
+                    );
+                } catch (fallbackErr) { /* ignora, o updatePlanejamento já tentou */ }
 
                 if (playlist.includes(execution.planejamento_id)) {
                     await removeFromPlaylist(execution.planejamento_id);
