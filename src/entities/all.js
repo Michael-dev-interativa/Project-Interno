@@ -6,6 +6,50 @@ const API_BASE = _isLocalhost ? '' : PROD_BACKEND;
 const LOCAL_AUTH_TOKEN_KEY = 'project_auth_token';
 const LOCAL_AUTH_USER_KEY = 'project_auth_user';
 
+// ---------------------------------------------------------------------------
+// Cache em memória + deduplicação de requests
+// Reduz drasticamente a carga no servidor quando múltiplos usuários acessam
+// os mesmos dados simultaneamente (ex: 50 usuários abrindo a mesma aba).
+// ---------------------------------------------------------------------------
+
+// Entidades globais/estáticas ganham TTL maior; dados por empreendimento ficam 2 min
+const _STATIC_PATHS = new Set(['disciplinas', 'users', 'empreendimentos']);
+const _TTL_STATIC  = 5 * 60 * 1000; // 5 minutos
+const _TTL_DEFAULT = 2 * 60 * 1000; // 2 minutos
+
+const _memCache   = new Map(); // key → { data, exp }
+const _inFlight   = new Map(); // key → Promise — deduplicação de requests idênticos
+
+function _cacheGet(key) {
+  const e = _memCache.get(key);
+  if (!e) return null;
+  if (Date.now() > e.exp) { _memCache.delete(key); return null; }
+  return e.data;
+}
+
+function _cacheSet(key, path, data) {
+  const ttl = _STATIC_PATHS.has(path) ? _TTL_STATIC : _TTL_DEFAULT;
+  _memCache.set(key, { data, exp: Date.now() + ttl });
+}
+
+// Invalida todas as entradas de cache de um path ao escrever
+function _cacheInvalidate(path) {
+  const prefix = `${path}::`;
+  for (const k of _memCache.keys()) {
+    if (k.startsWith(prefix)) _memCache.delete(k);
+  }
+}
+
+// Se há um request idêntico em voo, reutiliza a mesma Promise
+function _withDedup(key, fn) {
+  if (_inFlight.has(key)) return _inFlight.get(key);
+  const p = fn().finally(() => _inFlight.delete(key));
+  _inFlight.set(key, p);
+  return p;
+}
+
+// ---------------------------------------------------------------------------
+
 function qs(obj) {
   if (!obj) return '';
   const parts = Object.entries(obj).map(([k, v]) => {
@@ -23,6 +67,22 @@ function qs(obj) {
   return parts.length ? `?${parts.join('&')}` : '';
 }
 
+async function _parseJson(res, fallback) {
+  try {
+    const contentType = res.headers.get('content-type') || '';
+    if (!res.ok) {
+      const text = await res.text();
+      return Promise.reject(new Error(text));
+    }
+    if (contentType.includes('application/json')) return await res.json();
+    const text = await res.text();
+    if (text.trim().startsWith('<')) return fallback;
+    return JSON.parse(text);
+  } catch (e) {
+    return fallback;
+  }
+}
+
 function createEntity(path) {
   const base = `${API_BASE}/api/${path}`;
   return {
@@ -31,23 +91,15 @@ function createEntity(path) {
       if (sort) q.sort = sort;
       if (limit) q.limit = limit;
       if (offset) q.offset = offset;
-      const res = await fetch(base + qs(q));
-      // Try to safely parse JSON; if response is HTML (e.g., dev server 404 page), return empty list
-      try {
-        const contentType = res.headers.get('content-type') || '';
-        if (!res.ok) {
-          const text = await res.text();
-          return Promise.reject(new Error(text));
-        }
-        if (contentType.includes('application/json')) {
-          return await res.json();
-        }
-        const text = await res.text();
-        if (text.trim().startsWith('<')) return [];
-        return JSON.parse(text);
-      } catch (e) {
-        return [];
-      }
+      const key = `${path}::list::${JSON.stringify(q)}`;
+      const cached = _cacheGet(key);
+      if (cached) return cached;
+      return _withDedup(key, async () => {
+        const res = await fetch(base + qs(q));
+        const data = await _parseJson(res, []);
+        if (!Array.isArray(data) || data.length > 0) _cacheSet(key, path, data);
+        return data;
+      });
     },
     get: async (id) => {
       const res = await fetch(`${base}/${id}`);
@@ -64,67 +116,29 @@ function createEntity(path) {
     },
     create: async (data) => {
       const res = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-      try {
-        if (!res.ok) {
-          const text = await res.text();
-          return Promise.reject(new Error(text));
-        }
-        const contentType = res.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) return await res.json();
-        const text = await res.text();
-        if (text.trim().startsWith('<')) return null;
-        return JSON.parse(text);
-      } catch (e) {
-        return null;
-      }
+      _cacheInvalidate(path);
+      return _parseJson(res, null);
     },
     update: async (id, data) => {
       const res = await fetch(`${base}/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-      try {
-        if (!res.ok) {
-          const text = await res.text();
-          return Promise.reject(new Error(text));
-        }
-        const contentType = res.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) return await res.json();
-        const text = await res.text();
-        if (text.trim().startsWith('<')) return null;
-        return JSON.parse(text);
-      } catch (e) {
-        return null;
-      }
+      _cacheInvalidate(path);
+      return _parseJson(res, null);
     },
     delete: async (id) => {
       const res = await fetch(`${base}/${id}`, { method: 'DELETE' });
-      try {
-        if (!res.ok) {
-          const text = await res.text();
-          return Promise.reject(new Error(text));
-        }
-        const contentType = res.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) return await res.json();
-        const text = await res.text();
-        if (text.trim().startsWith('<')) return null;
-        return JSON.parse(text);
-      } catch (e) {
-        return null;
-      }
+      _cacheInvalidate(path);
+      return _parseJson(res, null);
     },
     filter: async (params) => {
-      const res = await fetch(base + qs(params));
-      try {
-        if (!res.ok) {
-          const text = await res.text();
-          return Promise.reject(new Error(text));
-        }
-        const contentType = res.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) return await res.json();
-        const text = await res.text();
-        if (text.trim().startsWith('<')) return [];
-        return JSON.parse(text);
-      } catch (e) {
-        return [];
-      }
+      const key = `${path}::filter::${JSON.stringify(params || {})}`;
+      const cached = _cacheGet(key);
+      if (cached) return cached;
+      return _withDedup(key, async () => {
+        const res = await fetch(base + qs(params));
+        const data = await _parseJson(res, []);
+        if (!Array.isArray(data) || data.length > 0) _cacheSet(key, path, data);
+        return data;
+      });
     }
   };
 }

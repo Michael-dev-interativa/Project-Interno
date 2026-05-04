@@ -9,12 +9,14 @@ export default function VirtualizedTable({
   width,
   renderRow
 }) {
+  if (!itemCount || itemCount <= 0) return null;
+
   return (
     <List
       height={height}
       itemCount={itemCount}
       itemSize={itemSize}
-      width={width}
+      width={width || '100%'}
       rowProps={{}}
     >
       {({ index, style }) => (
