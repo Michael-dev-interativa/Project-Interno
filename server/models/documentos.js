@@ -126,7 +126,7 @@ function jsonStringOrNull(v) {
   try { return JSON.stringify(v); } catch (e) { return null; }
 }
 
-async function listDocumentos(filter = {}, limit = 100) {
+async function listDocumentos(filter = {}, limit = 10000) {
   const res = await pool.query('SELECT * FROM documentos ORDER BY id DESC LIMIT $1', [limit]);
   return res.rows;
 }

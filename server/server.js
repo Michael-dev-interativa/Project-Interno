@@ -552,7 +552,7 @@ app.post('/api/documentos', async (req, res) => {
 
 app.get('/api/documentos', async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit || '200', 10);
+    const limit = parseInt(req.query.limit || '10000', 10);
     if (req.query.empreendimento_id) {
       const result = await pool.query('SELECT * FROM documentos WHERE empreendimento_id = $1 ORDER BY id DESC LIMIT $2', [req.query.empreendimento_id, limit]);
       console.log('GET /api/documentos for empreendimento_id=', req.query.empreendimento_id, 'rows=', result.rows.length);

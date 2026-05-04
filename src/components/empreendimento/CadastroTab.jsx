@@ -13,6 +13,8 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 // As etapas serão carregadas do empreendimento
 
 const DEFAULT_REVISOES = ["R00", "R01", "R02"];
+const ITEM_ROW_HEIGHT = 48;
+const ITEM_DISC_HEADER_HEIGHT = 44;
 
 // Memoized date cell — prevents full grid re-render when one cell changes
 
@@ -156,6 +158,8 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
   const linhasRef = useRef([]);
   linhasRef.current = linhas; // always current, without useEffect
   const scrollRafFolhas = useRef(null);
+  const virtualViewportRef = useRef(600);
+  const [virtualScrollTop, setVirtualScrollTop] = useState(0);
 
   useEffect(() => {
     if (!empreendimento?.id) return;
@@ -928,6 +932,56 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
     [ETAPAS_VIEW, etapasExcluidas]
   );
 
+  // Virtual scroll: flatten all items (discipline headers + rows) with pre-computed offsets
+  const flatItems = useMemo(() => {
+    const items = [];
+    linhasPorDisciplina.forEach(([disciplina, rows]) => {
+      items.push({ type: 'header', disciplina, count: rows.length });
+      rows.forEach(linha => items.push({ type: 'row', linha }));
+    });
+    return items;
+  }, [linhasPorDisciplina]);
+
+  const itemOffsets = useMemo(() => {
+    const offsets = new Array(flatItems.length);
+    let offset = 0;
+    flatItems.forEach((item, i) => {
+      offsets[i] = offset;
+      offset += item.type === 'header' ? ITEM_DISC_HEADER_HEIGHT : ITEM_ROW_HEIGHT;
+    });
+    return offsets;
+  }, [flatItems]);
+
+  const totalVirtualHeight = useMemo(() => {
+    if (!flatItems.length) return 0;
+    return (itemOffsets[flatItems.length - 1] ?? 0) +
+      (flatItems[flatItems.length - 1].type === 'header' ? ITEM_DISC_HEADER_HEIGHT : ITEM_ROW_HEIGHT);
+  }, [flatItems, itemOffsets]);
+
+  const { visibleItems, paddingTop, paddingBottom } = useMemo(() => {
+    if (!flatItems.length) return { visibleItems: [], paddingTop: 0, paddingBottom: 0 };
+    const overscan = 8;
+    const vpHeight = virtualViewportRef.current || 600;
+    const topLimit = Math.max(0, virtualScrollTop - overscan * ITEM_ROW_HEIGHT);
+    const bottomLimit = virtualScrollTop + vpHeight + overscan * ITEM_ROW_HEIGHT;
+
+    let start = 0;
+    for (let i = 0; i < flatItems.length; i++) {
+      const itemBottom = itemOffsets[i] + (flatItems[i].type === 'header' ? ITEM_DISC_HEADER_HEIGHT : ITEM_ROW_HEIGHT);
+      if (itemBottom > topLimit) { start = i; break; }
+    }
+    let end = flatItems.length - 1;
+    for (let i = start; i < flatItems.length; i++) {
+      if (itemOffsets[i] > bottomLimit) { end = Math.min(i, flatItems.length - 1); break; }
+    }
+
+    const pTop = itemOffsets[start] ?? 0;
+    const lastBottom = (itemOffsets[end] ?? 0) + (flatItems[end]?.type === 'header' ? ITEM_DISC_HEADER_HEIGHT : ITEM_ROW_HEIGHT);
+    const pBottom = Math.max(0, totalVirtualHeight - lastBottom);
+
+    return { visibleItems: flatItems.slice(start, end + 1), paddingTop: pTop, paddingBottom: pBottom };
+  }, [virtualScrollTop, flatItems, itemOffsets, totalVirtualHeight]);
+
   const handleDragEndEtapas = (result) => {
     if (!result.destination) return;
     const etapasParaOrdenar = ETAPAS_VIEW.filter(e => !etapasExcluidas.includes(e));
@@ -1295,53 +1349,46 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
                   Nenhum documento cadastrado neste empreendimento. Cadastre documentos na aba "Documentos" primeiro.
                 </div>
               ) : (
-                linhasPorDisciplina.map(([disciplina, linhasDaDisciplina]) => (
-                  <div key={disciplina}>
-                    {/* Cabeçalho da Disciplina */}
-                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-300 px-2 flex items-center" style={{ height: '44px' }}>
-                      <div className="flex items-center gap-1.5 w-full">
-                        <div className="w-1 h-5 bg-blue-600 rounded-full"></div>
-                        <h3 className="font-semibold text-sm text-gray-800">{disciplina}</h3>
-                        <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
-                          {linhasDaDisciplina.length}
-                        </Badge>
-                      </div>
-                    </div>
-
-                    {/* Folhas da Disciplina */}
-                    {linhasDaDisciplina.map((linha) => {
-                      const doc = docMap.get(linha.documento_id);
+                <div style={{ paddingTop: `${paddingTop}px`, paddingBottom: `${paddingBottom}px`, minHeight: `${totalVirtualHeight}px` }}>
+                  {visibleItems.map((item) => {
+                    if (item.type === 'header') {
                       return (
-                        <div
-                          key={linha.id}
-                          className="border-b border-gray-200 px-2 hover:bg-gray-100 transition-colors flex items-center"
-                          style={{ height: '48px' }}
-                        >
+                        <div key={item.disciplina} className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-300 px-2 flex items-center" style={{ height: `${ITEM_DISC_HEADER_HEIGHT}px` }}>
                           <div className="flex items-center gap-1.5 w-full">
-                            {!readOnly && (
-                              <input
-                                type="checkbox"
-                                checked={selectedFolhas.has(linha.id)}
-                                onChange={() => toggleSelectFolha(linha.id)}
-                                className="w-3 h-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer flex-shrink-0"
-                              />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-xs text-gray-900 truncate" title={doc?.arquivo || doc?.numero || 'Sem folha'}>
-                                {doc?.arquivo || doc?.numero || 'Sem folha'}
-                              </div>
-                              {doc?.descritivo && (
-                                <div className="text-xs text-gray-500 mt-0.5 line-clamp-1" title={doc.descritivo}>
-                                  {doc.descritivo}
-                                </div>
-                              )}
-                            </div>
+                            <div className="w-1 h-5 bg-blue-600 rounded-full"></div>
+                            <h3 className="font-semibold text-sm text-gray-800">{item.disciplina}</h3>
+                            <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">{item.count}</Badge>
                           </div>
                         </div>
                       );
-                    })}
-                  </div>
-                ))
+                    }
+                    const doc = docMap.get(item.linha.documento_id);
+                    return (
+                      <div key={item.linha.id} className="border-b border-gray-200 px-2 hover:bg-gray-100 transition-colors flex items-center" style={{ height: `${ITEM_ROW_HEIGHT}px` }}>
+                        <div className="flex items-center gap-1.5 w-full">
+                          {!readOnly && (
+                            <input
+                              type="checkbox"
+                              checked={selectedFolhas.has(item.linha.id)}
+                              onChange={() => toggleSelectFolha(item.linha.id)}
+                              className="w-3 h-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer flex-shrink-0"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-xs text-gray-900 truncate" title={doc?.arquivo || doc?.numero || 'Sem folha'}>
+                              {doc?.arquivo || doc?.numero || 'Sem folha'}
+                            </div>
+                            {doc?.descritivo && (
+                              <div className="text-xs text-gray-500 mt-0.5 line-clamp-1" title={doc.descritivo}>
+                                {doc.descritivo}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
@@ -1353,11 +1400,11 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
               className="flex-1 overflow-x-auto overflow-y-auto"
               onScroll={(e) => {
                 const scrollTop = e.currentTarget.scrollTop;
+                virtualViewportRef.current = e.currentTarget.clientHeight;
                 if (scrollRafFolhas.current) cancelAnimationFrame(scrollRafFolhas.current);
                 scrollRafFolhas.current = requestAnimationFrame(() => {
-                  if (folhasScrollRef.current) {
-                    folhasScrollRef.current.scrollTop = scrollTop;
-                  }
+                  if (folhasScrollRef.current) folhasScrollRef.current.scrollTop = scrollTop;
+                  setVirtualScrollTop(scrollTop);
                 });
               }}
             >
@@ -1480,50 +1527,42 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
                   </DragDropContext>
                 </div>
 
-                {/* Área de Dados */}
+                {/* Área de Dados — virtual scroll */}
                 <div style={{ minWidth: `${larguraTotalEtapas}px` }}>
               {linhas.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">
                   Nenhum documento cadastrado
                 </div>
               ) : (
-                <>
-                  {linhasPorDisciplina.map(([disciplina, linhasDaDisciplina]) => (
-                    <div key={disciplina}>
-                      {/* Cabeçalho da disciplina */}
-                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-300 flex" style={{ minWidth: `${larguraTotalEtapas}px`, height: '44px' }}>
-                        {ETAPAS_VIEW.filter(e => !etapasExcluidas.includes(e)).map((etapa) => {
-                          const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
-                          const isMinimizada = etapasMinimizadas[etapa];
-                          return (
-                            <div
-                              key={`${disciplina}-${etapa}`}
-                              className="border-r border-gray-200 flex-shrink-0"
-                              style={{
-                                width: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`,
-                                minWidth: isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`
-                              }}
-                            ></div>
-                          );
-                        })}
-                      </div>
-                      {/* Linhas da disciplina */}
-                      {linhasDaDisciplina.map((linha) => (
-                        <DataRow
-                          key={linha.id}
-                          linha={linha}
-                          etapasVisiveis={etapasVisiveis}
-                          revisoesPorEtapa={revisoesPorEtapa}
-                          etapasMinimizadas={etapasMinimizadas}
-                          larguraTotalEtapas={larguraTotalEtapas}
-                          readOnly={readOnly}
-                          onUpdate={handleUpdateData}
-                          onCopy={copiarDataParaBaixo}
-                        />
-                      ))}
-                    </div>
-                  ))}
-                </>
+                <div style={{ paddingTop: `${paddingTop}px`, paddingBottom: `${paddingBottom}px`, minHeight: `${totalVirtualHeight}px`, minWidth: `${larguraTotalEtapas}px` }}>
+                  {visibleItems.map((item) => {
+                    if (item.type === 'header') {
+                      return (
+                        <div key={item.disciplina} className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-300 flex" style={{ minWidth: `${larguraTotalEtapas}px`, height: `${ITEM_DISC_HEADER_HEIGHT}px` }}>
+                          {etapasVisiveis.map((etapa) => {
+                            const revisoesEtapa = revisoesPorEtapa[etapa] || DEFAULT_REVISOES;
+                            const isMinimizada = etapasMinimizadas[etapa];
+                            const w = isMinimizada ? '40px' : `${(revisoesEtapa.length * 110) + 40}px`;
+                            return <div key={`${item.disciplina}-${etapa}`} className="border-r border-gray-200 flex-shrink-0" style={{ width: w, minWidth: w }}></div>;
+                          })}
+                        </div>
+                      );
+                    }
+                    return (
+                      <DataRow
+                        key={item.linha.id}
+                        linha={item.linha}
+                        etapasVisiveis={etapasVisiveis}
+                        revisoesPorEtapa={revisoesPorEtapa}
+                        etapasMinimizadas={etapasMinimizadas}
+                        larguraTotalEtapas={larguraTotalEtapas}
+                        readOnly={readOnly}
+                        onUpdate={handleUpdateData}
+                        onCopy={copiarDataParaBaixo}
+                      />
+                    );
+                  })}
+                </div>
               )}
                 </div>
               </div>
