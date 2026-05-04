@@ -542,3 +542,9 @@ COMMENT ON COLUMN controle_os.monitoramento IS 'Status de monitoramento com brie
 COMMENT ON COLUMN controle_os.avanco IS 'Lista de itens de avanço do projeto';
 COMMENT ON COLUMN controle_os.observacoes IS 'Observações gerais';
 
+
+
+-- Idempotent column additions (safe to run multiple times)
+ALTER TABLE equipes ADD COLUMN IF NOT EXISTS cor VARCHAR(50) DEFAULT '#3B82F6';
+ALTER TABLE equipes ADD COLUMN IF NOT EXISTS descricao TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS equipe_id INTEGER REFERENCES equipes(id) ON DELETE SET NULL;
