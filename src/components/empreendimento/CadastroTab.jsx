@@ -155,10 +155,7 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
   const dataScrollRef = useRef(null);
   const linhasRef = useRef([]);
   linhasRef.current = linhas; // always current, without useEffect
-  const isSyncingFolhas = useRef(false);
-  const isSyncingData = useRef(false);
   const scrollRafFolhas = useRef(null);
-  const scrollRafData = useRef(null);
 
   useEffect(() => {
     if (!empreendimento?.id) return;
@@ -1291,19 +1288,7 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
             {/* Lista de Folhas */}
             <div 
               ref={folhasScrollRef}
-              className="flex-1 overflow-y-auto"
-              onScroll={(e) => {
-                if (isSyncingFolhas.current) return;
-                const scrollTop = e.currentTarget.scrollTop;
-                if (scrollRafData.current) cancelAnimationFrame(scrollRafData.current);
-                scrollRafData.current = requestAnimationFrame(() => {
-                  if (dataScrollRef.current) {
-                    isSyncingData.current = true;
-                    dataScrollRef.current.scrollTop = scrollTop;
-                    isSyncingData.current = false;
-                  }
-                });
-              }}
+              className="flex-1 overflow-y-hidden"
             >
               {linhas.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">
@@ -1367,14 +1352,11 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
               ref={dataScrollRef}
               className="flex-1 overflow-x-auto overflow-y-auto"
               onScroll={(e) => {
-                if (isSyncingData.current) return;
                 const scrollTop = e.currentTarget.scrollTop;
                 if (scrollRafFolhas.current) cancelAnimationFrame(scrollRafFolhas.current);
                 scrollRafFolhas.current = requestAnimationFrame(() => {
                   if (folhasScrollRef.current) {
-                    isSyncingFolhas.current = true;
                     folhasScrollRef.current.scrollTop = scrollTop;
-                    isSyncingFolhas.current = false;
                   }
                 });
               }}
