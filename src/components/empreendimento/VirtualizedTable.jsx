@@ -1,6 +1,9 @@
-// VirtualizedTable.jsx
 import React from 'react';
 import { List } from 'react-window';
+
+function RowRenderer({ index, style, renderRow }) {
+  return <div style={style}>{renderRow(index)}</div>;
+}
 
 export default function VirtualizedTable({
   height,
@@ -13,17 +16,15 @@ export default function VirtualizedTable({
 
   return (
     <List
-      height={height}
-      itemCount={itemCount}
-      itemSize={itemSize}
-      width={width || '100%'}
-      rowProps={{}}
-    >
-      {({ index, style }) => (
-        <div style={style}>
-          {renderRow(index)}
-        </div>
-      )}
-    </List>
+      rowCount={itemCount}
+      rowHeight={itemSize}
+      rowComponent={RowRenderer}
+      rowProps={{ renderRow }}
+      style={{
+        height: typeof height === 'number' ? `${height}px` : height,
+        width: width || '100%',
+        overflowY: 'auto'
+      }}
+    />
   );
 }
