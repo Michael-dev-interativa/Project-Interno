@@ -5,6 +5,12 @@ const LOCAL_AUTH_TOKEN_KEY = 'project_auth_token';
 const WARMUP_LAST_SUCCESS_KEY = 'offline_warmup_last_success_at';
 const WARMUP_COOLDOWN_MS = 1000 * 60 * 15;
 
+// Mesma lógica de base URL usada em entities/all.js e base44Client.js
+const PROD_BACKEND = 'https://project-interno-rati.onrender.com';
+const _isLocalhost = typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+const API_ORIGIN = _isLocalhost ? '' : PROD_BACKEND;
+
 export const CRITICAL_ENDPOINTS = [
   { entity: 'empreendimentos', path: '/api/empreendimentos', listParams: { limit: 200, offset: 0 } },
   { entity: 'users', path: '/api/users', listParams: { limit: 200, offset: 0 } },
@@ -46,7 +52,7 @@ function shouldSkipWarmup() {
 
 async function fetchAndCacheEndpoint(definition) {
   const query = buildQuery(definition.listParams);
-  const url = `${definition.path}${query}`;
+  const url = `${API_ORIGIN}${definition.path}${query}`;
   const response = await fetch(url, {
     headers: {
       'Content-Type': 'application/json',
