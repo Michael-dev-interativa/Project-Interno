@@ -36,7 +36,7 @@ async function updateUser(id, fields = {}) {
   if ('email' in mapped) mapped.email = String(mapped.email || '').trim().toLowerCase();
 
   // only allow updating known columns
-  const allowed = new Set(['email', 'name', 'password_hash', 'role', 'datas_indisponiveis', 'usuarios_permitidos_visualizar']);
+  const allowed = new Set(['email', 'name', 'password_hash', 'role', 'equipe_id', 'datas_indisponiveis', 'usuarios_permitidos_visualizar']);
   const keys = Object.keys(mapped).filter(k => allowed.has(k));
   if (!keys.length) return getUserById(id);
   const sets = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');

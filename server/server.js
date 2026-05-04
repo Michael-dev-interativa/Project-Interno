@@ -382,7 +382,7 @@ app.get('/api/users', async (req, res) => {
       return res.json(out);
     }
     // fallback: return basic list from DB
-    const result = await pool.query('SELECT id, email, name, role, datas_indisponiveis, usuarios_permitidos_visualizar, created_at, updated_at FROM users ORDER BY id DESC LIMIT 200');
+    const result = await pool.query('SELECT id, email, name, role, equipe_id, datas_indisponiveis, usuarios_permitidos_visualizar, created_at, updated_at FROM users ORDER BY id DESC LIMIT 200');
     const rows = result.rows.map(r => ({
       ...r,
       nome: r.name,
@@ -1514,8 +1514,11 @@ app.get('/api/equipes/:id', async (req, res) => {
 
 app.post('/api/equipes', async (req, res) => {
   try {
-    const { nome, empreendimento_id } = req.body || {};
-    const result = await pool.query('INSERT INTO equipes (nome, empreendimento_id) VALUES ($1, $2) RETURNING *', [nome || null, empreendimento_id || null]);
+    const { nome, empreendimento_id, cor, descricao } = req.body || {};
+    const result = await pool.query(
+      'INSERT INTO equipes (nome, empreendimento_id, cor, descricao) VALUES ($1, $2, $3, $4) RETURNING *',
+      [nome || null, empreendimento_id || null, cor || '#3B82F6', descricao || null]
+    );
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Dialog, 
   DialogContent, 
+  DialogDescription,
   DialogHeader, 
   DialogTitle 
 } from "@/components/ui/dialog";
@@ -230,6 +231,7 @@ export default function EquipesManager() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingEquipe ? 'Editar Equipe' : 'Nova Equipe'}</DialogTitle>
+            <DialogDescription>Preencha os campos para {editingEquipe ? 'editar a' : 'criar uma nova'} equipe.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -287,6 +289,7 @@ export default function EquipesManager() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Membros da Equipe: {selectedEquipe?.nome}</DialogTitle>
+            <DialogDescription>Gerencie os membros desta equipe.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {/* Membros atuais */}
