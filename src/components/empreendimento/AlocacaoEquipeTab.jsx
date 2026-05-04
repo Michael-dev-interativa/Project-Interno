@@ -14,6 +14,7 @@ import { ptBR } from "date-fns/locale";
 import { PlanejamentoAtividade, PlanejamentoDocumento, Empreendimento, Documento, Equipe, Usuario, OSManual } from "@/entities/all";
 import { retryWithBackoff } from "../utils/apiUtils";
 import { base44 } from "@/api/base44Client";
+import ResumoAlocacaoTab from "../dashboard/ResumoAlocacaoTab";
 
 
 // Retorna o identificador curto do empreendimento (número da OS)
