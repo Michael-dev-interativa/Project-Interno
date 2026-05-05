@@ -1,5 +1,8 @@
 const { pool } = require('../db/pool');
 
+const ALLOWED_USER_FIELDS = new Set(['email', 'name', 'password_hash', 'role', 'equipe_id', 'datas_indisponiveis', 'usuarios_permitidos_visualizar']);
+const JSON_USER_FIELDS = new Set(['datas_indisponiveis', 'usuarios_permitidos_visualizar']);
+
 async function createUser(payload = {}) {
   const email = String(payload.email || '').trim().toLowerCase();
   const name = payload.name || payload.nome || null;
@@ -36,11 +39,10 @@ async function updateUser(id, fields = {}) {
   if ('email' in mapped) mapped.email = String(mapped.email || '').trim().toLowerCase();
 
   // only allow updating known columns
-  const allowed = new Set(['email', 'name', 'password_hash', 'role', 'equipe_id', 'datas_indisponiveis', 'usuarios_permitidos_visualizar']);
-  const keys = Object.keys(mapped).filter(k => allowed.has(k));
+  const keys = Object.keys(mapped).filter(k => ALLOWED_USER_FIELDS.has(k));
   if (!keys.length) return getUserById(id);
   const sets = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
-  const values = keys.map(k => mapped[k] && (k === 'datas_indisponiveis' || k === 'usuarios_permitidos_visualizar') ? JSON.stringify(mapped[k]) : mapped[k]);
+  const values = keys.map(k => JSON_USER_FIELDS.has(k) ? (mapped[k] != null ? JSON.stringify(mapped[k]) : null) : mapped[k]);
   const q = `UPDATE users SET ${sets}, updated_at = now() WHERE id = $${keys.length + 1} RETURNING *`;
   const res = await pool.query(q, [...values, id]);
   return res.rows[0] || null;

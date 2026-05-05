@@ -1,5 +1,8 @@
 const { pool } = require('../db/pool');
 
+const NUMERIC_FIELDS = new Set(['atividade_id', 'empreendimento_id', 'executor_id', 'tempo_planejado', 'tempo_executado']);
+const JSONB_FIELDS = new Set(['executores', 'horas_por_dia', 'horas_executadas_por_dia']);
+
 // Frontend uses 'descritivo'; DB column is 'titulo'. Expose both so all callers work.
 function mapRow(row) {
   if (!row) return row;
@@ -20,25 +23,19 @@ async function createPlanejamentoAtividade(data = {}) {
   const values = [];
   const params = [];
 
-  const numericFields = new Set(['atividade_id', 'empreendimento_id', 'executor_id', 'tempo_planejado', 'tempo_executado']);
-  const jsonFields = new Set(['executores', 'horas_por_dia', 'horas_executadas_por_dia']);
-
   cols.forEach((c) => {
     if (payload[c] !== undefined) {
       keys.push(c);
       let value = payload[c];
 
-      // Converter campos numéricos
-      if (numericFields.has(c)) {
+      if (NUMERIC_FIELDS.has(c)) {
         if (value === '' || value === null) {
           value = null;
         } else {
           const num = Number(value);
           value = Number.isFinite(num) ? num : null;
         }
-      }
-      // Converter campos JSON
-      else if (jsonFields.has(c) && typeof value === 'object') {
+      } else if (JSONB_FIELDS.has(c) && typeof value === 'object') {
         value = JSON.stringify(value);
       }
 
@@ -69,8 +66,16 @@ async function deletePlanejamento(id) {
 async function updatePlanejamento(id, fields = {}) {
   const keys = Object.keys(fields);
   if (!keys.length) return getPlanejamentoById(id);
-  const sets = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
-  const values = keys.map(k => fields[k]);
+
+  const sets = keys.map((k, i) =>
+    JSONB_FIELDS.has(k) ? `${k} = $${i + 1}::jsonb` : `${k} = $${i + 1}`
+  ).join(', ');
+
+  const values = keys.map(k => {
+    const v = fields[k];
+    return JSONB_FIELDS.has(k) ? (v != null ? JSON.stringify(v) : null) : v;
+  });
+
   const q = `UPDATE planejamento_atividades SET ${sets}, updated_at = now() WHERE id = $${keys.length + 1} RETURNING *`;
   const res = await pool.query(q, [...values, id]);
   return mapRow(res.rows[0] || null);

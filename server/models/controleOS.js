@@ -36,6 +36,8 @@ const FIELD_DESCRIPTIONS = {
   observacoes: 'Observações gerais'
 };
 
+const CREATE_COLS = [...UPDATABLE_FIELDS];
+
 function serializeField(key, value) {
   if (value === undefined) return null;
   if (JSON_FIELDS.has(key)) {
@@ -46,16 +48,9 @@ function serializeField(key, value) {
 }
 
 async function createControle(data) {
-  const cols = [
-    'empreendimento_id', 'os', 'gestao', 'formalizacao', 'cronograma', 'markup', 'abertura_os_servidor',
-    'atividades_planejamento', 'kickoff_cliente', 'art_ee_ais', 'art_hid_in', 'art_hvac', 'art_bomb',
-    'conc_telefonia', 'conc_gas', 'conc_eletrica', 'conc_hidraulica', 'conc_agua_pluvial', 'conc_incendio',
-    'atividades_vinculadas', 'planejamento', 'monitoramento', 'avanco', 'observacoes'
-  ];
-
-  const vals = cols.map(c => serializeField(c, data[c] !== undefined ? data[c] : (data.dados && data.dados[c] !== undefined ? data.dados[c] : null)));
+  const vals = CREATE_COLS.map(c => serializeField(c, data[c] !== undefined ? data[c] : (data.dados && data.dados[c] !== undefined ? data.dados[c] : null)));
   const placeholders = vals.map((_, i) => `$${i + 1}`).join(',');
-  const q = `INSERT INTO controle_os (${cols.join(',')}) VALUES (${placeholders}) RETURNING *`;
+  const q = `INSERT INTO controle_os (${CREATE_COLS.join(',')}) VALUES (${placeholders}) RETURNING *`;
   const res = await pool.query(q, vals);
   return res.rows[0];
 }
@@ -72,7 +67,7 @@ async function listControles(filter = {}, limit = 200) {
   const q = `SELECT * FROM controle_os ${where} ORDER BY id DESC LIMIT $${idx}`;
   vals.push(limit);
   const res = await pool.query(q, vals);
-  return res.rows.map(r => ({ ...r, atividades_vinculadas: r.atividades_vinculadas, planejamento: r.planejamento, monitoramento: r.monitoramento, avanco: r.avanco }));
+  return res.rows;
 }
 
 async function getById(id) {

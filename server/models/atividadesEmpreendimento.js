@@ -1,54 +1,35 @@
 const { pool } = require('../db/pool');
 
+const ALLOWED_UPDATE_FIELDS = new Set([
+  'id_atividade', 'empreendimento_id', 'documento_id', 'documento_id_original',
+  'etapa', 'disciplina', 'subdisciplina', 'atividade', 'predecessora', 'tempo',
+  'funcao', 'documento_ids', 'status_planejamento'
+]);
+
 async function createAtividadeEmp(fields) {
   const {
-    id_atividade,
-    empreendimento_id,
-    documento_id,
-    etapa,
-    disciplina,
-    subdisciplina,
-    atividade,
-    predecessora,
-    tempo,
-    funcao,
-    documento_ids,
-    status_planejamento,
+    id_atividade, empreendimento_id, documento_id, etapa, disciplina, subdisciplina,
+    atividade, predecessora, tempo, funcao, documento_ids, status_planejamento,
     documento_id_original
   } = fields || {};
 
-  try {
-    // ensure documento_id_original is set (preserve original association)
-    const documentoOrig = documento_id_original || documento_id || null;
-    const statusFinal = status_planejamento || 'nao_planejada';
+  // ensure documento_id_original is set (preserve original association)
+  const documentoOrig = documento_id_original || documento_id || null;
+  const statusFinal = status_planejamento || 'nao_planejada';
 
-    const res = await pool.query(
-      `INSERT INTO atividades_empreendimento (
-        id_atividade, empreendimento_id, documento_id, documento_id_original, etapa, disciplina, subdisciplina,
-        atividade, predecessora, tempo, funcao, documento_ids, status_planejamento
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13) RETURNING *`,
-      [
-        id_atividade || null,
-        empreendimento_id || null,
-        documento_id || null,
-        documentoOrig,
-        etapa || null,
-        disciplina || null,
-        subdisciplina || null,
-        atividade || null,
-        predecessora || null,
-        tempo == null ? null : Number(tempo),
-        funcao || null,
-        documento_ids ? JSON.stringify(documento_ids) : null,
-        statusFinal
-      ]
-    );
-    console.log('createAtividadeEmp inserted:', res.rows[0]);
-    return res.rows[0];
-  } catch (err) {
-    console.error('createAtividadeEmp error:', err, 'fields:', JSON.stringify(fields));
-    throw err;
-  }
+  const res = await pool.query(
+    `INSERT INTO atividades_empreendimento (
+      id_atividade, empreendimento_id, documento_id, documento_id_original, etapa, disciplina, subdisciplina,
+      atividade, predecessora, tempo, funcao, documento_ids, status_planejamento
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13) RETURNING *`,
+    [
+      id_atividade || null, empreendimento_id || null, documento_id || null, documentoOrig,
+      etapa || null, disciplina || null, subdisciplina || null, atividade || null,
+      predecessora || null, tempo == null ? null : Number(tempo), funcao || null,
+      documento_ids ? JSON.stringify(documento_ids) : null, statusFinal
+    ]
+  );
+  return res.rows[0];
 }
 
 async function listByFilter(filter = {}, limit = 500) {
@@ -71,7 +52,7 @@ async function getById(id) {
 }
 
 async function updateAtividadeEmp(id, fields = {}) {
-  const keys = Object.keys(fields);
+  const keys = Object.keys(fields).filter(k => ALLOWED_UPDATE_FIELDS.has(k));
   if (!keys.length) return getById(id);
   const sets = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
   const values = keys.map(k => fields[k]);

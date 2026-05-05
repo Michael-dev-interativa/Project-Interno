@@ -87,14 +87,11 @@ async function createExecucao(payload = {}) {
 }
 
 async function listExecucoesByPlanejamento(planejamentoId) {
-  // support both coluna names for backward compatibility
-  try {
-    const res = await pool.query('SELECT * FROM execucoes WHERE planejamento_id = $1 ORDER BY inicio DESC', [planejamentoId]);
-    return res.rows;
-  } catch (e) {
-    const res = await pool.query('SELECT * FROM execucoes WHERE planejamento_atividade_id = $1 ORDER BY data_execucao DESC', [planejamentoId]);
-    return res.rows;
-  }
+  const res = await pool.query(
+    'SELECT * FROM execucoes WHERE planejamento_id = $1 OR planejamento_atividade_id = $1 ORDER BY id DESC',
+    [planejamentoId]
+  );
+  return res.rows;
 }
 
 async function getExecucaoById(id) {
@@ -108,7 +105,7 @@ async function updateExecucao(id, fields = {}) {
   if (!keys.length) return getExecucaoById(id);
   const sets = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
   const values = keys.map(k => normalizedFields[k]);
-  const q = `UPDATE execucoes SET ${sets} WHERE id = $${keys.length + 1} RETURNING *`;
+  const q = `UPDATE execucoes SET ${sets}, updated_at = now() WHERE id = $${keys.length + 1} RETURNING *`;
   const res = await pool.query(q, [...values, id]);
   return res.rows[0] || null;
 }

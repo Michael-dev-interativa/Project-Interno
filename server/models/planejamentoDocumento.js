@@ -1,6 +1,7 @@
 const { pool } = require('../db/pool');
 
-// Inserção flexível de planejamento por documento, armazenando horas_por_dia e metadados
+const JSONB_FIELDS = new Set(['horas_por_dia', 'horas_executadas_por_dia', 'executores']);
+
 async function linkDocumentoToPlanejamento(payload = {}) {
   const cols = [
     'planejamento_atividade_id', 'documento_id', 'etapa', 'executor_principal', 'executores',
@@ -13,8 +14,9 @@ async function linkDocumentoToPlanejamento(payload = {}) {
   cols.forEach((c) => {
     if (payload[c] !== undefined) {
       keys.push(c);
-      values.push(payload[c]);
-      params.push(`$${params.length + 1}`);
+      const v = payload[c];
+      values.push(JSONB_FIELDS.has(c) ? (v != null ? JSON.stringify(v) : null) : v);
+      params.push(`$${params.length + 1}${JSONB_FIELDS.has(c) ? '::jsonb' : ''}`);
     }
   });
 
@@ -39,11 +41,8 @@ async function linkDocumentoToPlanejamento(payload = {}) {
     return res.rows[0];
   }
 
-  // Convert objects/arrays to JSON where appropriate
-  const converted = values.map((v) => (typeof v === 'object' ? JSON.stringify(v) : v));
-
   const q = `INSERT INTO planejamento_documentos (${keys.join(',')}) VALUES (${params.join(',')}) RETURNING *`;
-  const res = await pool.query(q, converted);
+  const res = await pool.query(q, values);
   return res.rows[0];
 }
 
@@ -61,10 +60,13 @@ async function updateById(id, fields = {}) {
   const keys = Object.keys(fields || {});
   if (!keys.length) return (await pool.query('SELECT * FROM planejamento_documentos WHERE id = $1', [id])).rows[0] || null;
 
-  const sets = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
+  const sets = keys.map((k, i) =>
+    JSONB_FIELDS.has(k) ? `${k} = $${i + 1}::jsonb` : `${k} = $${i + 1}`
+  ).join(', ');
+
   const values = keys.map(k => {
     const v = fields[k];
-    return typeof v === 'object' ? JSON.stringify(v) : v;
+    return JSONB_FIELDS.has(k) ? (v != null ? JSON.stringify(v) : null) : v;
   });
 
   const q = `UPDATE planejamento_documentos SET ${sets} WHERE id = $${keys.length + 1} RETURNING *`;

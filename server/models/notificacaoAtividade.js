@@ -8,7 +8,7 @@ async function createNotificacao({ planejamento_atividade_id, tipo, payload }) {
   return res.rows[0];
 }
 
-async function listNotificacoes(usuarioId, limit = 100) {
+async function listNotificacoes(limit = 100) {
   const res = await pool.query('SELECT * FROM notificacoes_atividade ORDER BY id DESC LIMIT $1', [limit]);
   return res.rows;
 }

@@ -40,7 +40,7 @@ function sanitizeChecklistPayload(payload = {}) {
       if (value === undefined || value === null) {
         value = [];
       } else if (!Array.isArray(value)) {
-        value = Array.isArray(value) ? value : [value];
+        value = [value];
       }
     }
 

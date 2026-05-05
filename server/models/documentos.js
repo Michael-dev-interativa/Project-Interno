@@ -1,5 +1,26 @@
 const { pool } = require('../db/pool');
 
+const ALLOWED_DOC_COLUMNS = new Set([
+  'titulo', 'numero', 'tipo', 'arquivo', 'caminho', 'descritivo', 'area',
+  'executor_principal', 'multiplos_executores', 'inicio_planejado', 'termino_planejado',
+  'predecessora_id', 'pavimento_id', 'disciplina_id', 'disciplinas', 'subdisciplinas',
+  'escala', 'fator_dificuldade', 'empreendimento_id',
+  'tempo_total', 'tempo_estudo_preliminar', 'tempo_ante_projeto',
+  'tempo_projeto_basico', 'tempo_projeto_executivo', 'tempo_liberado_obra',
+  'tempo_concepcao', 'tempo_planejamento', 'tempo_execucao_total'
+]);
+
+const NUMERIC_DOC_COLUMNS = new Set([
+  'predecessora_id', 'pavimento_id', 'disciplina_id', 'fator_dificuldade', 'empreendimento_id',
+  'tempo_total', 'tempo_estudo_preliminar', 'tempo_ante_projeto',
+  'tempo_projeto_basico', 'tempo_projeto_executivo', 'tempo_liberado_obra',
+  'tempo_concepcao', 'tempo_planejamento', 'tempo_execucao_total'
+]);
+
+const BOOLEAN_DOC_COLUMNS = new Set(['multiplos_executores']);
+
+const JSON_DOC_COLUMNS = new Set(['disciplinas', 'subdisciplinas']);
+
 async function createDocumento(fields) {
   const {
     titulo,
@@ -137,28 +158,7 @@ async function getDocumentoById(id) {
 }
 
 async function updateDocumento(id, fields = {}) {
-  const allowedColumns = new Set([
-    'titulo', 'numero', 'tipo', 'arquivo', 'caminho', 'descritivo', 'area',
-    'executor_principal', 'multiplos_executores', 'inicio_planejado', 'termino_planejado',
-    'predecessora_id', 'pavimento_id', 'disciplina_id', 'disciplinas', 'subdisciplinas',
-    'escala', 'fator_dificuldade', 'empreendimento_id',
-    'tempo_total', 'tempo_estudo_preliminar', 'tempo_ante_projeto',
-    'tempo_projeto_basico', 'tempo_projeto_executivo', 'tempo_liberado_obra',
-    'tempo_concepcao', 'tempo_planejamento', 'tempo_execucao_total'
-  ]);
-
-  const numericColumns = new Set([
-    'predecessora_id', 'pavimento_id', 'disciplina_id', 'fator_dificuldade', 'empreendimento_id',
-    'tempo_total', 'tempo_estudo_preliminar', 'tempo_ante_projeto',
-    'tempo_projeto_basico', 'tempo_projeto_executivo', 'tempo_liberado_obra',
-    'tempo_concepcao', 'tempo_planejamento', 'tempo_execucao_total'
-  ]);
-
-  const booleanColumns = new Set(['multiplos_executores']);
-
-  const jsonColumns = new Set(['disciplinas', 'subdisciplinas']);
-
-  const entries = Object.entries(fields || {}).filter(([key]) => allowedColumns.has(key));
+  const entries = Object.entries(fields || {}).filter(([key]) => ALLOWED_DOC_COLUMNS.has(key));
   if (!entries.length) return getDocumentoById(id);
 
   const sets = [];
@@ -167,13 +167,13 @@ async function updateDocumento(id, fields = {}) {
 
   for (const [key, rawValue] of entries) {
     let value = rawValue;
-    if (jsonColumns.has(key)) {
+    if (JSON_DOC_COLUMNS.has(key)) {
       value = jsonStringOrNull(jsonOrNull(rawValue));
       sets.push(`${key} = $${idx}::jsonb`);
-    } else if (booleanColumns.has(key)) {
+    } else if (BOOLEAN_DOC_COLUMNS.has(key)) {
       value = toBooleanOrNull(rawValue);
       sets.push(`${key} = $${idx}`);
-    } else if (numericColumns.has(key)) {
+    } else if (NUMERIC_DOC_COLUMNS.has(key)) {
       value = toNumberOrNull(rawValue);
       sets.push(`${key} = $${idx}`);
     } else {
