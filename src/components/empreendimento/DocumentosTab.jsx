@@ -493,18 +493,8 @@ export default function DocumentosTab({
               subdisciplinasDoc.includes(a.subdisciplina)
             )
           : [];
-        // Atividades do projeto que combinam por disciplina/subdisciplina (sem link explícito a documento)
-        const projetoMatch = subdisciplinasDoc.length > 0 && disciplinasDoc.length > 0
-          ? projectAtividades.filter(pa =>
-              !pa.documento_id &&
-              !(Array.isArray(pa.documento_ids) && pa.documento_ids.length > 0) &&
-              !pa.id_atividade &&
-              disciplinasDoc.includes(pa.disciplina) &&
-              subdisciplinasDoc.includes(pa.subdisciplina)
-            )
-          : [];
         const seen = new Set();
-        const docAtividades = [...linked, ...catalog, ...projetoMatch].filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
+        const docAtividades = [...linked, ...catalog].filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
         if (!docAtividades.length) { semAtividades++; return; }
         const etapaTotais = {};
         let total = 0;
