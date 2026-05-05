@@ -71,6 +71,7 @@ export default function DocumentosTab({
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [importModoAtualizacao, setImportModoAtualizacao] = useState(false);
 
   const [isDocEtapaModalOpen, setIsDocEtapaModal] = useState(false);
   const [documentForDocEtapaModal, setDocumentForDocEtapaModal] = useState(null);
@@ -478,11 +479,13 @@ export default function DocumentosTab({
   const handleExportTemplate = () => {
     const etapasDisponiveis = ["ESTUDO PRELIMINAR", "ANTE-PROJETO", "PROJETO BÁSICO", "PROJETO EXECUTIVO", "LIBERADO PARA OBRA"];
     const revisoesDefault = ["R00", "R01", "R02"];
-    let headers = ['numero', 'arquivo', 'descritivo', 'pavimento_nome', 'disciplinas', 'subdisciplinas', 'escala', 'fator_dificuldade'];
+    const tempoHeaders = ['tempo_total', 'tempo_estudo_preliminar', 'tempo_ante_projeto', 'tempo_projeto_basico', 'tempo_projeto_executivo', 'tempo_liberado_obra'];
+    let headers = ['numero', 'arquivo', 'descritivo', 'pavimento_nome', 'disciplinas', 'subdisciplinas', 'escala', 'fator_dificuldade', ...tempoHeaders];
     etapasDisponiveis.forEach(etapa => revisoesDefault.forEach(rev => headers.push(`${etapa}_${rev}`)));
     const csvContent = [
       headers.join(';'),
       ['ARQ-01', 'Planta Baixa Terreo', 'Planta baixa do pavimento terreo', 'Terreo', 'Arquitetura', 'Planta,Compat', '125', '1',
+        '40', '8', '8', '12', '8', '4',
         ...etapasDisponiveis.flatMap(() => revisoesDefault.map(() => '15/01/2025'))].join(';')
     ].join('\n');
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -535,7 +538,9 @@ export default function DocumentosTab({
 
         const datas = {};
         headers.forEach(header => {
-          if (['numero', 'arquivo', 'descritivo', 'pavimento_nome', 'disciplinas', 'subdisciplinas', 'escala', 'fator_dificuldade'].includes(header)) return;
+          if (['numero', 'arquivo', 'descritivo', 'pavimento_nome', 'disciplinas', 'subdisciplinas', 'escala', 'fator_dificuldade',
+          'tempo_total', 'tempo_concepcao', 'tempo_planejamento', 'tempo_estudo_preliminar', 'tempo_ante_projeto',
+          'tempo_projeto_basico', 'tempo_projeto_executivo', 'tempo_liberado_obra'].includes(header)) return;
           const data = row[header];
           if (!data) return;
           const parts = header.split('_');
@@ -558,9 +563,14 @@ export default function DocumentosTab({
           escala: row.escala ? parseFloat(row.escala) : null,
           fator_dificuldade: row.fator_dificuldade ? parseFloat(row.fator_dificuldade) : 1,
           pavimento_id: pavimento?.id || null, empreendimento_id: empreendimento.id,
-          tempo_total: 0, tempo_concepcao: 0, tempo_planejamento: 0,
-          tempo_estudo_preliminar: 0, tempo_ante_projeto: 0, tempo_projeto_basico: 0,
-          tempo_projeto_executivo: 0, tempo_liberado_obra: 0,
+          tempo_total: row.tempo_total ? parseFloat(row.tempo_total) : null,
+          tempo_concepcao: row.tempo_concepcao ? parseFloat(row.tempo_concepcao) : null,
+          tempo_planejamento: row.tempo_planejamento ? parseFloat(row.tempo_planejamento) : null,
+          tempo_estudo_preliminar: row.tempo_estudo_preliminar ? parseFloat(row.tempo_estudo_preliminar) : null,
+          tempo_ante_projeto: row.tempo_ante_projeto ? parseFloat(row.tempo_ante_projeto) : null,
+          tempo_projeto_basico: row.tempo_projeto_basico ? parseFloat(row.tempo_projeto_basico) : null,
+          tempo_projeto_executivo: row.tempo_projeto_executivo ? parseFloat(row.tempo_projeto_executivo) : null,
+          tempo_liberado_obra: row.tempo_liberado_obra ? parseFloat(row.tempo_liberado_obra) : null,
           datas: Object.keys(datas).length > 0 ? datas : null
         });
       }
@@ -568,13 +578,32 @@ export default function DocumentosTab({
       if (erros.length > 0) alert(`Erros encontrados:\n${erros.join('\n')}`);
       if (documentosParaImportar.length === 0) { alert('Nenhum documento válido encontrado'); return; }
 
-      let sucessos = 0, falhas = 0;
+      const TEMPO_FIELDS = ['tempo_total', 'tempo_concepcao', 'tempo_planejamento',
+        'tempo_estudo_preliminar', 'tempo_ante_projeto', 'tempo_projeto_basico',
+        'tempo_projeto_executivo', 'tempo_liberado_obra'];
+
+      let sucessos = 0, falhas = 0, atualizados = 0;
       const documentosCriados = [];
+
       for (const doc of documentosParaImportar) {
+        const existing = importModoAtualizacao
+          ? localDocumentos.find(d => d.numero === doc.numero && String(d.empreendimento_id) === String(empreendimento.id))
+          : null;
         try {
-          const docCriado = await retryWithBackoff(() => Documento.create(doc), 3, 1000, `importDoc-${doc.numero}`);
-          documentosCriados.push({ original: doc, criado: docCriado });
-          sucessos++;
+          if (existing) {
+            const updatePayload = {};
+            TEMPO_FIELDS.forEach(f => { if (doc[f] != null) updatePayload[f] = doc[f]; });
+            if (doc.disciplinas?.length) updatePayload.disciplinas = doc.disciplinas;
+            if (doc.subdisciplinas?.length) updatePayload.subdisciplinas = doc.subdisciplinas;
+            if (doc.escala != null) updatePayload.escala = doc.escala;
+            const updated = await retryWithBackoff(() => Documento.update(existing.id, updatePayload), 3, 1000, `updateDoc-${existing.id}`);
+            handleLocalUpdate(updated);
+            atualizados++;
+          } else {
+            const docCriado = await retryWithBackoff(() => Documento.create(doc), 3, 1000, `importDoc-${doc.numero}`);
+            documentosCriados.push({ original: doc, criado: docCriado });
+            sucessos++;
+          }
         } catch (error) { falhas++; }
       }
 
@@ -592,10 +621,13 @@ export default function DocumentosTab({
         }
       }
 
-      let mensagem = `Importação concluída!\n\nDocumentos: ${sucessos} sucessos, ${falhas} falhas`;
+      let mensagem = importModoAtualizacao
+        ? `Atualização concluída!\n\nDocumentos atualizados: ${atualizados}${sucessos > 0 ? `\nNovos documentos criados: ${sucessos}` : ''}${falhas > 0 ? `\nFalhas: ${falhas}` : ''}`
+        : `Importação concluída!\n\nDocumentos: ${sucessos} sucessos, ${falhas} falhas`;
       if (sucessosCadastro > 0 || falhasCadastro > 0) mensagem += `\nDatas de Cadastro: ${sucessosCadastro} sucessos, ${falhasCadastro} falhas`;
       alert(mensagem);
-      if (sucessos > 0) { await onUpdate(); setShowImportModal(false); setImportFile(null); }
+      if (sucessos > 0) { await onUpdate(); }
+      if (atualizados > 0 || sucessos > 0) { setShowImportModal(false); setImportFile(null); setImportModoAtualizacao(false); }
     } catch (error) {
       alert(`Erro ao processar arquivo: ${error.message}`);
     } finally {
@@ -1090,6 +1122,17 @@ export default function DocumentosTab({
                 <input type="file" accept=".csv" onChange={(e) => setImportFile(e.target.files?.[0] || null)} className="w-full" />
                 {importFile && <p className="text-sm text-green-600 mt-2">✓ Arquivo selecionado: {importFile.name}</p>}
               </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={importModoAtualizacao}
+                  onChange={e => setImportModoAtualizacao(e.target.checked)}
+                  className="w-4 h-4 accent-blue-600"
+                />
+                <span className="text-sm text-gray-700">
+                  Atualizar documentos existentes (por número) — use para corrigir horas e outros campos
+                </span>
+              </label>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => { setShowImportModal(false); setImportFile(null); }} disabled={isImporting}>Cancelar</Button>
                 <Button onClick={handleImport} disabled={!importFile || isImporting} className="bg-green-600 hover:bg-green-700">
