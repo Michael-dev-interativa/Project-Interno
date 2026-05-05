@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState, useEffect, useMemo, useCallback, useRef, useContext, startTransition } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, useContext } from 'react';
 import { ActivityTimerContext } from '@/components/contexts/ActivityTimerContext';
 import { Documento, Disciplina, Atividade, Execucao, Usuario, PlanejamentoAtividade, PlanejamentoDocumento, DataCadastro } from "@/entities/all";
 import { base44 } from '@/api/base44Client';
@@ -103,7 +103,6 @@ export default function DocumentosTab({
     }
   }, []);
   const [disciplinasMinimizadas, setDisciplinasMinimizadas] = useState({});
-  const hasAutoExpanded = useRef(false);
 
   const filteredDocumentos = useMemo(() => {
     let filtered = localDocumentos.filter(doc =>
@@ -125,14 +124,6 @@ export default function DocumentosTab({
     });
     return Object.entries(grupos).sort((a, b) => a[0].localeCompare(b[0]));
   }, [filteredDocumentos]);
-
-  useEffect(() => {
-    if (hasAutoExpanded.current || !documentosPorDisciplina?.length) return;
-    hasAutoExpanded.current = true;
-    const allExpanded = {};
-    documentosPorDisciplina.forEach(([disciplina]) => { allExpanded[disciplina] = false; });
-    startTransition(() => setDisciplinasMinimizadas(allExpanded));
-  }, [documentosPorDisciplina]);
 
   // Recarregar planejamentos quando triggerUpdate for chamado (ex: após execução/pause/finish)
   const reloadPlanejamentos = useCallback(async () => {
