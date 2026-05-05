@@ -159,6 +159,7 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
   linhasRef.current = linhas; // always current, without useEffect
   const scrollRafFolhas = useRef(null);
   const virtualViewportRef = useRef(600);
+  const lastScrollTopRef = useRef(0);
   const [virtualScrollTop, setVirtualScrollTop] = useState(0);
 
   useEffect(() => {
@@ -965,19 +966,26 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
     const topLimit = Math.max(0, virtualScrollTop - overscan * ITEM_ROW_HEIGHT);
     const bottomLimit = virtualScrollTop + vpHeight + overscan * ITEM_ROW_HEIGHT;
 
-    let start = 0;
-    for (let i = 0; i < flatItems.length; i++) {
-      const itemBottom = itemOffsets[i] + (flatItems[i].type === 'header' ? ITEM_DISC_HEADER_HEIGHT : ITEM_ROW_HEIGHT);
-      if (itemBottom > topLimit) { start = i; break; }
+    // Binary search for start index
+    let lo = 0, hi = flatItems.length - 1, start = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const h = flatItems[mid].type === 'header' ? ITEM_DISC_HEADER_HEIGHT : ITEM_ROW_HEIGHT;
+      if (itemOffsets[mid] + h <= topLimit) lo = mid + 1;
+      else { start = mid; hi = mid - 1; }
     }
-    let end = flatItems.length - 1;
-    for (let i = start; i < flatItems.length; i++) {
-      if (itemOffsets[i] > bottomLimit) { end = Math.min(i, flatItems.length - 1); break; }
+
+    // Binary search for end index
+    let lo2 = start, hi2 = flatItems.length - 1, end = flatItems.length - 1;
+    while (lo2 <= hi2) {
+      const mid = (lo2 + hi2) >> 1;
+      if (itemOffsets[mid] <= bottomLimit) lo2 = mid + 1;
+      else { end = mid; hi2 = mid - 1; }
     }
 
     const pTop = itemOffsets[start] ?? 0;
-    const lastBottom = (itemOffsets[end] ?? 0) + (flatItems[end]?.type === 'header' ? ITEM_DISC_HEADER_HEIGHT : ITEM_ROW_HEIGHT);
-    const pBottom = Math.max(0, totalVirtualHeight - lastBottom);
+    const lastH = flatItems[end]?.type === 'header' ? ITEM_DISC_HEADER_HEIGHT : ITEM_ROW_HEIGHT;
+    const pBottom = Math.max(0, totalVirtualHeight - (itemOffsets[end] ?? 0) - lastH);
 
     return { visibleItems: flatItems.slice(start, end + 1), paddingTop: pTop, paddingBottom: pBottom };
   }, [virtualScrollTop, flatItems, itemOffsets, totalVirtualHeight]);
@@ -1340,9 +1348,10 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
             </div>
 
             {/* Lista de Folhas */}
-            <div 
+            <div
               ref={folhasScrollRef}
               className="flex-1 overflow-y-hidden"
+              style={{ willChange: 'transform' }}
             >
               {linhas.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">
@@ -1395,16 +1404,21 @@ export default function CadastroTab({ empreendimento, readOnly = false }) {
 
           {/* Container de Etapas com Scroll Horizontal - 80% */}
           <div className="w-[80%] flex flex-col overflow-hidden">
-            <div 
+            <div
               ref={dataScrollRef}
               className="flex-1 overflow-x-auto overflow-y-auto"
+              style={{ willChange: 'transform' }}
               onScroll={(e) => {
-                const scrollTop = e.currentTarget.scrollTop;
-                virtualViewportRef.current = e.currentTarget.clientHeight;
+                const el = e.currentTarget;
                 if (scrollRafFolhas.current) cancelAnimationFrame(scrollRafFolhas.current);
                 scrollRafFolhas.current = requestAnimationFrame(() => {
+                  const scrollTop = el.scrollTop;
+                  virtualViewportRef.current = el.clientHeight;
                   if (folhasScrollRef.current) folhasScrollRef.current.scrollTop = scrollTop;
-                  setVirtualScrollTop(scrollTop);
+                  if (Math.abs(scrollTop - lastScrollTopRef.current) >= ITEM_ROW_HEIGHT) {
+                    lastScrollTopRef.current = scrollTop;
+                    setVirtualScrollTop(scrollTop);
+                  }
                 });
               }}
             >
