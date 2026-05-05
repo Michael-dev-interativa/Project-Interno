@@ -450,8 +450,20 @@ export default function DocumentosTab({
       'Projeto Básico': 'tempo_projeto_basico', 'Projeto Executivo': 'tempo_projeto_executivo',
       'Liberado para Obra': 'tempo_liberado_obra',
     };
-    const genericAtividades = (allAtividades || []).filter(a => !a.empreendimento_id && a.tempo !== -999);
-    const projectAtividades = (allAtividades || []).filter(a => a.empreendimento_id != null && a.tempo !== -999);
+    // Combinar allAtividades com atividadesEmpCache (fonte mais atualizada), sem duplicatas
+    const allAtividadesIds = new Set((allAtividades || []).map(a => a.id));
+    const allAtividadesCombined = [
+      ...(allAtividades || []),
+      ...(atividadesEmpCache || []).filter(a => !allAtividadesIds.has(a.id)),
+    ];
+    const genericAtividades = allAtividadesCombined.filter(a => !a.empreendimento_id && a.tempo !== -999);
+    const projectAtividades = allAtividadesCombined.filter(a => a.empreendimento_id != null && a.tempo !== -999);
+    // IDs de atividades genéricas excluídas globalmente para este projeto (tempo=-999, sem documento_id)
+    const excludedGlobalIds = new Set(
+      allAtividadesCombined
+        .filter(a => a.empreendimento_id != null && a.tempo === -999 && a.id_atividade && !a.documento_id)
+        .map(a => String(a.id_atividade))
+    );
     let atualizados = 0, semAtividades = 0, falhas = 0;
     const BATCH_SIZE = 20;
     for (let i = 0; i < localDocumentos.length; i += BATCH_SIZE) {
@@ -464,12 +476,35 @@ export default function DocumentosTab({
           (Array.isArray(pa.documento_ids) && pa.documento_ids.some(id => String(id) === String(doc.id)))
         );
         // IDs de atividades genéricas com override específico neste documento (evitar dupla contagem)
-        const idsComOverride = new Set(linked.filter(pa => pa.id_atividade).map(pa => pa.id_atividade));
+        // Usar String() para evitar type mismatch entre pa.id_atividade e a.id
+        const idsComOverride = new Set(linked.filter(pa => pa.id_atividade).map(pa => String(pa.id_atividade)));
+        // IDs excluídos especificamente para este documento
+        const excludedDocIds = new Set(
+          allAtividadesCombined
+            .filter(a => a.empreendimento_id != null && a.tempo === -999 && a.id_atividade && a.documento_id != null && String(a.documento_id) === String(doc.id))
+            .map(a => String(a.id_atividade))
+        );
         const catalog = subdisciplinasDoc.length > 0 && disciplinasDoc.length > 0
-          ? genericAtividades.filter(a => !idsComOverride.has(a.id) && disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina))
+          ? genericAtividades.filter(a =>
+              !idsComOverride.has(String(a.id)) &&
+              !excludedGlobalIds.has(String(a.id)) &&
+              !excludedDocIds.has(String(a.id)) &&
+              disciplinasDoc.includes(a.disciplina) &&
+              subdisciplinasDoc.includes(a.subdisciplina)
+            )
+          : [];
+        // Atividades do projeto que combinam por disciplina/subdisciplina (sem link explícito a documento)
+        const projetoMatch = subdisciplinasDoc.length > 0 && disciplinasDoc.length > 0
+          ? projectAtividades.filter(pa =>
+              !pa.documento_id &&
+              !(Array.isArray(pa.documento_ids) && pa.documento_ids.length > 0) &&
+              !pa.id_atividade &&
+              disciplinasDoc.includes(pa.disciplina) &&
+              subdisciplinasDoc.includes(pa.subdisciplina)
+            )
           : [];
         const seen = new Set();
-        const docAtividades = [...linked, ...catalog].filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
+        const docAtividades = [...linked, ...catalog, ...projetoMatch].filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
         if (!docAtividades.length) { semAtividades++; return; }
         const etapaTotais = {};
         let total = 0;
@@ -489,7 +524,7 @@ export default function DocumentosTab({
     }
     setIsRecalculandoTodas(false);
     alert(`Recálculo concluído!\n\nAtualizados: ${atualizados}\nSem atividades: ${semAtividades}\nFalhas: ${falhas}`);
-  }, [allAtividades, localDocumentos, handleLocalUpdate]);
+  }, [allAtividades, atividadesEmpCache, localDocumentos, handleLocalUpdate]);
 
   const handleSuccess = useCallback((savedDoc) => {
     if (savedDoc) {
