@@ -584,41 +584,47 @@ export default function DocumentosTab({
 
       let sucessos = 0, falhas = 0, atualizados = 0;
       const documentosCriados = [];
+      const BATCH_SIZE = 20;
 
-      for (const doc of documentosParaImportar) {
-        const existing = importModoAtualizacao
-          ? localDocumentos.find(d => d.numero === doc.numero && String(d.empreendimento_id) === String(empreendimento.id))
-          : null;
-        try {
-          if (existing) {
-            const updatePayload = {};
-            TEMPO_FIELDS.forEach(f => { if (doc[f] != null) updatePayload[f] = doc[f]; });
-            if (doc.disciplinas?.length) updatePayload.disciplinas = doc.disciplinas;
-            if (doc.subdisciplinas?.length) updatePayload.subdisciplinas = doc.subdisciplinas;
-            if (doc.escala != null) updatePayload.escala = doc.escala;
-            const updated = await retryWithBackoff(() => Documento.update(existing.id, updatePayload), 3, 1000, `updateDoc-${existing.id}`);
-            handleLocalUpdate(updated);
-            atualizados++;
-          } else {
-            const docCriado = await retryWithBackoff(() => Documento.create(doc), 3, 1000, `importDoc-${doc.numero}`);
-            documentosCriados.push({ original: doc, criado: docCriado });
-            sucessos++;
-          }
-        } catch (error) { falhas++; }
+      for (let i = 0; i < documentosParaImportar.length; i += BATCH_SIZE) {
+        const batch = documentosParaImportar.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(async (doc) => {
+          const existing = importModoAtualizacao
+            ? localDocumentos.find(d => d.numero === doc.numero && String(d.empreendimento_id) === String(empreendimento.id))
+            : null;
+          try {
+            if (existing) {
+              const updatePayload = {};
+              TEMPO_FIELDS.forEach(f => { if (doc[f] != null) updatePayload[f] = doc[f]; });
+              if (doc.disciplinas?.length) updatePayload.disciplinas = doc.disciplinas;
+              if (doc.subdisciplinas?.length) updatePayload.subdisciplinas = doc.subdisciplinas;
+              if (doc.escala != null) updatePayload.escala = doc.escala;
+              const updated = await Documento.update(existing.id, updatePayload);
+              handleLocalUpdate(updated);
+              atualizados++;
+            } else {
+              const docCriado = await Documento.create(doc);
+              documentosCriados.push({ original: doc, criado: docCriado });
+              sucessos++;
+            }
+          } catch (error) { falhas++; }
+        }));
       }
 
       let sucessosCadastro = 0, falhasCadastro = 0;
-      for (const { original, criado } of documentosCriados) {
-        if (original.datas && Object.keys(original.datas).length > 0) {
+      for (let i = 0; i < documentosCriados.length; i += BATCH_SIZE) {
+        const batch = documentosCriados.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(async ({ original, criado }) => {
+          if (!original.datas || !Object.keys(original.datas).length) return;
           try {
-            await retryWithBackoff(() => DataCadastro.create({
+            await DataCadastro.create({
               empreendimento_id: empreendimento.id,
-              ordem: documentosCriados.indexOf(documentosCriados.find(d => d.criado.id === criado.id)),
+              ordem: documentosCriados.findIndex(d => d.criado.id === criado.id),
               documento_id: criado.id, datas: original.datas
-            }), 3, 1000, `importCadastro-${criado.id}`);
+            });
             sucessosCadastro++;
           } catch (error) { falhasCadastro++; }
-        }
+        }));
       }
 
       let mensagem = importModoAtualizacao
