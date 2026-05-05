@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Search, ChevronDown, ChevronRight, FileText, Loader2, Upload, Download } from "lucide-react";
+import { Search, ChevronDown, ChevronRight, FileText, Loader2, Upload, Download, RefreshCw } from "lucide-react";
 import { Plus } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import DocumentoForm from "./DocumentoForm";
@@ -439,6 +439,56 @@ export default function DocumentosTab({
   // Mantém o ref sempre atualizado para o cascade usar sem criar dependência circular
   autoPlanejarRef.current = autoPlanejarAtividades;
 
+  const [isRecalculandoTodas, setIsRecalculandoTodas] = useState(false);
+
+  const handleRecalcularTodasHoras = useCallback(async () => {
+    if (!window.confirm(`Recalcular horas de todos os ${localDocumentos.length} documentos a partir das atividades vinculadas?\n\nIsso pode levar alguns segundos.`)) return;
+    setIsRecalculandoTodas(true);
+    const ETAPA_TEMPO_MAP = {
+      'Concepção': 'tempo_concepcao', 'Planejamento': 'tempo_planejamento',
+      'Estudo Preliminar': 'tempo_estudo_preliminar', 'Ante-Projeto': 'tempo_ante_projeto',
+      'Projeto Básico': 'tempo_projeto_basico', 'Projeto Executivo': 'tempo_projeto_executivo',
+      'Liberado para Obra': 'tempo_liberado_obra',
+    };
+    const genericAtividades = (allAtividades || []).filter(a => !a.empreendimento_id && a.tempo !== -999);
+    const projectAtividades = (allAtividades || []).filter(a => a.empreendimento_id != null && a.tempo !== -999);
+    let atualizados = 0, semAtividades = 0, falhas = 0;
+    const BATCH_SIZE = 20;
+    for (let i = 0; i < localDocumentos.length; i += BATCH_SIZE) {
+      const batch = localDocumentos.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(async (doc) => {
+        const disciplinasDoc = doc.disciplinas?.length > 0 ? doc.disciplinas : [doc.disciplina].filter(Boolean);
+        const subdisciplinasDoc = doc.subdisciplinas || [];
+        const linked = projectAtividades.filter(pa =>
+          (pa.documento_id != null && String(pa.documento_id) === String(doc.id)) ||
+          (Array.isArray(pa.documento_ids) && pa.documento_ids.some(id => String(id) === String(doc.id)))
+        );
+        const catalog = subdisciplinasDoc.length > 0 && disciplinasDoc.length > 0
+          ? genericAtividades.filter(a => disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina))
+          : [];
+        const seen = new Set();
+        const docAtividades = [...linked, ...catalog].filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
+        if (!docAtividades.length) { semAtividades++; return; }
+        const etapaTotais = {};
+        let total = 0;
+        docAtividades.forEach(a => {
+          if (!a.tempo || a.tempo <= 0) return;
+          total += a.tempo;
+          const campo = ETAPA_TEMPO_MAP[a.etapa];
+          if (campo) etapaTotais[campo] = (etapaTotais[campo] || 0) + a.tempo;
+        });
+        if (total === 0) { semAtividades++; return; }
+        try {
+          const updated = await Documento.update(doc.id, { tempo_total: total, ...etapaTotais });
+          handleLocalUpdate(updated);
+          atualizados++;
+        } catch (e) { falhas++; }
+      }));
+    }
+    setIsRecalculandoTodas(false);
+    alert(`Recálculo concluído!\n\nAtualizados: ${atualizados}\nSem atividades: ${semAtividades}\nFalhas: ${falhas}`);
+  }, [allAtividades, localDocumentos, handleLocalUpdate]);
+
   const handleSuccess = useCallback((savedDoc) => {
     if (savedDoc) {
       if (editingDocumento) {
@@ -463,11 +513,18 @@ export default function DocumentosTab({
         (doc.disciplinas || (doc.disciplina ? [doc.disciplina] : [])).join(', '),
         (doc.subdisciplinas || []).join(', '),
         doc.escala || '',
-        doc.fator_dificuldade || ''
+        doc.fator_dificuldade || '',
+        doc.tempo_total ?? '',
+        doc.tempo_estudo_preliminar ?? '',
+        doc.tempo_ante_projeto ?? '',
+        doc.tempo_projeto_basico ?? '',
+        doc.tempo_projeto_executivo ?? '',
+        doc.tempo_liberado_obra ?? '',
       ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';');
     });
 
-    const header = ['numero', 'arquivo', 'descritivo', 'pavimento_nome', 'disciplinas', 'subdisciplinas', 'escala', 'fator_dificuldade'].join(';');
+    const header = ['numero', 'arquivo', 'descritivo', 'pavimento_nome', 'disciplinas', 'subdisciplinas', 'escala', 'fator_dificuldade',
+      'tempo_total', 'tempo_estudo_preliminar', 'tempo_ante_projeto', 'tempo_projeto_basico', 'tempo_projeto_executivo', 'tempo_liberado_obra'].join(';');
     const csvContent = [header, ...rows].join('\n');
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -582,16 +639,25 @@ export default function DocumentosTab({
         'tempo_estudo_preliminar', 'tempo_ante_projeto', 'tempo_projeto_basico',
         'tempo_projeto_executivo', 'tempo_liberado_obra'];
 
-      let sucessos = 0, falhas = 0, atualizados = 0;
+      const findExisting = (doc) => {
+        const empId = String(empreendimento.id);
+        // match by numero + empreendimento, fallback to arquivo + empreendimento
+        return localDocumentos.find(d =>
+          String(d.empreendimento_id) === empId &&
+          (String(d.numero).trim() === String(doc.numero).trim() ||
+           String(d.arquivo).trim().toLowerCase() === String(doc.arquivo).trim().toLowerCase())
+        );
+      };
+
+      let sucessos = 0, falhas = 0, atualizados = 0, semMatch = 0;
       const documentosCriados = [];
       const BATCH_SIZE = 20;
 
       for (let i = 0; i < documentosParaImportar.length; i += BATCH_SIZE) {
         const batch = documentosParaImportar.slice(i, i + BATCH_SIZE);
         await Promise.all(batch.map(async (doc) => {
-          const existing = importModoAtualizacao
-            ? localDocumentos.find(d => d.numero === doc.numero && String(d.empreendimento_id) === String(empreendimento.id))
-            : null;
+          const existing = importModoAtualizacao ? findExisting(doc) : null;
+          if (importModoAtualizacao && !existing) { semMatch++; return; }
           try {
             if (existing) {
               const updatePayload = {};
@@ -599,6 +665,7 @@ export default function DocumentosTab({
               if (doc.disciplinas?.length) updatePayload.disciplinas = doc.disciplinas;
               if (doc.subdisciplinas?.length) updatePayload.subdisciplinas = doc.subdisciplinas;
               if (doc.escala != null) updatePayload.escala = doc.escala;
+              if (!Object.keys(updatePayload).length) { semMatch++; return; }
               const updated = await Documento.update(existing.id, updatePayload);
               handleLocalUpdate(updated);
               atualizados++;
@@ -628,7 +695,7 @@ export default function DocumentosTab({
       }
 
       let mensagem = importModoAtualizacao
-        ? `Atualização concluída!\n\nDocumentos atualizados: ${atualizados}${sucessos > 0 ? `\nNovos documentos criados: ${sucessos}` : ''}${falhas > 0 ? `\nFalhas: ${falhas}` : ''}`
+        ? `Atualização concluída!\n\nDocumentos atualizados: ${atualizados}${semMatch > 0 ? `\nSem correspondência (número/arquivo não encontrado ou sem dados para atualizar): ${semMatch}` : ''}${sucessos > 0 ? `\nNovos documentos criados: ${sucessos}` : ''}${falhas > 0 ? `\nFalhas: ${falhas}` : ''}`
         : `Importação concluída!\n\nDocumentos: ${sucessos} sucessos, ${falhas} falhas`;
       if (sucessosCadastro > 0 || falhasCadastro > 0) mensagem += `\nDatas de Cadastro: ${sucessosCadastro} sucessos, ${falhasCadastro} falhas`;
       alert(mensagem);
@@ -915,6 +982,10 @@ export default function DocumentosTab({
               </Button>
               <Button variant="outline" onClick={() => setShowImportModal(true)} className="border-green-500 text-green-600 hover:bg-green-50">
                 <Upload className="w-4 h-4 mr-2" />Importar
+              </Button>
+              <Button variant="outline" onClick={handleRecalcularTodasHoras} disabled={isRecalculandoTodas} className="border-orange-500 text-orange-600 hover:bg-orange-50">
+                {isRecalculandoTodas ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                Recalcular Horas
               </Button>
               <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-700">
                 <Plus className="w-4 h-4 mr-2" />Novo Documento
