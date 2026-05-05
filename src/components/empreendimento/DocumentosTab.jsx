@@ -126,17 +126,12 @@ export default function DocumentosTab({
     return Object.entries(grupos).sort((a, b) => a[0].localeCompare(b[0]));
   }, [filteredDocumentos]);
 
-  // Expand sections one at a time after initial render so the page loads fast
   useEffect(() => {
     if (hasAutoExpanded.current || !documentosPorDisciplina?.length) return;
     hasAutoExpanded.current = true;
-    documentosPorDisciplina.forEach(([disciplina], index) => {
-      setTimeout(() => {
-        startTransition(() => {
-          setDisciplinasMinimizadas(prev => ({ ...prev, [disciplina]: false }));
-        });
-      }, 50 + index * 250);
-    });
+    const allExpanded = {};
+    documentosPorDisciplina.forEach(([disciplina]) => { allExpanded[disciplina] = false; });
+    startTransition(() => setDisciplinasMinimizadas(allExpanded));
   }, [documentosPorDisciplina]);
 
   // Recarregar planejamentos quando triggerUpdate for chamado (ex: após execução/pause/finish)
@@ -807,16 +802,14 @@ export default function DocumentosTab({
     });
   }, [usuarios]);
 
-  // Pre-compute which doc IDs have activities (single pass — avoids O(N×M) per item on mount)
   const docIdsWithActivities = useMemo(() => {
     const result = new Set();
     const catalogPairs = new Set();
     (allAtividades || []).forEach(a => {
-      if (!a.empreendimento_id && a.tempo !== -999 && a.disciplina && a.subdisciplina)
-        catalogPairs.add(`${a.disciplina}|${a.subdisciplina}`);
-    });
-    (allAtividades || []).forEach(a => {
-      if (a.empreendimento_id != null && a.tempo !== -999) {
+      if (!a.empreendimento_id) {
+        if (a.tempo !== -999 && a.disciplina && a.subdisciplina)
+          catalogPairs.add(`${a.disciplina}|${a.subdisciplina}`);
+      } else if (a.tempo !== -999) {
         if (a.documento_id != null) result.add(String(a.documento_id));
         if (Array.isArray(a.documento_ids)) a.documento_ids.forEach(id => result.add(String(id)));
       }
