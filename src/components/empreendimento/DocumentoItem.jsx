@@ -187,8 +187,8 @@ function DocumentoItem({
   const atividadesCatalogo = [];
   if (subdisciplinasDoc.length > 0 && disciplinasDoc.length > 0) {
     allGenericActivitiesMap.forEach(baseAtividade => {
-      const baseIdStr = String(baseAtividade.id);
       if (baseAtividade.tempo === -999) return;
+      const baseIdStr = String(baseAtividade.id);
       if (excludedActivitiesSet.has(baseIdStr)) return;
       if (excludedFromDocumentMap.has(baseIdStr) && excludedFromDocumentMap.get(baseIdStr).has(String(doc.id))) return;
       // Se há um override específico desta folha para esta atividade base, não incluir o catálogo (evita dupla contagem)
@@ -201,9 +201,27 @@ function DocumentoItem({
     });
   }
 
-  // 5. Mesclar todas as fontes sem duplicatas
+  // 5. Atividades do projeto SEM link de documento mas com disciplina/subdisciplina compatível
+  // (equivalente às normalizedProjectActivities do AnaliticoGlobalTab — exibidas no painel global lá,
+  //  mostradas aqui nos documentos com disciplina/subdisciplina correspondente)
+  // Nota: Atividades COM id_atividade já foram capturadas em atividadesVinculadas*
+  //       Aqui capturamos atividades novas do projeto (id_atividade=null) que combinam com doc
+  const atividadesProjetoMatch = subdisciplinasDoc.length > 0 ? projectActivities.filter(pa => {
+    if (pa.tempo === -999) return false;
+    // Ignorar as que já têm link explícito com algum documento (tratadas em atividadesVinculadas)
+    if (pa.documento_id != null || (Array.isArray(pa.documento_ids) && pa.documento_ids.length > 0)) return false;
+    // Ignorar atividades que são overrides de base activities (têm id_atividade apontando para ID base)
+    // Essas vêm de atividades_empreendimento e já foram capturadas em atividadesVinculadas
+    if (pa.id_atividade) return false;
+    const subdisciplinaMatch = subdisciplinasDoc.includes(pa.subdisciplina);
+    if (!subdisciplinaMatch) return false;
+    if (disciplinasDoc.length === 0) return true;
+    return disciplinasDoc.includes(pa.disciplina);
+  }) : [];
+
+  // 6. Mesclar todas as fontes sem duplicatas
   const idsSeen = new Set();
-  const _atividadesDocAll = [...atividadesVinculadasAll, ...atividadesVinculadasEmp, ...atividadesCatalogo].filter(a => {
+  const _atividadesDocAll = [...atividadesVinculadasAll, ...atividadesVinculadasEmp, ...atividadesCatalogo, ...atividadesProjetoMatch].filter(a => {
     if (idsSeen.has(a.id)) return false;
     idsSeen.add(a.id);
     return true;

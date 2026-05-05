@@ -287,14 +287,14 @@ export default function DocumentosTab({
       const idsComOverrideEspecifico = new Set();
       allAtividades.forEach(ativ => {
         if (ativ.empreendimento_id === empreendimento.id && ativ.documento_id === documento.id && ativ.id_atividade && ativ.tempo !== -999) {
-          idsComOverrideEspecifico.add(ativ.id_atividade);
+          idsComOverrideEspecifico.add(String(ativ.id_atividade));
         }
       });
 
       let atividadesGerais = allAtividades.filter(ativ => {
         // Atividades genéricas (sem empreendimento) com disciplina/subdisciplina compatível
         if (!ativ.empreendimento_id) {
-          if (idsComOverrideEspecifico.has(ativ.id)) return false;
+          if (idsComOverrideEspecifico.has(String(ativ.id))) return false;
           const disciplinaMatch = disciplinasDoc.length === 0 || disciplinasDoc.includes(ativ.disciplina);
           const subdisciplinaMatch = Array.isArray(subdisciplinasDoc) && subdisciplinasDoc.includes(ativ.subdisciplina);
           return disciplinaMatch && subdisciplinaMatch;
@@ -310,15 +310,15 @@ export default function DocumentosTab({
       const atividadesExcluidasPorDoc = new Set();
       allAtividades.forEach(ativ => {
         if (ativ.empreendimento_id === empreendimento.id && ativ.tempo === -999 && ativ.id_atividade) {
-          if (ativ.documento_id === documento.id) atividadesExcluidasPorDoc.add(ativ.id_atividade);
-          else if (!ativ.documento_id) atividadesExcluidasGlobal.add(ativ.id_atividade);
+          if (ativ.documento_id === documento.id) atividadesExcluidasPorDoc.add(String(ativ.id_atividade));
+          else if (!ativ.documento_id) atividadesExcluidasGlobal.add(String(ativ.id_atividade));
         }
       });
 
       atividadesGerais = atividadesGerais.filter(ativ =>
         ativ.empreendimento_id // específica da folha, não filtrar por exclusão global
           ? true
-          : !atividadesExcluidasGlobal.has(ativ.id) && !atividadesExcluidasPorDoc.has(ativ.id)
+          : !atividadesExcluidasGlobal.has(String(ativ.id)) && !atividadesExcluidasPorDoc.has(String(ativ.id))
       );
 
       // Mapear etapa do catálogo para etapa do empreendimento
@@ -450,20 +450,8 @@ export default function DocumentosTab({
       'Projeto Básico': 'tempo_projeto_basico', 'Projeto Executivo': 'tempo_projeto_executivo',
       'Liberado para Obra': 'tempo_liberado_obra',
     };
-    // Combinar allAtividades com atividadesEmpCache (fonte mais atualizada), sem duplicatas
-    const allAtividadesIds = new Set((allAtividades || []).map(a => a.id));
-    const allAtividadesCombined = [
-      ...(allAtividades || []),
-      ...(atividadesEmpCache || []).filter(a => !allAtividadesIds.has(a.id)),
-    ];
-    const genericAtividades = allAtividadesCombined.filter(a => !a.empreendimento_id && a.tempo !== -999);
-    const projectAtividades = allAtividadesCombined.filter(a => a.empreendimento_id != null && a.tempo !== -999);
-    // IDs de atividades genéricas excluídas globalmente para este projeto (tempo=-999, sem documento_id)
-    const excludedGlobalIds = new Set(
-      allAtividadesCombined
-        .filter(a => a.empreendimento_id != null && a.tempo === -999 && a.id_atividade && !a.documento_id)
-        .map(a => String(a.id_atividade))
-    );
+    const genericAtividades = (allAtividades || []).filter(a => !a.empreendimento_id && a.tempo !== -999);
+    const projectAtividades = (allAtividades || []).filter(a => a.empreendimento_id != null && a.tempo !== -999);
     let atualizados = 0, semAtividades = 0, falhas = 0;
     const BATCH_SIZE = 20;
     for (let i = 0; i < localDocumentos.length; i += BATCH_SIZE) {
@@ -476,22 +464,9 @@ export default function DocumentosTab({
           (Array.isArray(pa.documento_ids) && pa.documento_ids.some(id => String(id) === String(doc.id)))
         );
         // IDs de atividades genéricas com override específico neste documento (evitar dupla contagem)
-        // Usar String() para evitar type mismatch entre pa.id_atividade e a.id
         const idsComOverride = new Set(linked.filter(pa => pa.id_atividade).map(pa => String(pa.id_atividade)));
-        // IDs excluídos especificamente para este documento
-        const excludedDocIds = new Set(
-          allAtividadesCombined
-            .filter(a => a.empreendimento_id != null && a.tempo === -999 && a.id_atividade && a.documento_id != null && String(a.documento_id) === String(doc.id))
-            .map(a => String(a.id_atividade))
-        );
         const catalog = subdisciplinasDoc.length > 0 && disciplinasDoc.length > 0
-          ? genericAtividades.filter(a =>
-              !idsComOverride.has(String(a.id)) &&
-              !excludedGlobalIds.has(String(a.id)) &&
-              !excludedDocIds.has(String(a.id)) &&
-              disciplinasDoc.includes(a.disciplina) &&
-              subdisciplinasDoc.includes(a.subdisciplina)
-            )
+          ? genericAtividades.filter(a => !idsComOverride.has(String(a.id)) && disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina))
           : [];
         const seen = new Set();
         const docAtividades = [...linked, ...catalog].filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
@@ -514,7 +489,7 @@ export default function DocumentosTab({
     }
     setIsRecalculandoTodas(false);
     alert(`Recálculo concluído!\n\nAtualizados: ${atualizados}\nSem atividades: ${semAtividades}\nFalhas: ${falhas}`);
-  }, [allAtividades, atividadesEmpCache, localDocumentos, handleLocalUpdate]);
+  }, [allAtividades, localDocumentos, handleLocalUpdate]);
 
   const handleSuccess = useCallback((savedDoc) => {
     if (savedDoc) {
