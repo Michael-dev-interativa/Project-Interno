@@ -438,7 +438,18 @@ export default function DocumentosTab({
   // Mantém o ref sempre atualizado para o cascade usar sem criar dependência circular
   autoPlanejarRef.current = autoPlanejarAtividades;
 
-  const handleSuccess = async () => { onUpdate(); setShowForm(false); setEditingDocumento(null); setCargaDiariaCache({}); };
+  const handleSuccess = useCallback((savedDoc) => {
+    if (savedDoc) {
+      if (editingDocumento) {
+        handleLocalUpdate(savedDoc);
+      } else {
+        setLocalDocumentos(prev => [savedDoc, ...prev]);
+      }
+    }
+    setShowForm(false);
+    setEditingDocumento(null);
+    setCargaDiariaCache({});
+  }, [editingDocumento, handleLocalUpdate, setCargaDiariaCache]);
 
   const handleExportData = () => {
     const rows = localDocumentos.map(doc => {
