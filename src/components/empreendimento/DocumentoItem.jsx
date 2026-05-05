@@ -144,18 +144,19 @@ function DocumentoItem({
   const excludedFromDocumentMap = new Map();
   projectActivities.forEach(pa => {
     if (pa.id_atividade) {
+      const idAtivStr = String(pa.id_atividade);
       if (pa.tempo === -999) {
         if (pa.documento_id) {
-          if (!excludedFromDocumentMap.has(pa.id_atividade)) excludedFromDocumentMap.set(pa.id_atividade, new Set());
-          excludedFromDocumentMap.get(pa.id_atividade).add(String(pa.documento_id));
+          if (!excludedFromDocumentMap.has(idAtivStr)) excludedFromDocumentMap.set(idAtivStr, new Set());
+          excludedFromDocumentMap.get(idAtivStr).add(String(pa.documento_id));
         } else {
-          excludedActivitiesSet.add(pa.id_atividade);
+          excludedActivitiesSet.add(idAtivStr);
         }
       } else {
         if (pa.documento_id) {
-          overrideActivitiesByDocMap.set(`${pa.documento_id}|${pa.id_atividade}`, pa);
+          overrideActivitiesByDocMap.set(`${pa.documento_id}|${idAtivStr}`, pa);
         } else {
-          overrideActivitiesGlobalMap.set(pa.id_atividade, pa);
+          overrideActivitiesGlobalMap.set(idAtivStr, pa);
         }
       }
     }
@@ -181,16 +182,17 @@ function DocumentoItem({
   const idsComOverrideNesteDoc = new Set(
     [...overrideActivitiesByDocMap.values()]
       .filter(pa => String(pa.documento_id) === String(doc.id) && pa.id_atividade)
-      .map(pa => pa.id_atividade)
+      .map(pa => String(pa.id_atividade))
   );
   const atividadesCatalogo = [];
   if (subdisciplinasDoc.length > 0 && disciplinasDoc.length > 0) {
     allGenericActivitiesMap.forEach(baseAtividade => {
+      const baseIdStr = String(baseAtividade.id);
       if (baseAtividade.tempo === -999) return;
-      if (excludedActivitiesSet.has(baseAtividade.id)) return;
-      if (excludedFromDocumentMap.has(baseAtividade.id) && excludedFromDocumentMap.get(baseAtividade.id).has(String(doc.id))) return;
+      if (excludedActivitiesSet.has(baseIdStr)) return;
+      if (excludedFromDocumentMap.has(baseIdStr) && excludedFromDocumentMap.get(baseIdStr).has(String(doc.id))) return;
       // Se há um override específico desta folha para esta atividade base, não incluir o catálogo (evita dupla contagem)
-      if (idsComOverrideNesteDoc.has(baseAtividade.id)) return;
+      if (idsComOverrideNesteDoc.has(baseIdStr)) return;
       const disciplinaMatch = disciplinasDoc.includes(baseAtividade.disciplina);
       const subdisciplinaMatch = subdisciplinasDoc.includes(baseAtividade.subdisciplina);
       if (disciplinaMatch && subdisciplinaMatch) {
