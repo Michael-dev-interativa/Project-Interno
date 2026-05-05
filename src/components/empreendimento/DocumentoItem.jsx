@@ -177,12 +177,20 @@ function DocumentoItem({
   // Nota: Só inclui atividades genéricas (sem empreendimento_id), não sobrescritas por projeto
   const disciplinasDoc = doc.disciplinas?.length > 0 ? doc.disciplinas : [doc.disciplina].filter(Boolean);
   const subdisciplinasDoc = doc.subdisciplinas || [];
+  // IDs de atividades genéricas que já têm override específico neste documento (evitar dupla contagem)
+  const idsComOverrideNesteDoc = new Set(
+    [...overrideActivitiesByDocMap.values()]
+      .filter(pa => String(pa.documento_id) === String(doc.id) && pa.id_atividade)
+      .map(pa => pa.id_atividade)
+  );
   const atividadesCatalogo = [];
   if (subdisciplinasDoc.length > 0 && disciplinasDoc.length > 0) {
     allGenericActivitiesMap.forEach(baseAtividade => {
       if (baseAtividade.tempo === -999) return;
       if (excludedActivitiesSet.has(baseAtividade.id)) return;
       if (excludedFromDocumentMap.has(baseAtividade.id) && excludedFromDocumentMap.get(baseAtividade.id).has(String(doc.id))) return;
+      // Se há um override específico desta folha para esta atividade base, não incluir o catálogo (evita dupla contagem)
+      if (idsComOverrideNesteDoc.has(baseAtividade.id)) return;
       const disciplinaMatch = disciplinasDoc.includes(baseAtividade.disciplina);
       const subdisciplinaMatch = subdisciplinasDoc.includes(baseAtividade.subdisciplina);
       if (disciplinaMatch && subdisciplinaMatch) {

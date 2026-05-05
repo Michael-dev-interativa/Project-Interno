@@ -463,8 +463,10 @@ export default function DocumentosTab({
           (pa.documento_id != null && String(pa.documento_id) === String(doc.id)) ||
           (Array.isArray(pa.documento_ids) && pa.documento_ids.some(id => String(id) === String(doc.id)))
         );
+        // IDs de atividades genéricas com override específico neste documento (evitar dupla contagem)
+        const idsComOverride = new Set(linked.filter(pa => pa.id_atividade).map(pa => pa.id_atividade));
         const catalog = subdisciplinasDoc.length > 0 && disciplinasDoc.length > 0
-          ? genericAtividades.filter(a => disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina))
+          ? genericAtividades.filter(a => !idsComOverride.has(a.id) && disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina))
           : [];
         const seen = new Set();
         const docAtividades = [...linked, ...catalog].filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
