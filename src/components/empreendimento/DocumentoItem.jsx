@@ -64,6 +64,7 @@ function DocumentoItem({
   sortedDocOptionsList,
 }) {
   const [isLoading, setIsLoading] = useState(false);
+  const [predecessoraFocused, setPredecessoraFocused] = useState(false);
 
   // Register this item's loading setter so the parent can target only this item
   useEffect(() => {
@@ -231,16 +232,17 @@ function DocumentoItem({
     || executorAtual
     || '—';
 
-  const predecessoraOptions = useMemo(() =>
-    (sortedDocOptionsList || [])
-      .filter(d => d.id !== doc.id)
-      .map(d => (
-        <option key={d.id} value={String(d.id)}>
-          {d.label}
-        </option>
-      )),
-    [sortedDocOptionsList, doc.id]
-  );
+  const predecessoraOptions = useMemo(() => {
+    if (predecessoraFocused) {
+      return (sortedDocOptionsList || [])
+        .filter(d => d.id !== doc.id)
+        .map(d => <option key={d.id} value={String(d.id)}>{d.label}</option>);
+    }
+    // Before focus: only render the currently selected option to avoid O(N²) DOM nodes
+    if (!doc.predecessora_id) return [];
+    const selected = (sortedDocOptionsList || []).find(d => String(d.id) === String(doc.predecessora_id));
+    return selected ? [<option key={selected.id} value={String(selected.id)}>{selected.label}</option>] : [];
+  }, [predecessoraFocused, sortedDocOptionsList, doc.id, doc.predecessora_id]);
 
   const campTempo = ETAPA_TEMPO_MAP[etapaParaPlanejamento];
   const tempoExibido = campTempo
@@ -379,6 +381,7 @@ function DocumentoItem({
                 <select
                   value={doc.predecessora_id ? String(doc.predecessora_id) : ''}
                   onChange={(e) => handlePredecessoraChange(doc.id, e.target.value || null)}
+                  onFocus={() => setPredecessoraFocused(true)}
                   className="h-7 w-full text-xs border border-gray-300 rounded px-1 bg-white text-gray-700 focus:border-blue-400 focus:outline-none cursor-pointer"
                 >
                   <option value="">Predecessora</option>
