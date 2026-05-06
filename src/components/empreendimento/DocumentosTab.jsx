@@ -452,6 +452,14 @@ export default function DocumentosTab({
     };
     const genericAtividades = (allAtividades || []).filter(a => !a.empreendimento_id && a.tempo !== -999);
     const projectAtividades = (allAtividades || []).filter(a => a.empreendimento_id != null && a.tempo !== -999);
+
+    // Exclusões globais: atividades com tempo=-999, id_atividade preenchido e sem documento_id específico
+    const atividadesExcluidasGlobal = new Set(
+      (allAtividades || [])
+        .filter(a => a.empreendimento_id != null && a.tempo === -999 && a.id_atividade && !a.documento_id)
+        .map(a => String(a.id_atividade))
+    );
+
     let atualizados = 0, semAtividades = 0, falhas = 0;
     const BATCH_SIZE = 20;
     for (let i = 0; i < localDocumentos.length; i += BATCH_SIZE) {
@@ -459,6 +467,15 @@ export default function DocumentosTab({
       await Promise.all(batch.map(async (doc) => {
         const disciplinasDoc = doc.disciplinas?.length > 0 ? doc.disciplinas : [doc.disciplina].filter(Boolean);
         const subdisciplinasDoc = doc.subdisciplinas || [];
+        const fatorDificuldade = doc.fator_dificuldade || 1;
+
+        // Exclusões específicas deste documento
+        const atividadesExcluidasDoc = new Set(
+          (allAtividades || [])
+            .filter(a => a.empreendimento_id != null && a.tempo === -999 && a.id_atividade && String(a.documento_id) === String(doc.id))
+            .map(a => String(a.id_atividade))
+        );
+
         const linked = projectAtividades.filter(pa =>
           (pa.documento_id != null && String(pa.documento_id) === String(doc.id)) ||
           (Array.isArray(pa.documento_ids) && pa.documento_ids.some(id => String(id) === String(doc.id)))
@@ -466,7 +483,13 @@ export default function DocumentosTab({
         // IDs de atividades genéricas com override específico neste documento (evitar dupla contagem)
         const idsComOverride = new Set(linked.filter(pa => pa.id_atividade).map(pa => String(pa.id_atividade)));
         const catalog = subdisciplinasDoc.length > 0 && disciplinasDoc.length > 0
-          ? genericAtividades.filter(a => !idsComOverride.has(String(a.id)) && disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina))
+          ? genericAtividades.filter(a => {
+              const idStr = String(a.id);
+              if (idsComOverride.has(idStr)) return false;
+              if (atividadesExcluidasGlobal.has(idStr)) return false;
+              if (atividadesExcluidasDoc.has(idStr)) return false;
+              return disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina);
+            })
           : [];
         const seen = new Set();
         const docAtividades = [...linked, ...catalog].filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
@@ -475,9 +498,11 @@ export default function DocumentosTab({
         let total = 0;
         docAtividades.forEach(a => {
           if (!a.tempo || a.tempo <= 0) return;
-          total += a.tempo;
+          const isConfeccaoA = a.atividade && String(a.atividade).trim().startsWith('Confecção de A-');
+          const tempoAjustado = a.tempo * (isConfeccaoA ? 1 : fatorDificuldade);
+          total += tempoAjustado;
           const campo = ETAPA_TEMPO_MAP[a.etapa];
-          if (campo) etapaTotais[campo] = (etapaTotais[campo] || 0) + a.tempo;
+          if (campo) etapaTotais[campo] = (etapaTotais[campo] || 0) + tempoAjustado;
         });
         if (total === 0) { semAtividades++; return; }
         try {
