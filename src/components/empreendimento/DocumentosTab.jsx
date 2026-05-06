@@ -491,8 +491,17 @@ export default function DocumentosTab({
               return disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina);
             })
           : [];
+        // Atividades do projeto sem link de documento mas com disciplina/subdisciplina compatível
+        // (equivalente ao atividadesProjetoMatch do DocumentoItem)
+        const projetoMatch = subdisciplinasDoc.length > 0 ? projectAtividades.filter(pa => {
+          if (pa.documento_id != null || (Array.isArray(pa.documento_ids) && pa.documento_ids.length > 0)) return false;
+          if (pa.id_atividade) return false;
+          if (!subdisciplinasDoc.includes(pa.subdisciplina)) return false;
+          if (disciplinasDoc.length === 0) return true;
+          return disciplinasDoc.includes(pa.disciplina);
+        }) : [];
         const seen = new Set();
-        const docAtividades = [...linked, ...catalog].filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
+        const docAtividades = [...linked, ...catalog, ...projetoMatch].filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
         if (!docAtividades.length) { semAtividades++; return; }
         const etapaTotais = {};
         let total = 0;
