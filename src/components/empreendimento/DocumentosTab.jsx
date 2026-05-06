@@ -480,8 +480,16 @@ export default function DocumentosTab({
           (pa.documento_id != null && String(pa.documento_id) === String(doc.id)) ||
           (Array.isArray(pa.documento_ids) && pa.documento_ids.some(id => String(id) === String(doc.id)))
         );
+        // Incluir também atividades de atividadesEmpCache vinculadas a este documento
+        const linkedEmpCache = (atividadesEmpCache || []).filter(pa =>
+          pa.tempo !== -999 &&
+          ((pa.documento_id != null && String(pa.documento_id) === String(doc.id)) ||
+           (Array.isArray(pa.documento_ids) && pa.documento_ids.some(id => String(id) === String(doc.id))))
+        );
+        const linkedSeenIds = new Set(linked.map(a => a.id));
+        const allLinked = [...linked, ...linkedEmpCache.filter(a => !linkedSeenIds.has(a.id))];
         // IDs de atividades genéricas com override específico neste documento (evitar dupla contagem)
-        const idsComOverride = new Set(linked.filter(pa => pa.id_atividade).map(pa => String(pa.id_atividade)));
+        const idsComOverride = new Set(allLinked.filter(pa => pa.id_atividade).map(pa => String(pa.id_atividade)));
         const catalog = subdisciplinasDoc.length > 0 && disciplinasDoc.length > 0
           ? genericAtividades.filter(a => {
               const idStr = String(a.id);
@@ -501,7 +509,7 @@ export default function DocumentosTab({
           return disciplinasDoc.includes(pa.disciplina);
         }) : [];
         const seen = new Set();
-        const docAtividades = [...linked, ...catalog, ...projetoMatch].filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
+        const docAtividades = [...allLinked, ...catalog, ...projetoMatch].filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
         if (!docAtividades.length) { semAtividades++; return; }
         const etapaTotais = {};
         let total = 0;
@@ -523,7 +531,7 @@ export default function DocumentosTab({
     }
     setIsRecalculandoTodas(false);
     alert(`Recálculo concluído!\n\nAtualizados: ${atualizados}\nSem atividades: ${semAtividades}\nFalhas: ${falhas}`);
-  }, [allAtividades, localDocumentos, handleLocalUpdate]);
+  }, [allAtividades, atividadesEmpCache, localDocumentos, handleLocalUpdate]);
 
   const handleSuccess = useCallback((savedDoc) => {
     if (savedDoc) {
