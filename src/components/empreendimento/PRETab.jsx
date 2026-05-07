@@ -978,33 +978,25 @@ export default function PRETab({ empreendimento, readOnly = false }) {
                             <Upload className="w-3 h-3 mr-2" />
                             Anexar Imagem ou PDF
                           </Button>
-                          <div className="relative mt-1">
-                            <textarea
-                              id={`paste-area-${item.id}`}
-                              aria-hidden="true"
-                              className="absolute opacity-0 w-0 h-0 overflow-hidden pointer-events-none"
-                              onPaste={(e) => {
-                                e.preventDefault();
-                                const clipItems = e.clipboardData?.items;
-                                if (!clipItems) return;
-                                for (const clipItem of clipItems) {
-                                  if (clipItem.type.startsWith('image/')) {
-                                    const rawFile = clipItem.getAsFile();
-                                    if (!rawFile) break;
-                                    const ext = clipItem.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
-                                    const namedFile = new window.File([rawFile], `print_${Date.now()}.${ext}`, { type: clipItem.type });
-                                    handleUploadImage(item.id, namedFile);
-                                    break;
-                                  }
+                          <div
+                            contentEditable
+                            suppressContentEditableWarning
+                            className="mt-1 border-2 border-dashed border-gray-300 rounded p-2 text-center text-xs text-gray-400 cursor-pointer hover:border-blue-400 hover:text-blue-400 transition-colors focus:outline-none focus:border-blue-400 focus:text-blue-400"
+                            onKeyDown={(e) => { if (!e.ctrlKey && !e.metaKey) e.preventDefault(); }}
+                            onPaste={(e) => {
+                              e.preventDefault();
+                              const clipItems = e.clipboardData?.items;
+                              if (!clipItems) return;
+                              for (const clipItem of clipItems) {
+                                if (clipItem.type.startsWith('image/')) {
+                                  const rawFile = clipItem.getAsFile();
+                                  if (rawFile) handleUploadImage(item.id, rawFile);
+                                  break;
                                 }
-                              }}
-                            />
-                            <div
-                              className="border-2 border-dashed border-gray-300 rounded p-2 text-center text-xs text-gray-400 cursor-pointer select-none hover:border-blue-400 hover:text-blue-400 transition-colors"
-                              onClick={() => document.getElementById(`paste-area-${item.id}`)?.focus()}
-                            >
-                              Clique aqui e cole (Ctrl+V) para adicionar print
-                            </div>
+                              }
+                            }}
+                          >
+                            Clique aqui e cole (Ctrl+V) para adicionar print
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
