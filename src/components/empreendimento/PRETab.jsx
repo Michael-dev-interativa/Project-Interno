@@ -990,7 +990,22 @@ export default function PRETab({ empreendimento, readOnly = false }) {
                               for (const clipItem of clipItems) {
                                 if (clipItem.type.startsWith('image/')) {
                                   const rawFile = clipItem.getAsFile();
-                                  if (rawFile) handleUploadImage(item.id, rawFile);
+                                  if (!rawFile) break;
+                                  const objectUrl = URL.createObjectURL(rawFile);
+                                  const img = new Image();
+                                  img.onload = () => {
+                                    const canvas = document.createElement('canvas');
+                                    canvas.width = img.naturalWidth;
+                                    canvas.height = img.naturalHeight;
+                                    canvas.getContext('2d').drawImage(img, 0, 0);
+                                    canvas.toBlob((blob) => {
+                                      if (!blob) return;
+                                      const pngFile = new window.File([blob], `print_${Date.now()}.png`, { type: 'image/png' });
+                                      handleUploadImage(item.id, pngFile);
+                                      URL.revokeObjectURL(objectUrl);
+                                    }, 'image/png');
+                                  };
+                                  img.src = objectUrl;
                                   break;
                                 }
                               }
