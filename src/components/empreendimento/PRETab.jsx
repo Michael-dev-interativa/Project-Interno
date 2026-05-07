@@ -314,14 +314,15 @@ export default function PRETab({ empreendimento, readOnly = false }) {
     try {
       setIsSaving(true);
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      
+      if (!file_url) throw new Error('URL inválida retornada pelo upload.');
+
       // Encontra o item e atualiza com a nova imagem
       const itemToUpdate = items.find(item => item.id === itemId);
       if (!itemToUpdate) return;
-      
+
       const updatedItem = {
         ...itemToUpdate,
-        imagens: [...(itemToUpdate.imagens || []), file_url]
+        imagens: [...(itemToUpdate.imagens || []).filter(Boolean), file_url]
       };
       
       // Prepara dados para salvar
@@ -986,8 +987,11 @@ export default function PRETab({ empreendimento, readOnly = false }) {
                               if (!clipItems) return;
                               for (const clipItem of clipItems) {
                                 if (clipItem.type.startsWith('image/')) {
-                                  const file = clipItem.getAsFile();
-                                  if (file) handleUploadImage(item.id, file);
+                                  const rawFile = clipItem.getAsFile();
+                                  if (!rawFile) break;
+                                  const ext = clipItem.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+                                  const namedFile = new File([rawFile], `print_${Date.now()}.${ext}`, { type: clipItem.type });
+                                  handleUploadImage(item.id, namedFile);
                                   break;
                                 }
                               }
@@ -997,7 +1001,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          {(item.imagens || []).map((imgUrl, idx) => (
+                          {(item.imagens || []).filter(Boolean).map((imgUrl, idx) => (
                             <div key={idx} className="relative group flex-shrink-0">
                               {imgUrl.toLowerCase().endsWith('.pdf') ? (
                                 <a
