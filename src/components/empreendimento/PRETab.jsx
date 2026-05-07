@@ -977,6 +977,24 @@ export default function PRETab({ empreendimento, readOnly = false }) {
                             <Upload className="w-3 h-3 mr-2" />
                             Anexar Imagem ou PDF
                           </Button>
+                          <div
+                            tabIndex={0}
+                            className="mt-1 border-2 border-dashed border-gray-300 rounded p-2 text-center text-xs text-gray-400 cursor-pointer select-none focus:outline-none focus:border-blue-400 hover:border-gray-400 hover:text-gray-500 transition-colors"
+                            onClick={(e) => e.currentTarget.focus()}
+                            onPaste={(e) => {
+                              const clipItems = e.clipboardData?.items;
+                              if (!clipItems) return;
+                              for (const clipItem of clipItems) {
+                                if (clipItem.type.startsWith('image/')) {
+                                  const file = clipItem.getAsFile();
+                                  if (file) handleUploadImage(item.id, file);
+                                  break;
+                                }
+                              }
+                            }}
+                          >
+                            Clique aqui e cole (Ctrl+V) para adicionar print
+                          </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {(item.imagens || []).map((imgUrl, idx) => (
