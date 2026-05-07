@@ -992,7 +992,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
                                     const rawFile = clipItem.getAsFile();
                                     if (!rawFile) break;
                                     const ext = clipItem.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
-                                    const namedFile = new File([rawFile], `print_${Date.now()}.${ext}`, { type: clipItem.type });
+                                    const namedFile = new window.File([rawFile], `print_${Date.now()}.${ext}`, { type: clipItem.type });
                                     handleUploadImage(item.id, namedFile);
                                     break;
                                   }
