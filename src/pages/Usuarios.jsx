@@ -196,6 +196,7 @@ export default function Usuarios() {
                     usuario={usuario}
                     onEdit={handleEdit}
                     onDelete={handleDelete}
+                    onRefresh={loadUsuarios}
                   />
                 ))
               )}
