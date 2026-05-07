@@ -221,10 +221,18 @@ if (appId && serverUrl) {
         }
       }
     },
-    // minimal integrations shim to avoid errors (UploadFile returns empty url)
+    // minimal integrations shim — UploadFile converts file to base64 data URL
     integrations: {
       Core: {
-        UploadFile: async ({ file } = { file: null }) => ({ file_url: '' }),
+        UploadFile: async ({ file } = { file: null }) => {
+          if (!file) return { file_url: '' };
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve({ file_url: e.target.result });
+            reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+            reader.readAsDataURL(file);
+          });
+        },
         InvokeLLM: async () => { throw new Error('InvokeLLM not configured in dev'); },
         SendEmail: async () => { throw new Error('SendEmail not configured in dev'); },
         SendSMS: async () => { throw new Error('SendSMS not configured in dev'); }

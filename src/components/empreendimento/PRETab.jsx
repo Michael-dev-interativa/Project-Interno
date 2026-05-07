@@ -1017,7 +1017,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
                         <div className="flex flex-wrap gap-2">
                           {(item.imagens || []).filter(Boolean).map((imgUrl, idx) => (
                             <div key={idx} className="relative group flex-shrink-0">
-                              {imgUrl.toLowerCase().endsWith('.pdf') ? (
+                              {imgUrl.toLowerCase().endsWith('.pdf') || imgUrl.startsWith('data:application/pdf') ? (
                                 <a
                                   href={imgUrl}
                                   target="_blank"
