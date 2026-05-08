@@ -153,7 +153,7 @@ export default function Dashboard() {
         <div className="max-w-full mx-auto 2xl:max-w-screen-2xl">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Painel de Controle</h1>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Painel de Atividades</h1>
               <p className="text-gray-600">
                 {isColaboradorView ?
                   `Bem-vindo, ${user?.full_name || user?.email || 'Colaborador'}. Veja suas atividades.` :
