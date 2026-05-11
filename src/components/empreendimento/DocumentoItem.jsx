@@ -79,12 +79,15 @@ function DocumentoItem({
     return () => { if (registerLoadingSetter) registerLoadingSetter(doc.id, null); };
   }, [doc.id, registerLoadingSetter]);
 
-  // Set of atividade_id values that are concluded for this document (derived from persisted localPlanejamentos)
+  // Set of IDs used to check if an activity is concluded (persisted in localPlanejamentos)
+  // For project activities: ativ.id === plan.id → add p.id to set
+  // For catalog activities: ativ.id === p.atividade_id → add p.atividade_id to set
   const concludedAtivIdSet = useMemo(() => {
     const s = new Set();
     for (const p of (localPlanejamentos || [])) {
-      if (p.atividade_id != null && String(p.documento_id) === String(doc.id) && p.status === 'concluido') {
-        s.add(String(p.atividade_id));
+      if (String(p.documento_id) === String(doc.id) && p.status === 'concluido') {
+        s.add(String(p.id)); // covers project activities (ativ.id === plan.id)
+        if (p.atividade_id != null) s.add(String(p.atividade_id)); // covers catalog activities
       }
     }
     return s;
@@ -144,33 +147,43 @@ function DocumentoItem({
       for (const id of selectedAtivIds) {
         const ativ = atividadesDoc.find(a => a.id === id);
         if (!ativ) continue;
-        // Find existing plan for this activity + doc
-        const existingPlan = (localPlanejamentos || []).find(
-          p => String(p.atividade_id) === String(ativ.id) && String(p.documento_id) === String(doc.id)
-        );
-        if (existingPlan) {
+        if (ativ.empreendimento_id != null) {
+          // Project activity: ativ.id IS the plan ID — update directly
           ops.push(
-            PlanejamentoAtividade.update(existingPlan.id, { status: 'concluido', termino_real: hoje })
+            PlanejamentoAtividade.update(ativ.id, { status: 'concluido', termino_real: hoje })
               .then(() => setLocalPlanejamentos(prev =>
-                prev.map(p => p.id === existingPlan.id ? { ...p, status: 'concluido', termino_real: hoje } : p)
+                prev.map(p => p.id === ativ.id ? { ...p, status: 'concluido', termino_real: hoje } : p)
               ))
           );
         } else {
-          ops.push(
-            PlanejamentoAtividade.create({
-              empreendimento_id: empreendimento.id,
-              atividade_id: ativ.id,
-              documento_id: doc.id,
-              etapa: ativ.etapa,
-              descritivo: ativ.atividade,
-              tempo_planejado: ativ.tempo || 0,
-              status: 'concluido',
-              termino_real: hoje,
-              horas_por_dia: {},
-            }).then(created => {
-              setLocalPlanejamentos(prev => [...prev, created]);
-            })
+          // Catalog activity: look up existing plan by atividade_id + documento_id, or create
+          const existingPlan = (localPlanejamentos || []).find(
+            p => String(p.atividade_id) === String(ativ.id) && String(p.documento_id) === String(doc.id)
           );
+          if (existingPlan) {
+            ops.push(
+              PlanejamentoAtividade.update(existingPlan.id, { status: 'concluido', termino_real: hoje })
+                .then(() => setLocalPlanejamentos(prev =>
+                  prev.map(p => p.id === existingPlan.id ? { ...p, status: 'concluido', termino_real: hoje } : p)
+                ))
+            );
+          } else {
+            ops.push(
+              PlanejamentoAtividade.create({
+                empreendimento_id: empreendimento.id,
+                atividade_id: ativ.id,
+                documento_id: doc.id,
+                etapa: ativ.etapa,
+                descritivo: ativ.atividade,
+                tempo_planejado: ativ.tempo || 0,
+                status: 'concluido',
+                termino_real: hoje,
+                horas_por_dia: {},
+              }).then(created => {
+                setLocalPlanejamentos(prev => [...prev, created]);
+              })
+            );
+          }
         }
       }
       await Promise.all(ops);
@@ -184,56 +197,63 @@ function DocumentoItem({
 
   const handleToggleConcluida = async (ativ) => {
     const hoje = new Date().toISOString().slice(0, 10);
-    const atividadeIdStr = String(ativ.id);
-    // Find existing plan for this activity + doc
-    const existingPlan = (localPlanejamentos || []).find(
-      p => String(p.atividade_id) === atividadeIdStr && String(p.documento_id) === String(doc.id)
-    );
-    if (existingPlan) {
-      const novoStatus = existingPlan.status === 'concluido' ? 'em_andamento' : 'concluido';
+    if (ativ.empreendimento_id != null) {
+      // Project activity: ativ.id IS the plan ID — update directly
+      const novoStatus = concludedAtivIdSet.has(String(ativ.id)) ? 'em_andamento' : 'concluido';
       try {
-        await PlanejamentoAtividade.update(existingPlan.id, { status: novoStatus, termino_real: novoStatus === 'concluido' ? hoje : null });
+        await PlanejamentoAtividade.update(ativ.id, { status: novoStatus, termino_real: novoStatus === 'concluido' ? hoje : null });
         setLocalPlanejamentos(prev =>
-          prev.map(p => p.id === existingPlan.id ? { ...p, status: novoStatus, termino_real: novoStatus === 'concluido' ? hoje : null } : p)
+          prev.map(p => p.id === ativ.id ? { ...p, status: novoStatus, termino_real: novoStatus === 'concluido' ? hoje : null } : p)
         );
       } catch {
         alert('Erro ao atualizar status da atividade.');
       }
     } else {
-      // No plan exists: create one with status 'concluido'
-      setPendingAtivIds(prev => new Set([...prev, atividadeIdStr]));
-      try {
-        const created = await PlanejamentoAtividade.create({
-          empreendimento_id: empreendimento.id,
-          atividade_id: ativ.id,
-          documento_id: doc.id,
-          etapa: ativ.etapa,
-          descritivo: ativ.atividade,
-          tempo_planejado: ativ.tempo || 0,
-          status: 'concluido',
-          termino_real: hoje,
-          horas_por_dia: {},
-        });
-        setLocalPlanejamentos(prev => [...prev, created]);
-      } catch {
-        alert('Erro ao concluir atividade.');
-      } finally {
-        setPendingAtivIds(prev => { const n = new Set(prev); n.delete(atividadeIdStr); return n; });
+      // Catalog activity: look up by atividade_id + documento_id
+      const existingPlan = (localPlanejamentos || []).find(
+        p => String(p.atividade_id) === String(ativ.id) && String(p.documento_id) === String(doc.id)
+      );
+      if (existingPlan) {
+        // Undo: delete the created planejamento
+        try {
+          await PlanejamentoAtividade.delete(existingPlan.id);
+          setLocalPlanejamentos(prev => prev.filter(p => p.id !== existingPlan.id));
+        } catch {
+          alert('Erro ao desfazer conclusão.');
+        }
+      } else {
+        // Create new concluded plan for this catalog activity
+        const atividadeIdStr = String(ativ.id);
+        setPendingAtivIds(prev => new Set([...prev, atividadeIdStr]));
+        try {
+          const created = await PlanejamentoAtividade.create({
+            empreendimento_id: empreendimento.id,
+            atividade_id: ativ.id,
+            documento_id: doc.id,
+            etapa: ativ.etapa,
+            descritivo: ativ.atividade,
+            tempo_planejado: ativ.tempo || 0,
+            status: 'concluido',
+            termino_real: hoje,
+            horas_por_dia: {},
+          });
+          setLocalPlanejamentos(prev => [...prev, created]);
+        } catch {
+          alert('Erro ao concluir atividade.');
+        } finally {
+          setPendingAtivIds(prev => { const n = new Set(prev); n.delete(atividadeIdStr); return n; });
+        }
       }
     }
   };
 
   const handleDeleteAtividadeLocal = async (ativ) => {
     if (!ativ.empreendimento_id) return;
-    // Find the planejamento for this activity in this document
-    const plan = (localPlanejamentos || []).find(
-      p => String(p.atividade_id) === String(ativ.id) && String(p.documento_id) === String(doc.id)
-    );
-    if (!plan) return;
     if (!window.confirm(`Remover a atividade "${ativ.atividade}"?`)) return;
+    // ativ.id IS the plan ID for project activities
     try {
-      await PlanejamentoAtividade.delete(plan.id);
-      setLocalPlanejamentos(prev => prev.filter(p => p.id !== plan.id));
+      await PlanejamentoAtividade.delete(ativ.id);
+      setLocalPlanejamentos(prev => prev.filter(p => p.id !== ativ.id));
     } catch {
       alert('Erro ao remover atividade.');
     }
