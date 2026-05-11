@@ -5,8 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ChevronDown, ChevronRight, Pencil, Trash2, Calendar, Loader2, X } from "lucide-react";
-import { Documento } from "@/entities/all";
+import { ChevronDown, ChevronRight, Pencil, Trash2, Calendar, Loader2, X, CheckSquare } from "lucide-react";
+import { Documento, PlanejamentoAtividade } from "@/entities/all";
 import { format, parseISO, isValid, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatHoras } from '../utils/formatHours';
@@ -66,6 +66,8 @@ function DocumentoItem({
 }) {
   const [isLoading, setIsLoading] = useState(false);
   const [predecessoraFocused, setPredecessoraFocused] = useState(false);
+  const [selectedAtivIds, setSelectedAtivIds] = useState(new Set());
+  const [isConcluding, setIsConcluding] = useState(false);
 
   // Register this item's loading setter so the parent can target only this item
   useEffect(() => {
@@ -116,6 +118,33 @@ function DocumentoItem({
     const dataStr = format(selectedDate, 'yyyy-MM-dd');
     autoPlanejarAtividades(doc, etapaParaPlanejamento, pendingExecutor, 'manual', dataStr);
     setPendingExecutor(null);
+  };
+
+  const handleConcluirSelecionadas = async () => {
+    if (selectedAtivIds.size === 0) return;
+    setIsConcluding(true);
+    try {
+      const updates = [...selectedAtivIds].map(id =>
+        PlanejamentoAtividade.update(id, { status: 'concluido' })
+      );
+      await Promise.all(updates);
+      setLocalPlanejamentos(prev =>
+        prev.map(p => selectedAtivIds.has(p.id) ? { ...p, status: 'concluido' } : p)
+      );
+      setSelectedAtivIds(new Set());
+    } catch {
+      alert('Erro ao concluir atividades. Tente novamente.');
+    } finally {
+      setIsConcluding(false);
+    }
+  };
+
+  const toggleAtivSelection = (id) => {
+    setSelectedAtivIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   };
 
   // Replicar exata lógica do AnaliticoGlobalTab para garantir atividades idênticas
@@ -434,34 +463,105 @@ function DocumentoItem({
         )}
       </tr>
 
-      {isExpanded && atividadesDoc.map(ativ => (
-        <tr key={ativ.id} className="bg-blue-50 border-b text-sm">
-          <td className="p-2 pl-8" colSpan={2}></td>
-          <td className="p-2 text-gray-700 font-medium" colSpan={2}>{ativ.atividade || '—'}</td>
-          <td className="p-2 text-gray-500">{ativ.subdisciplina || '—'}</td>
-          <td className="p-2 text-gray-500">{ativ.escala || '—'}</td>
-          {!readOnly && (
-            <>
-              <td className="p-2 text-gray-500">{ativ.executor_principal || '—'}</td>
-              <td className="p-2 text-xs text-gray-500">
-                <div>Início: {formatDate(ativ.inicio_planejado)}</div>
-                <div>Fim: {formatDate(ativ.termino_planejado)}</div>
-              </td>
-              <td className="p-2 text-gray-500">{ativ.tempo ? formatHoras(ativ.tempo) : '—'}</td>
-              <td className="p-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-blue-600"
-                  onClick={() => handleEditAtividade(ativ)}
-                >
-                  <Pencil className="w-3 h-3" />
-                </Button>
-              </td>
-            </>
-          )}
-        </tr>
-      ))}
+      {isExpanded && (() => {
+        // Only project activities (empreendimento_id set) can be marked complete
+        const selectableAtivs = atividadesDoc.filter(a => a.empreendimento_id != null && a.status !== 'concluido');
+        const allSelected = selectableAtivs.length > 0 && selectableAtivs.every(a => selectedAtivIds.has(a.id));
+        const someSelected = selectedAtivIds.size > 0;
+
+        return (
+          <>
+            {/* Select-all + action bar */}
+            {!readOnly && selectableAtivs.length > 0 && (
+              <tr className="bg-blue-100 border-b text-xs">
+                <td className="p-2 pl-8" colSpan={2}>
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={() => {
+                        if (allSelected) {
+                          setSelectedAtivIds(prev => {
+                            const next = new Set(prev);
+                            selectableAtivs.forEach(a => next.delete(a.id));
+                            return next;
+                          });
+                        } else {
+                          setSelectedAtivIds(prev => {
+                            const next = new Set(prev);
+                            selectableAtivs.forEach(a => next.add(a.id));
+                            return next;
+                          });
+                        }
+                      }}
+                      className="h-3.5 w-3.5 accent-blue-600"
+                    />
+                    <span className="font-medium text-blue-800">Selecionar todas</span>
+                  </label>
+                </td>
+                <td colSpan={8} className="p-2">
+                  {someSelected && (
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white flex items-center gap-1"
+                      onClick={handleConcluirSelecionadas}
+                      disabled={isConcluding}
+                    >
+                      {isConcluding ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckSquare className="w-3 h-3" />}
+                      Concluir selecionadas ({selectedAtivIds.size})
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            )}
+
+            {atividadesDoc.map(ativ => {
+              const isSelectable = !readOnly && ativ.empreendimento_id != null && ativ.status !== 'concluido';
+              const isConcluido = ativ.status === 'concluido';
+              return (
+                <tr key={ativ.id} className={`border-b text-sm ${isConcluido ? 'bg-green-50' : 'bg-blue-50'}`}>
+                  <td className="p-2 pl-8" colSpan={2}>
+                    {isSelectable && (
+                      <input
+                        type="checkbox"
+                        checked={selectedAtivIds.has(ativ.id)}
+                        onChange={() => toggleAtivSelection(ativ.id)}
+                        className="h-3.5 w-3.5 accent-blue-600"
+                      />
+                    )}
+                    {isConcluido && (
+                      <span className="text-xs font-semibold text-green-700">✓</span>
+                    )}
+                  </td>
+                  <td className={`p-2 font-medium ${isConcluido ? 'text-green-700 line-through' : 'text-gray-700'}`} colSpan={2}>{ativ.atividade || '—'}</td>
+                  <td className="p-2 text-gray-500">{ativ.subdisciplina || '—'}</td>
+                  <td className="p-2 text-gray-500">{ativ.escala || '—'}</td>
+                  {!readOnly && (
+                    <>
+                      <td className="p-2 text-gray-500">{ativ.executor_principal || '—'}</td>
+                      <td className="p-2 text-xs text-gray-500">
+                        <div>Início: {formatDate(ativ.inicio_planejado)}</div>
+                        <div>Fim: {formatDate(ativ.termino_planejado)}</div>
+                      </td>
+                      <td className="p-2 text-gray-500">{ativ.tempo ? formatHoras(ativ.tempo) : '—'}</td>
+                      <td className="p-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-blue-600"
+                          onClick={() => handleEditAtividade(ativ)}
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </Button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              );
+            })}
+          </>
+        );
+      })()}
 
       {/* Modal de seleção de data para planejamento */}
       <Dialog open={dateModalOpen} onOpenChange={(open) => { if (!open) { setDateModalOpen(false); setPendingExecutor(null); } }}>
