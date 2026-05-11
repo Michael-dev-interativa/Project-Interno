@@ -624,14 +624,14 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
           </div>
         )}
 
-        {/* **NOVO**: Checkbox de Seleção - Sempre visível quando há seleções */}
-        {(hasSelections || isSelected) && plano.status !== 'concluido' && !plano.isLegacyExecution && (
-          <div className="absolute left-1 top-1 z-20">
+        {/* Checkbox de Seleção - visível no hover ou quando há seleções ativas */}
+        {plano.status !== 'concluido' && !plano.isLegacyExecution && (
+          <div className={`absolute left-1 top-1 z-20 transition-opacity ${hasSelections || isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
             <input
               type="checkbox"
               checked={isSelected}
               onChange={(e) => {
-                e.stopPropagation(); // Prevent parent div click from being triggered
+                e.stopPropagation();
                 onToggleSelect(plano.id);
               }}
               className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
@@ -2614,11 +2614,11 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
               )}
             </CardTitle>
             <div className="flex items-center gap-2">
-              {/* **NOVO**: Mostrar contador e botão de limpar quando há seleções */}
-              {selectedActivities.size > 0 && (
+              {/* Contador de selecionadas e botão de limpar */}
+              {selectedActivities.size > 0 ? (
                 <div className="flex items-center gap-2 mr-4 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-lg">
                   <span className="text-sm font-medium text-indigo-700">
-                    {selectedActivities.size} selecionada{selectedActivities.size > 1 ? 's' : ''}
+                    ✅ {selectedActivities.size} selecionada{selectedActivities.size > 1 ? 's' : ''} — arraste para replanejar
                   </span>
                   <Button
                     variant="ghost"
@@ -2629,6 +2629,10 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
                     Limpar
                   </Button>
                 </div>
+              ) : hasSelectedUser && canReprogram && (
+                <span className="text-xs text-gray-400 mr-2 hidden sm:block">
+                  💡 Passe o mouse sobre uma atividade para selecioná-la
+                </span>
               )}
               {hasSelectedUser && (
                 <>
