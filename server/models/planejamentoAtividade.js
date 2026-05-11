@@ -1,6 +1,6 @@
 const { pool } = require('../db/pool');
 
-const NUMERIC_FIELDS = new Set(['atividade_id', 'empreendimento_id', 'executor_id', 'tempo_planejado', 'tempo_executado']);
+const NUMERIC_FIELDS = new Set(['atividade_id', 'empreendimento_id', 'documento_id', 'executor_id', 'tempo_planejado', 'tempo_executado']);
 const JSONB_FIELDS = new Set(['executores', 'horas_por_dia', 'horas_executadas_por_dia']);
 
 // Frontend uses 'descritivo'; DB column is 'titulo'. Expose both so all callers work.
@@ -11,7 +11,7 @@ function mapRow(row) {
 
 async function createPlanejamentoAtividade(data = {}) {
   const cols = [
-    'titulo', 'descricao', 'atividade_id', 'empreendimento_id', 'executor_principal', 'executores', 'executor_id',
+    'titulo', 'descricao', 'atividade_id', 'empreendimento_id', 'documento_id', 'executor_principal', 'executores', 'executor_id',
     'inicio_previsto', 'fim_previsto', 'inicio_planejado', 'termino_planejado', 'tempo_planejado', 'tempo_executado',
     'horas_por_dia', 'horas_executadas_por_dia', 'status', 'is_quick_activity'
   ];

@@ -909,6 +909,7 @@ app.get('/api/planejamentos', async (req, res) => {
       }
     }
     addNumericFilterQualified('pa.atividade_id', req.query.atividade_id);
+    addNumericFilterQualified('pa.documento_id', req.query.documento_id);
     addNumericFilterQualified('pa.executor_id', req.query.executor_id);
     addTextFilter('executor_principal', req.query.executor_principal);
     addTextFilter('status', req.query.status);
@@ -2722,6 +2723,7 @@ startServer().catch((err) => {
     await pool.query("ALTER TABLE planejamento_atividades ADD COLUMN IF NOT EXISTS inicio_real DATE;");
     await pool.query("ALTER TABLE planejamento_atividades ADD COLUMN IF NOT EXISTS termino_real DATE;");
     await pool.query("ALTER TABLE planejamento_atividades ADD COLUMN IF NOT EXISTS is_quick_activity BOOLEAN DEFAULT false;");
+    await pool.query("ALTER TABLE planejamento_atividades ADD COLUMN IF NOT EXISTS documento_id INTEGER REFERENCES documentos(id) ON DELETE SET NULL;");
     await pool.query("ALTER TABLE planejamento_documentos ADD COLUMN IF NOT EXISTS inicio_real DATE;");
     await pool.query("ALTER TABLE planejamento_documentos ADD COLUMN IF NOT EXISTS termino_real DATE;");
     console.log('✅ ensured inicio_real/termino_real on planejamento tables');
