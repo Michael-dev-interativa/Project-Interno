@@ -976,9 +976,25 @@ const DailyActivityGroup = ({ empreendimento, executor, atividades, isExpanded, 
     empreendimentoNome !== 'Atividades Rápidas' &&
     !atividades.some(a => a.status === 'concluido' || a.isLegacyExecution);
 
+  // Seleção em grupo
+  const selectableIds = atividades
+    .filter(a => a.status !== 'concluido' && !a.isLegacyExecution)
+    .map(a => normalizeActivityId(a.id));
+  const isGroupSelected = selectableIds.length > 0 && selectableIds.every(id => selectedActivities.has(id));
+  const isGroupPartial = !isGroupSelected && selectableIds.some(id => selectedActivities.has(id));
+
+  const handleGroupCheckbox = (e) => {
+    e.stopPropagation();
+    if (isGroupSelected) {
+      selectableIds.forEach(id => { if (selectedActivities.has(id)) onToggleSelect(id); });
+    } else {
+      selectableIds.forEach(id => { if (!selectedActivities.has(id)) onToggleSelect(id); });
+    }
+  };
+
   return (
     <div
-      className="mb-1"
+      className="mb-1 group"
       ref={provided?.innerRef}
       {...(provided?.draggableProps || {})}
     >
@@ -999,9 +1015,25 @@ const DailyActivityGroup = ({ empreendimento, executor, atividades, isExpanded, 
             transition: 'all 0.2s ease'
           })
         }}
-        className={`p-2 rounded-lg hover:shadow-md transition-shadow duration-200 border ${isDragging ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-gray-200'
+        className={`p-2 rounded-lg hover:shadow-md transition-shadow duration-200 border relative ${isDragging ? 'border-indigo-400 ring-2 ring-indigo-200' : isGroupSelected ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-gray-200'
           }`}
       >
+        {/* Checkbox de grupo - visível no hover ou quando selecionado/parcial */}
+        {selectableIds.length > 0 && (
+          <div
+            className={`absolute right-1 top-1 z-20 transition-opacity ${isGroupSelected || isGroupPartial || hasSelections ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+            onClick={handleGroupCheckbox}
+          >
+            <input
+              type="checkbox"
+              checked={isGroupSelected}
+              ref={el => { if (el) el.indeterminate = isGroupPartial; }}
+              onChange={() => {}}
+              className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+              title={isGroupSelected ? 'Desmarcar grupo' : 'Selecionar grupo'}
+            />
+          </div>
+        )}
         <div className="flex items-center justify-between gap-2">
           {canDragGroup && (
             <div
