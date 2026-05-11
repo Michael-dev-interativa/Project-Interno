@@ -882,7 +882,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
               </Card>
             ) : (
               filteredItems.map((item, index) => (
-                <div key={item.id} className={`flex gap-4 border border-gray-300 rounded-lg overflow-hidden ${index % 2 === 0 ? 'bg-white' : 'bg-gray-200'}`}>
+                <div key={item.id} className={`flex gap-4 rounded-lg overflow-hidden ${index % 2 === 0 ? 'bg-white border border-gray-300' : 'bg-blue-50 border border-blue-200'}`}>
                   {/* Container Principal (80%) */}
                   <div className="w-4/5 p-4 space-y-4 border-r border-gray-300">
                     {/* De, Descritiva e Assunto - lado a lado */}
