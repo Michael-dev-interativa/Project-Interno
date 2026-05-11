@@ -626,7 +626,7 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
 
         {/* Checkbox de Seleção - visível no hover ou quando há seleções ativas */}
         {plano.status !== 'concluido' && !plano.isLegacyExecution && (
-          <div className={`absolute left-1 top-1 z-20 transition-opacity ${hasSelections || isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+          <div className={`absolute right-1 top-1 z-20 transition-opacity ${hasSelections || isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
             <input
               type="checkbox"
               checked={isSelected}
@@ -640,11 +640,10 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
           </div>
         )}
 
-        {/* **MODIFICADO**: Drag Handle - Ajustar posição quando há checkbox */}
+        {/* **MODIFICADO**: Drag Handle */}
         <div
           {...provided.dragHandleProps}
-          className={`absolute top-0 bottom-9 w-6 flex items-center justify-center cursor-move opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-r from-gray-100 to-transparent ${hasSelections || isSelected ? 'left-6' : 'left-0'
-            }`}
+          className={`absolute top-0 bottom-9 w-6 flex items-center justify-center cursor-move opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-r from-gray-100 to-transparent left-0`}
           title={isSelected && hasSelections ? "Arrastar atividades selecionadas" : "Arrastar para mover"}
         >
           <svg className="w-3.5 h-3.5 text-gray-500" viewBox="0 0 24 24" fill="currentColor">
