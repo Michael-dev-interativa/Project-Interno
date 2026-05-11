@@ -36,6 +36,7 @@ function DocumentoItem({
   isExpanded,
   hasActivities,
   allAtividades,
+  isFullyCompleted,
   handleEdit,
   handleDelete,
   handleOpenDocEtapaModal,
@@ -285,7 +286,7 @@ function DocumentoItem({
 
   return (
     <>
-      <tr className="border-b hover:bg-gray-50 transition-colors">
+      <tr className={`border-b transition-colors ${isFullyCompleted ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50'}`}>
         <td className="w-[50px] p-3">
           {hasActivities && (
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleRow(doc.id)}>
@@ -294,7 +295,16 @@ function DocumentoItem({
           )}
         </td>
 
-        <td className="p-3 text-sm font-medium">{doc.numero || '—'}</td>
+        <td className="p-3 text-sm font-medium">
+          <div className="flex flex-col gap-1">
+            <span>{doc.numero || '—'}</span>
+            {isFullyCompleted && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded px-1.5 py-0.5 w-fit">
+                ✓ Concluída
+              </span>
+            )}
+          </div>
+        </td>
         <td className="p-3 text-sm">{doc.arquivo || '—'}</td>
         <td className="p-3 text-sm text-gray-600">{doc.descritivo || '—'}</td>
         <td className="p-3 text-sm">

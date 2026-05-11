@@ -991,6 +991,24 @@ export default function DocumentosTab({
     [localDocumentos]
   );
 
+  // Set de IDs de documentos onde todos os planejamentos estão concluídos
+  const completedDocIds = useMemo(() => {
+    const byDoc = {};
+    for (const p of localPlanejamentos) {
+      if (!p.documento_id) continue;
+      const key = String(p.documento_id);
+      if (!byDoc[key]) byDoc[key] = [];
+      byDoc[key].push(p);
+    }
+    const result = new Set();
+    for (const [docId, plans] of Object.entries(byDoc)) {
+      if (plans.length > 0 && plans.every(p => p.status === 'concluido')) {
+        result.add(docId);
+      }
+    }
+    return result;
+  }, [localPlanejamentos]);
+
   const sharedProps = useMemo(() => ({
     localDocumentos,
     setLocalPlanejamentos,
@@ -1140,6 +1158,7 @@ export default function DocumentosTab({
                                 doc={doc}
                                 isExpanded={!!expandedRows[doc.id]}
                                 hasActivities={docIdsWithActivities.has(String(doc.id))}
+                                isFullyCompleted={completedDocIds.has(String(doc.id))}
                                 allAtividades={allAtividades}
                                 handleEdit={handleEdit}
                                 handleDelete={handleDelete}
