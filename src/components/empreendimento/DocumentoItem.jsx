@@ -68,6 +68,8 @@ function DocumentoItem({
   const [predecessoraFocused, setPredecessoraFocused] = useState(false);
   const [selectedAtivIds, setSelectedAtivIds] = useState(new Set());
   const [isConcluding, setIsConcluding] = useState(false);
+  // Track catalog activities concluded locally (base activity id → new planejamento id or 'pending')
+  const [localConcluidosMap, setLocalConcluidosMap] = useState({});
 
   // Register this item's loading setter so the parent can target only this item
   useEffect(() => {
@@ -123,14 +125,42 @@ function DocumentoItem({
   const handleConcluirSelecionadas = async () => {
     if (selectedAtivIds.size === 0) return;
     setIsConcluding(true);
+    const hoje = new Date().toISOString().slice(0, 10);
     try {
-      const updates = [...selectedAtivIds].map(id =>
-        PlanejamentoAtividade.update(id, { status: 'concluido' })
-      );
-      await Promise.all(updates);
-      setLocalPlanejamentos(prev =>
-        prev.map(p => selectedAtivIds.has(p.id) ? { ...p, status: 'concluido' } : p)
-      );
+      const projectUpdates = [];
+      const catalogCreates = [];
+      for (const id of selectedAtivIds) {
+        const ativ = atividadesDoc.find(a => a.id === id);
+        if (!ativ) continue;
+        if (ativ.empreendimento_id != null) {
+          projectUpdates.push(
+            PlanejamentoAtividade.update(id, { status: 'concluido', termino_real: hoje })
+              .then(() => setLocalPlanejamentos(prev =>
+                prev.map(p => p.id === id ? { ...p, status: 'concluido', termino_real: hoje } : p)
+              ))
+          );
+        } else {
+          // Catalog activity: create a new planejamento record
+          setLocalConcluidosMap(prev => ({ ...prev, [String(id)]: 'pending' }));
+          catalogCreates.push(
+            PlanejamentoAtividade.create({
+              empreendimento_id: empreendimento.id,
+              atividade_id: id,
+              documento_id: doc.id,
+              etapa: ativ.etapa,
+              descritivo: ativ.atividade,
+              tempo_planejado: ativ.tempo || 0,
+              status: 'concluido',
+              termino_real: hoje,
+              horas_por_dia: {},
+            }).then(created => {
+              setLocalConcluidosMap(prev => ({ ...prev, [String(id)]: created.id }));
+              setLocalPlanejamentos(prev => [...prev, created]);
+            })
+          );
+        }
+      }
+      await Promise.all([...projectUpdates, ...catalogCreates]);
       setSelectedAtivIds(new Set());
     } catch {
       alert('Erro ao concluir atividades. Tente novamente.');
@@ -140,15 +170,50 @@ function DocumentoItem({
   };
 
   const handleToggleConcluida = async (ativ) => {
-    if (!ativ.empreendimento_id) return;
-    const novoStatus = ativ.status === 'concluido' ? 'em_andamento' : 'concluido';
-    try {
-      await PlanejamentoAtividade.update(ativ.id, { status: novoStatus });
-      setLocalPlanejamentos(prev =>
-        prev.map(p => p.id === ativ.id ? { ...p, status: novoStatus } : p)
-      );
-    } catch {
-      alert('Erro ao atualizar status da atividade.');
+    const hoje = new Date().toISOString().slice(0, 10);
+    if (ativ.empreendimento_id != null) {
+      const novoStatus = ativ.status === 'concluido' ? 'em_andamento' : 'concluido';
+      try {
+        await PlanejamentoAtividade.update(ativ.id, { status: novoStatus, termino_real: novoStatus === 'concluido' ? hoje : null });
+        setLocalPlanejamentos(prev =>
+          prev.map(p => p.id === ativ.id ? { ...p, status: novoStatus, termino_real: novoStatus === 'concluido' ? hoje : null } : p)
+        );
+      } catch {
+        alert('Erro ao atualizar status da atividade.');
+      }
+    } else {
+      // Catalog activity — create a planejamento with status 'concluido'
+      const alreadyConcluido = localConcluidosMap[String(ativ.id)];
+      if (alreadyConcluido && alreadyConcluido !== 'pending') {
+        // Undo: delete the created planejamento
+        try {
+          await PlanejamentoAtividade.delete(alreadyConcluido);
+          setLocalConcluidosMap(prev => { const n = { ...prev }; delete n[String(ativ.id)]; return n; });
+          setLocalPlanejamentos(prev => prev.filter(p => p.id !== alreadyConcluido));
+        } catch {
+          alert('Erro ao desfazer conclusão.');
+        }
+      } else {
+        setLocalConcluidosMap(prev => ({ ...prev, [String(ativ.id)]: 'pending' }));
+        try {
+          const created = await PlanejamentoAtividade.create({
+            empreendimento_id: empreendimento.id,
+            atividade_id: ativ.id,
+            documento_id: doc.id,
+            etapa: ativ.etapa,
+            descritivo: ativ.atividade,
+            tempo_planejado: ativ.tempo || 0,
+            status: 'concluido',
+            termino_real: hoje,
+            horas_por_dia: {},
+          });
+          setLocalConcluidosMap(prev => ({ ...prev, [String(ativ.id)]: created.id }));
+          setLocalPlanejamentos(prev => [...prev, created]);
+        } catch {
+          setLocalConcluidosMap(prev => { const n = { ...prev }; delete n[String(ativ.id)]; return n; });
+          alert('Erro ao concluir atividade.');
+        }
+      }
     }
   };
 
@@ -488,7 +553,11 @@ function DocumentoItem({
       </tr>
 
       {isExpanded && (() => {
-        const selectableAtivs = atividadesDoc.filter(a => a.empreendimento_id != null && a.status !== 'concluido');
+        // isConcluido for any activity: project ones check status field; catalog ones check localConcluidosMap
+        const isAtivConcluida = (a) =>
+          a.empreendimento_id != null ? a.status === 'concluido' : !!localConcluidosMap[String(a.id)];
+
+        const selectableAtivs = atividadesDoc.filter(a => !isAtivConcluida(a));
         const allSelected = selectableAtivs.length > 0 && selectableAtivs.every(a => selectedAtivIds.has(a.id));
         const someSelected = selectedAtivIds.size > 0;
         const totalTempo = atividadesDoc.reduce((sum, a) => sum + (a.tempo || 0), 0);
@@ -548,8 +617,10 @@ function DocumentoItem({
                 {/* Activity list */}
                 <div className="divide-y divide-gray-100">
                   {atividadesDoc.map(ativ => {
-                    const isSelectable = !readOnly && ativ.empreendimento_id != null;
-                    const isConcluido = ativ.status === 'concluido';
+                    const isSelectable = !readOnly;
+                    const isConcluido = isAtivConcluida(ativ);
+                    const isCatalog = ativ.empreendimento_id == null;
+                    const isPending = isCatalog && localConcluidosMap[String(ativ.id)] === 'pending';
                     return (
                       <div key={ativ.id} className={`flex items-center gap-3 px-4 py-2.5 ${isConcluido ? 'bg-green-50/50' : 'hover:bg-gray-50'}`}>
                         {/* Checkbox */}
@@ -591,38 +662,44 @@ function DocumentoItem({
                               <div className="text-xs text-gray-400">Concluída manualmente</div>
                             )}
                           </div>
-                          {!readOnly && isSelectable && (
+                          {!readOnly && (
                             <div className="flex items-center gap-1">
+                              {/* Toggle conclude button */}
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 className={`h-7 w-7 ${isConcluido ? 'text-green-600 hover:text-green-800' : 'text-gray-400 hover:text-green-600'} hover:bg-green-50`}
                                 title={isConcluido ? 'Desfazer conclusão' : 'Marcar como concluída'}
                                 onClick={() => handleToggleConcluida(ativ)}
+                                disabled={isPending}
                               >
-                                <Check className="w-4 h-4" />
+                                {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-4 h-4" />}
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-gray-400 hover:text-red-600 hover:bg-red-50"
-                                title="Remover atividade"
-                                onClick={() => handleDeleteAtividadeLocal(ativ)}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
+                              {/* Delete only for project activities (empreendimento_id set) */}
+                              {!isCatalog && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                                  title="Remover atividade"
+                                  onClick={() => handleDeleteAtividadeLocal(ativ)}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                              {/* Edit for project activities */}
+                              {!isCatalog && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-blue-500 hover:text-blue-700"
+                                  title="Editar atividade"
+                                  onClick={() => handleEditAtividade(ativ)}
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </Button>
+                              )}
                             </div>
-                          )}
-                          {!readOnly && !isSelectable && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-blue-500 hover:text-blue-700"
-                              title="Editar atividade"
-                              onClick={() => handleEditAtividade(ativ)}
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </Button>
                           )}
                         </div>
                       </div>
