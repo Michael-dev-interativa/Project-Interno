@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ChevronDown, ChevronRight, Pencil, Trash2, Calendar, Loader2, X, CheckSquare } from "lucide-react";
+import { ChevronDown, ChevronRight, Pencil, Trash2, Calendar, Loader2, X, CheckSquare, Check, Plus } from "lucide-react";
 import { Documento, PlanejamentoAtividade } from "@/entities/all";
 import { format, parseISO, isValid, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -136,6 +136,30 @@ function DocumentoItem({
       alert('Erro ao concluir atividades. Tente novamente.');
     } finally {
       setIsConcluding(false);
+    }
+  };
+
+  const handleToggleConcluida = async (ativ) => {
+    if (!ativ.empreendimento_id) return;
+    const novoStatus = ativ.status === 'concluido' ? 'em_andamento' : 'concluido';
+    try {
+      await PlanejamentoAtividade.update(ativ.id, { status: novoStatus });
+      setLocalPlanejamentos(prev =>
+        prev.map(p => p.id === ativ.id ? { ...p, status: novoStatus } : p)
+      );
+    } catch {
+      alert('Erro ao atualizar status da atividade.');
+    }
+  };
+
+  const handleDeleteAtividadeLocal = async (ativ) => {
+    if (!ativ.empreendimento_id) return;
+    if (!window.confirm(`Remover a atividade "${ativ.atividade}"?`)) return;
+    try {
+      await PlanejamentoAtividade.delete(ativ.id);
+      setLocalPlanejamentos(prev => prev.filter(p => p.id !== ativ.id));
+    } catch {
+      alert('Erro ao remover atividade.');
     }
   };
 
@@ -464,102 +488,159 @@ function DocumentoItem({
       </tr>
 
       {isExpanded && (() => {
-        // Only project activities (empreendimento_id set) can be marked complete
         const selectableAtivs = atividadesDoc.filter(a => a.empreendimento_id != null && a.status !== 'concluido');
         const allSelected = selectableAtivs.length > 0 && selectableAtivs.every(a => selectedAtivIds.has(a.id));
         const someSelected = selectedAtivIds.size > 0;
+        const totalTempo = atividadesDoc.reduce((sum, a) => sum + (a.tempo || 0), 0);
+        const planejadas = atividadesDoc.filter(a => a.inicio_planejado).length;
 
         return (
-          <>
-            {/* Select-all + action bar */}
-            {!readOnly && selectableAtivs.length > 0 && (
-              <tr className="bg-blue-100 border-b text-xs">
-                <td className="p-2 pl-8" colSpan={2}>
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      onChange={() => {
-                        if (allSelected) {
-                          setSelectedAtivIds(prev => {
-                            const next = new Set(prev);
-                            selectableAtivs.forEach(a => next.delete(a.id));
-                            return next;
-                          });
-                        } else {
-                          setSelectedAtivIds(prev => {
-                            const next = new Set(prev);
-                            selectableAtivs.forEach(a => next.add(a.id));
-                            return next;
-                          });
-                        }
-                      }}
-                      className="h-3.5 w-3.5 accent-blue-600"
-                    />
-                    <span className="font-medium text-blue-800">Selecionar todas</span>
-                  </label>
-                </td>
-                <td colSpan={8} className="p-2">
-                  {someSelected && (
+          <tr>
+            <td colSpan={99} className="p-0 bg-gray-50 border-b">
+              <div className="mx-4 my-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold text-gray-800">
+                      Atividades da Folha: <span className="text-blue-600">{doc.numero}</span>
+                    </span>
+                    {!readOnly && selectableAtivs.length > 0 && (
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs text-gray-600">
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={() => {
+                            if (allSelected) {
+                              setSelectedAtivIds(prev => { const n = new Set(prev); selectableAtivs.forEach(a => n.delete(a.id)); return n; });
+                            } else {
+                              setSelectedAtivIds(prev => { const n = new Set(prev); selectableAtivs.forEach(a => n.add(a.id)); return n; });
+                            }
+                          }}
+                          className="h-3.5 w-3.5 accent-blue-600"
+                        />
+                        Selecionar todos
+                      </label>
+                    )}
+                    {!readOnly && someSelected && (
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white flex items-center gap-1"
+                        onClick={handleConcluirSelecionadas}
+                        disabled={isConcluding}
+                      >
+                        {isConcluding ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckSquare className="w-3 h-3" />}
+                        Concluir selecionadas ({selectedAtivIds.size})
+                      </Button>
+                    )}
+                  </div>
+                  {!readOnly && (
                     <Button
                       size="sm"
-                      className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white flex items-center gap-1"
-                      onClick={handleConcluirSelecionadas}
-                      disabled={isConcluding}
+                      className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1"
+                      onClick={() => handleEditAtividade(null)}
                     >
-                      {isConcluding ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckSquare className="w-3 h-3" />}
-                      Concluir selecionadas ({selectedAtivIds.size})
+                      <Plus className="w-3 h-3" /> Nova Atividade
                     </Button>
                   )}
-                </td>
-              </tr>
-            )}
+                </div>
 
-            {atividadesDoc.map(ativ => {
-              const isSelectable = !readOnly && ativ.empreendimento_id != null && ativ.status !== 'concluido';
-              const isConcluido = ativ.status === 'concluido';
-              return (
-                <tr key={ativ.id} className={`border-b text-sm ${isConcluido ? 'bg-green-50' : 'bg-blue-50'}`}>
-                  <td className="p-2 pl-8" colSpan={2}>
-                    {isSelectable && (
-                      <input
-                        type="checkbox"
-                        checked={selectedAtivIds.has(ativ.id)}
-                        onChange={() => toggleAtivSelection(ativ.id)}
-                        className="h-3.5 w-3.5 accent-blue-600"
-                      />
-                    )}
-                    {isConcluido && (
-                      <span className="text-xs font-semibold text-green-700">✓</span>
-                    )}
-                  </td>
-                  <td className={`p-2 font-medium ${isConcluido ? 'text-green-700 line-through' : 'text-gray-700'}`} colSpan={2}>{ativ.atividade || '—'}</td>
-                  <td className="p-2 text-gray-500">{ativ.subdisciplina || '—'}</td>
-                  <td className="p-2 text-gray-500">{ativ.escala || '—'}</td>
-                  {!readOnly && (
-                    <>
-                      <td className="p-2 text-gray-500">{ativ.executor_principal || '—'}</td>
-                      <td className="p-2 text-xs text-gray-500">
-                        <div>Início: {formatDate(ativ.inicio_planejado)}</div>
-                        <div>Fim: {formatDate(ativ.termino_planejado)}</div>
-                      </td>
-                      <td className="p-2 text-gray-500">{ativ.tempo ? formatHoras(ativ.tempo) : '—'}</td>
-                      <td className="p-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-blue-600"
-                          onClick={() => handleEditAtividade(ativ)}
-                        >
-                          <Pencil className="w-3 h-3" />
-                        </Button>
-                      </td>
-                    </>
+                {/* Activity list */}
+                <div className="divide-y divide-gray-100">
+                  {atividadesDoc.map(ativ => {
+                    const isSelectable = !readOnly && ativ.empreendimento_id != null;
+                    const isConcluido = ativ.status === 'concluido';
+                    return (
+                      <div key={ativ.id} className={`flex items-center gap-3 px-4 py-2.5 ${isConcluido ? 'bg-green-50/50' : 'hover:bg-gray-50'}`}>
+                        {/* Checkbox */}
+                        <div className="w-5 flex-shrink-0 flex justify-center">
+                          {isSelectable && !isConcluido ? (
+                            <input
+                              type="checkbox"
+                              checked={selectedAtivIds.has(ativ.id)}
+                              onChange={() => toggleAtivSelection(ativ.id)}
+                              className="h-4 w-4 accent-blue-600"
+                            />
+                          ) : <span className="w-4" />}
+                        </div>
+
+                        {/* Name + badge + subtitle */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-sm font-medium ${isConcluido ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                              {ativ.atividade || '—'}
+                            </span>
+                            {isConcluido && (
+                              <span className="inline-flex items-center text-xs bg-gray-100 text-gray-600 border border-gray-200 rounded px-1.5 py-0.5 font-medium whitespace-nowrap">
+                                Concluída Manualmente
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-0.5">
+                            {[ativ.etapa, ativ.subdisciplina].filter(Boolean).join(' • ')}
+                          </div>
+                        </div>
+
+                        {/* Right side */}
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <div className="text-right">
+                            <div className={`text-sm font-medium ${isConcluido ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                              {ativ.tempo ? formatHoras(ativ.tempo) : '—'}
+                            </div>
+                            {isConcluido && (
+                              <div className="text-xs text-gray-400">Concluída manualmente</div>
+                            )}
+                          </div>
+                          {!readOnly && isSelectable && (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={`h-7 w-7 ${isConcluido ? 'text-green-600 hover:text-green-800' : 'text-gray-400 hover:text-green-600'} hover:bg-green-50`}
+                                title={isConcluido ? 'Desfazer conclusão' : 'Marcar como concluída'}
+                                onClick={() => handleToggleConcluida(ativ)}
+                              >
+                                <Check className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                                title="Remover atividade"
+                                onClick={() => handleDeleteAtividadeLocal(ativ)}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          )}
+                          {!readOnly && !isSelectable && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-blue-500 hover:text-blue-700"
+                              title="Editar atividade"
+                              onClick={() => handleEditAtividade(ativ)}
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {atividadesDoc.length === 0 && (
+                    <div className="px-4 py-6 text-center text-sm text-gray-400">Nenhuma atividade encontrada</div>
                   )}
-                </tr>
-              );
-            })}
-          </>
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-between px-4 py-2.5 border-t border-gray-100 bg-gray-50 rounded-b-lg text-xs text-gray-500">
+                  <span>Total: <strong className="text-gray-700">{atividadesDoc.length}</strong> atividades | Planejadas: <strong className="text-gray-700">{planejadas}</strong></span>
+                  <span>Tempo total: <strong className="text-gray-700">{totalTempo > 0 ? formatHoras(totalTempo) : '—'}</strong></span>
+                </div>
+              </div>
+            </td>
+          </tr>
         );
       })()}
 
