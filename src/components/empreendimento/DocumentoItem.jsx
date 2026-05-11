@@ -36,7 +36,6 @@ function DocumentoItem({
   isExpanded,
   hasActivities,
   allAtividades,
-  isFullyCompleted,
   handleEdit,
   handleDelete,
   handleOpenDocEtapaModal,
@@ -48,6 +47,7 @@ function DocumentoItem({
   readOnly,
   // sharedProps
   localDocumentos,
+  localPlanejamentos,
   setLocalPlanejamentos,
   handleLocalUpdate,
   setCargaDiariaCache,
@@ -68,14 +68,27 @@ function DocumentoItem({
   const [predecessoraFocused, setPredecessoraFocused] = useState(false);
   const [selectedAtivIds, setSelectedAtivIds] = useState(new Set());
   const [isConcluding, setIsConcluding] = useState(false);
-  // Track catalog activities concluded locally (base activity id → new planejamento id or 'pending')
-  const [localConcluidosMap, setLocalConcluidosMap] = useState({});
+  // Set of atividade IDs currently being concluded (for spinner UX)
+  const [pendingAtivIds, setPendingAtivIds] = useState(new Set());
+  // Tracks whether this document's activities are all concluded (persists across collapse)
+  const [docFullyCompleted, setDocFullyCompleted] = useState(false);
 
   // Register this item's loading setter so the parent can target only this item
   useEffect(() => {
     if (registerLoadingSetter) registerLoadingSetter(doc.id, setIsLoading);
     return () => { if (registerLoadingSetter) registerLoadingSetter(doc.id, null); };
   }, [doc.id, registerLoadingSetter]);
+
+  // Set of atividade_id values that are concluded for this document (derived from persisted localPlanejamentos)
+  const concludedAtivIdSet = useMemo(() => {
+    const s = new Set();
+    for (const p of (localPlanejamentos || [])) {
+      if (p.atividade_id != null && String(p.documento_id) === String(doc.id) && p.status === 'concluido') {
+        s.add(String(p.atividade_id));
+      }
+    }
+    return s;
+  }, [localPlanejamentos, doc.id]);
 
   // Estado do mini-modal de data
   const [dateModalOpen, setDateModalOpen] = useState(false);
@@ -127,25 +140,26 @@ function DocumentoItem({
     setIsConcluding(true);
     const hoje = new Date().toISOString().slice(0, 10);
     try {
-      const projectUpdates = [];
-      const catalogCreates = [];
+      const ops = [];
       for (const id of selectedAtivIds) {
         const ativ = atividadesDoc.find(a => a.id === id);
         if (!ativ) continue;
-        if (ativ.empreendimento_id != null) {
-          projectUpdates.push(
-            PlanejamentoAtividade.update(id, { status: 'concluido', termino_real: hoje })
+        // Find existing plan for this activity + doc
+        const existingPlan = (localPlanejamentos || []).find(
+          p => String(p.atividade_id) === String(ativ.id) && String(p.documento_id) === String(doc.id)
+        );
+        if (existingPlan) {
+          ops.push(
+            PlanejamentoAtividade.update(existingPlan.id, { status: 'concluido', termino_real: hoje })
               .then(() => setLocalPlanejamentos(prev =>
-                prev.map(p => p.id === id ? { ...p, status: 'concluido', termino_real: hoje } : p)
+                prev.map(p => p.id === existingPlan.id ? { ...p, status: 'concluido', termino_real: hoje } : p)
               ))
           );
         } else {
-          // Catalog activity: create a new planejamento record
-          setLocalConcluidosMap(prev => ({ ...prev, [String(id)]: 'pending' }));
-          catalogCreates.push(
+          ops.push(
             PlanejamentoAtividade.create({
               empreendimento_id: empreendimento.id,
-              atividade_id: id,
+              atividade_id: ativ.id,
               documento_id: doc.id,
               etapa: ativ.etapa,
               descritivo: ativ.atividade,
@@ -154,13 +168,12 @@ function DocumentoItem({
               termino_real: hoje,
               horas_por_dia: {},
             }).then(created => {
-              setLocalConcluidosMap(prev => ({ ...prev, [String(id)]: created.id }));
               setLocalPlanejamentos(prev => [...prev, created]);
             })
           );
         }
       }
-      await Promise.all([...projectUpdates, ...catalogCreates]);
+      await Promise.all(ops);
       setSelectedAtivIds(new Set());
     } catch {
       alert('Erro ao concluir atividades. Tente novamente.');
@@ -171,58 +184,56 @@ function DocumentoItem({
 
   const handleToggleConcluida = async (ativ) => {
     const hoje = new Date().toISOString().slice(0, 10);
-    if (ativ.empreendimento_id != null) {
-      const novoStatus = ativ.status === 'concluido' ? 'em_andamento' : 'concluido';
+    const atividadeIdStr = String(ativ.id);
+    // Find existing plan for this activity + doc
+    const existingPlan = (localPlanejamentos || []).find(
+      p => String(p.atividade_id) === atividadeIdStr && String(p.documento_id) === String(doc.id)
+    );
+    if (existingPlan) {
+      const novoStatus = existingPlan.status === 'concluido' ? 'em_andamento' : 'concluido';
       try {
-        await PlanejamentoAtividade.update(ativ.id, { status: novoStatus, termino_real: novoStatus === 'concluido' ? hoje : null });
+        await PlanejamentoAtividade.update(existingPlan.id, { status: novoStatus, termino_real: novoStatus === 'concluido' ? hoje : null });
         setLocalPlanejamentos(prev =>
-          prev.map(p => p.id === ativ.id ? { ...p, status: novoStatus, termino_real: novoStatus === 'concluido' ? hoje : null } : p)
+          prev.map(p => p.id === existingPlan.id ? { ...p, status: novoStatus, termino_real: novoStatus === 'concluido' ? hoje : null } : p)
         );
       } catch {
         alert('Erro ao atualizar status da atividade.');
       }
     } else {
-      // Catalog activity — create a planejamento with status 'concluido'
-      const alreadyConcluido = localConcluidosMap[String(ativ.id)];
-      if (alreadyConcluido && alreadyConcluido !== 'pending') {
-        // Undo: delete the created planejamento
-        try {
-          await PlanejamentoAtividade.delete(alreadyConcluido);
-          setLocalConcluidosMap(prev => { const n = { ...prev }; delete n[String(ativ.id)]; return n; });
-          setLocalPlanejamentos(prev => prev.filter(p => p.id !== alreadyConcluido));
-        } catch {
-          alert('Erro ao desfazer conclusão.');
-        }
-      } else {
-        setLocalConcluidosMap(prev => ({ ...prev, [String(ativ.id)]: 'pending' }));
-        try {
-          const created = await PlanejamentoAtividade.create({
-            empreendimento_id: empreendimento.id,
-            atividade_id: ativ.id,
-            documento_id: doc.id,
-            etapa: ativ.etapa,
-            descritivo: ativ.atividade,
-            tempo_planejado: ativ.tempo || 0,
-            status: 'concluido',
-            termino_real: hoje,
-            horas_por_dia: {},
-          });
-          setLocalConcluidosMap(prev => ({ ...prev, [String(ativ.id)]: created.id }));
-          setLocalPlanejamentos(prev => [...prev, created]);
-        } catch {
-          setLocalConcluidosMap(prev => { const n = { ...prev }; delete n[String(ativ.id)]; return n; });
-          alert('Erro ao concluir atividade.');
-        }
+      // No plan exists: create one with status 'concluido'
+      setPendingAtivIds(prev => new Set([...prev, atividadeIdStr]));
+      try {
+        const created = await PlanejamentoAtividade.create({
+          empreendimento_id: empreendimento.id,
+          atividade_id: ativ.id,
+          documento_id: doc.id,
+          etapa: ativ.etapa,
+          descritivo: ativ.atividade,
+          tempo_planejado: ativ.tempo || 0,
+          status: 'concluido',
+          termino_real: hoje,
+          horas_por_dia: {},
+        });
+        setLocalPlanejamentos(prev => [...prev, created]);
+      } catch {
+        alert('Erro ao concluir atividade.');
+      } finally {
+        setPendingAtivIds(prev => { const n = new Set(prev); n.delete(atividadeIdStr); return n; });
       }
     }
   };
 
   const handleDeleteAtividadeLocal = async (ativ) => {
     if (!ativ.empreendimento_id) return;
+    // Find the planejamento for this activity in this document
+    const plan = (localPlanejamentos || []).find(
+      p => String(p.atividade_id) === String(ativ.id) && String(p.documento_id) === String(doc.id)
+    );
+    if (!plan) return;
     if (!window.confirm(`Remover a atividade "${ativ.atividade}"?`)) return;
     try {
-      await PlanejamentoAtividade.delete(ativ.id);
-      setLocalPlanejamentos(prev => prev.filter(p => p.id !== ativ.id));
+      await PlanejamentoAtividade.delete(plan.id);
+      setLocalPlanejamentos(prev => prev.filter(p => p.id !== plan.id));
     } catch {
       alert('Erro ao remover atividade.');
     }
@@ -356,6 +367,13 @@ function DocumentoItem({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isExpanded, allAtividades, atividadesEmpCache, doc.id, doc.disciplinas, doc.disciplina, doc.subdisciplinas, etapaParaPlanejamento]);
 
+  // Update docFullyCompleted when the panel is open and all activities are concluded
+  useEffect(() => {
+    if (isExpanded && atividadesDoc.length > 0) {
+      setDocFullyCompleted(atividadesDoc.every(a => concludedAtivIdSet.has(String(a.id))));
+    }
+  }, [isExpanded, atividadesDoc, concludedAtivIdSet]);
+
   const executorAtual = doc.executor_principal;
   const executorNome = (usuariosOrdenados || []).find(u => u.email === executorAtual)?.nome
     || executorAtual
@@ -404,7 +422,7 @@ function DocumentoItem({
 
   return (
     <>
-      <tr className={`border-b transition-colors ${isFullyCompleted ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50'}`}>
+      <tr className={`border-b transition-colors ${docFullyCompleted ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50'}`}>
         <td className="w-[50px] p-3">
           {hasActivities && (
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleRow(doc.id)}>
@@ -416,7 +434,7 @@ function DocumentoItem({
         <td className="p-3 text-sm font-medium">
           <div className="flex flex-col gap-1">
             <span>{doc.numero || '—'}</span>
-            {isFullyCompleted && (
+            {docFullyCompleted && (
               <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded px-1.5 py-0.5 w-fit">
                 ✓ Concluída
               </span>
@@ -553,9 +571,8 @@ function DocumentoItem({
       </tr>
 
       {isExpanded && (() => {
-        // isConcluido for any activity: project ones check status field; catalog ones check localConcluidosMap
-        const isAtivConcluida = (a) =>
-          a.empreendimento_id != null ? a.status === 'concluido' : !!localConcluidosMap[String(a.id)];
+        // isConcluido: check concludedAtivIdSet which is derived from persisted localPlanejamentos
+        const isAtivConcluida = (a) => concludedAtivIdSet.has(String(a.id));
 
         const selectableAtivs = atividadesDoc.filter(a => !isAtivConcluida(a));
         const allSelected = selectableAtivs.length > 0 && selectableAtivs.every(a => selectedAtivIds.has(a.id));
@@ -620,7 +637,7 @@ function DocumentoItem({
                     const isSelectable = !readOnly;
                     const isConcluido = isAtivConcluida(ativ);
                     const isCatalog = ativ.empreendimento_id == null;
-                    const isPending = isCatalog && localConcluidosMap[String(ativ.id)] === 'pending';
+                    const isPending = pendingAtivIds.has(String(ativ.id));
                     return (
                       <div key={ativ.id} className={`flex items-center gap-3 px-4 py-2.5 ${isConcluido ? 'bg-green-50/50' : 'hover:bg-gray-50'}`}>
                         {/* Checkbox */}
