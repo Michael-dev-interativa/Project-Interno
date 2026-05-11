@@ -70,8 +70,6 @@ function DocumentoItem({
   const [isConcluding, setIsConcluding] = useState(false);
   // Set of atividade IDs currently being concluded (for spinner UX)
   const [pendingAtivIds, setPendingAtivIds] = useState(new Set());
-  // Tracks whether this document's activities are all concluded (persists across collapse)
-  const [docFullyCompleted, setDocFullyCompleted] = useState(false);
 
   // Register this item's loading setter so the parent can target only this item
   useEffect(() => {
@@ -378,11 +376,52 @@ function DocumentoItem({
   }, [isExpanded, allAtividades, atividadesEmpCache, doc.id, doc.disciplinas, doc.disciplina, doc.subdisciplinas, etapaParaPlanejamento]);
 
   // Update docFullyCompleted when the panel is open and all activities are concluded
-  useEffect(() => {
+  // When expanded, use the accurate atividadesDoc list.
+  // When collapsed, use a lightweight discipline/subdiscipline count so the badge
+  // shows correctly on page load without requiring the user to expand first.
+  const docFullyCompleted = useMemo(() => {
+    if (concludedAtivIdSet.size === 0) return false;
+
+    // Accurate path: row is expanded and we have the full activity list
     if (isExpanded && atividadesDoc.length > 0) {
-      setDocFullyCompleted(atividadesDoc.every(a => concludedAtivIdSet.has(String(a.id))));
+      return atividadesDoc.every(a => concludedAtivIdSet.has(String(a.id)));
     }
-  }, [isExpanded, atividadesDoc, concludedAtivIdSet]);
+
+    // Lightweight path: count expected activities without expanding
+    const disciplinasDoc = doc.disciplinas?.length > 0 ? doc.disciplinas : [doc.disciplina].filter(Boolean);
+    const subdisciplinasDoc = doc.subdisciplinas || [];
+    const idsSeen = new Set();
+
+    // Project activities explicitly linked to this doc
+    (allAtividades || []).forEach(a => {
+      if (a.empreendimento_id == null || a.tempo === -999) return;
+      const linked = (a.documento_id != null && String(a.documento_id) === String(doc.id)) ||
+        (Array.isArray(a.documento_ids) && a.documento_ids.some(id => String(id) === String(doc.id)));
+      if (linked) idsSeen.add(String(a.id));
+    });
+    (atividadesEmpCache || []).forEach(a => {
+      if (a.tempo === -999) return;
+      const linked = (a.documento_id != null && String(a.documento_id) === String(doc.id)) ||
+        (Array.isArray(a.documento_ids) && a.documento_ids.some(id => String(id) === String(doc.id)));
+      if (linked) idsSeen.add(String(a.id));
+    });
+
+    // Catalog activities matching discipline + subdiscipline
+    if (subdisciplinasDoc.length > 0 && disciplinasDoc.length > 0) {
+      (allAtividades || []).forEach(a => {
+        if (a.empreendimento_id != null || a.tempo === -999) return;
+        if (idsSeen.has(String(a.id))) return;
+        if (disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina)) {
+          idsSeen.add(String(a.id));
+        }
+      });
+    }
+
+    const expectedCount = idsSeen.size;
+    return expectedCount > 0 && concludedAtivIdSet.size >= expectedCount;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [concludedAtivIdSet, isExpanded, atividadesDoc, allAtividades, atividadesEmpCache,
+    doc.id, doc.disciplinas, doc.disciplina, doc.subdisciplinas]);
 
   const executorAtual = doc.executor_principal;
   const executorNome = (usuariosOrdenados || []).find(u => u.email === executorAtual)?.nome
