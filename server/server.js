@@ -1124,6 +1124,27 @@ app.patch('/api/planejamento_documentos/:id', async (req, res) => {
     }
     const updated = await planejamentoDocumentoModel.updateById(req.params.id, req.body || {});
     if (!updated) return res.status(404).json({ error: 'Not found' });
+
+    // When a document planning is concluded, auto-complete all matching activities
+    if (req.body && req.body.status === 'concluido' && updated.documento_id && updated.etapa) {
+      try {
+        await pool.query(
+          `UPDATE planejamento_atividades pa
+           SET status = 'concluido', termino_real = CURRENT_DATE
+           WHERE pa.documento_id = $1
+             AND pa.status != 'concluido'
+             AND EXISTS (
+               SELECT 1 FROM atividades a WHERE a.id = pa.atividade_id AND a.etapa = $2
+               UNION ALL
+               SELECT 1 FROM atividades_empreendimento ae WHERE ae.id = pa.atividade_id AND ae.etapa = $2
+             )`,
+          [updated.documento_id, updated.etapa]
+        );
+      } catch (autoErr) {
+        console.error('[planejamento_documentos PATCH] Erro ao auto-concluir atividades:', autoErr.message);
+      }
+    }
+
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
