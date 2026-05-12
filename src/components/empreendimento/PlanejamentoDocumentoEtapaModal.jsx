@@ -22,6 +22,7 @@ export default function PlanejamentoDocumentoEtapaModal({
   allAtividades = [],
   executorPadrao = null,
   etapaParaPlanejamento = 'todas',
+  planejamentos = [],
   onSuccess
 }) {
   const [etapasSelecionadas, setEtapasSelecionadas] = useState([]);
@@ -151,6 +152,19 @@ export default function PlanejamentoDocumentoEtapaModal({
     .filter(etapa => etapa.tempoCalculado > 0)
     .sort((a, b) => a.ordem - b.ordem);
   }, [documento, etapaParaPlanejamento, atividadesDisponiveisPorEtapa]);
+
+  // Map etapa → existing plan status for this document
+  const planosPorEtapa = useMemo(() => {
+    const map = {};
+    if (!documento || !planejamentos) return map;
+    for (const p of planejamentos) {
+      if (p == null) continue;
+      if (String(p.documento_id) === String(documento.id) && p.tipo_plano === 'documento' && p.etapa) {
+        map[p.etapa] = { status: p.status, executor: p.executor_principal, id: p.id };
+      }
+    }
+    return map;
+  }, [planejamentos, documento]);
 
   useEffect(() => {
     if (isOpen) {
@@ -480,6 +494,19 @@ export default function PlanejamentoDocumentoEtapaModal({
         
         const horasPorDia = plano.horas_por_dia || {};
 
+        // Delete existing non-concluded plan for this same etapa to avoid duplicates
+        const existingPlan = planosPorEtapa[plano.etapa];
+        if (existingPlan?.id && existingPlan?.status !== 'concluido') {
+          try {
+            await retryWithExtendedBackoff(
+              () => PlanejamentoDocumento.delete(existingPlan.id),
+              `deleteOldDocPlan-${existingPlan.id}`
+            );
+          } catch (delErr) {
+            console.warn(`⚠️ Não foi possível remover plano antigo para etapa ${plano.etapa}:`, delErr);
+          }
+        }
+
         const atividadesDaEtapa = atividadesDisponiveisPorEtapa[plano.etapa] || [];
         const atividades_ids = atividadesDaEtapa.map(ativ => ativ.id);
 
@@ -701,14 +728,24 @@ export default function PlanejamentoDocumentoEtapaModal({
                 const atividadesDaEtapa = etapaObj.atividades || [];
                 const tempoTotal = etapaObj.tempoCalculado;
                 const isSelected = etapasSelecionadas.includes(etapaName);
+                const planoExistente = planosPorEtapa[etapaName];
+                const isConcluida = planoExistente?.status === 'concluido';
+                const isPlanejada = planoExistente && !isConcluida;
+                const executorNomePlan = planoExistente?.executor
+                  ? (usuariosOrdenados.find(u => u.email === planoExistente.executor)?.nome || planoExistente.executor)
+                  : '';
 
                 return (
                   <div 
                     key={etapaName}
                     className={`border rounded-lg p-4 transition-all ${
                       isSelected 
-                        ? 'border-blue-500 bg-blue-50' 
-                        : 'border-gray-200 hover:border-gray-300'
+                        ? 'border-blue-500 bg-blue-50'
+                        : isConcluida
+                          ? 'border-green-300 bg-green-50'
+                          : isPlanejada
+                            ? 'border-yellow-300 bg-yellow-50'
+                            : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -716,15 +753,27 @@ export default function PlanejamentoDocumentoEtapaModal({
                         id={`etapa-${etapaName}`}
                         checked={isSelected}
                         onCheckedChange={() => handleEtapaToggle(etapaName)}
-                        disabled={isCalculatingDate}
+                        disabled={isCalculatingDate || isConcluida}
                       />
                       <div className="flex-1">
-                        <Label 
-                          htmlFor={`etapa-${etapaName}`}
-                          className="font-medium cursor-pointer"
-                        >
-                          {etapaName}
-                        </Label>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Label 
+                            htmlFor={`etapa-${etapaName}`}
+                            className={`font-medium cursor-pointer ${isConcluida ? 'text-green-700' : ''}`}
+                          >
+                            {etapaName}
+                          </Label>
+                          {isConcluida && (
+                            <span className="inline-flex items-center text-xs bg-green-100 text-green-700 border border-green-300 rounded px-1.5 py-0.5 font-medium">
+                              ✓ Concluída
+                            </span>
+                          )}
+                          {isPlanejada && (
+                            <span className="inline-flex items-center text-xs bg-yellow-100 text-yellow-700 border border-yellow-300 rounded px-1.5 py-0.5 font-medium">
+                              Planejada — {executorNomePlan}
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
                           <span>{atividadesDaEtapa.length} atividade(s)</span>
                           <span>•</span>

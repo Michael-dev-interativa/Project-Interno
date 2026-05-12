@@ -1191,6 +1191,7 @@ export default function DocumentosTab({
           allAtividades={allAtividades}
           executorPadrao={executorPreSelecionado}
           etapaParaPlanejamento={etapaParaPlanejamento}
+          planejamentos={localPlanejamentos}
           isOpen={isDocEtapaModalOpen}
           onClose={handleCloseDocEtapaModal}
           onSuccess={handleSaveDocEtapaPlanning}
