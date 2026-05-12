@@ -2745,6 +2745,7 @@ startServer().catch((err) => {
     await pool.query("ALTER TABLE execucoes ADD COLUMN IF NOT EXISTS pausado_automaticamente BOOLEAN DEFAULT false;");
     await pool.query("ALTER TABLE execucoes ADD COLUMN IF NOT EXISTS tipo_planejamento VARCHAR(50);");
     await pool.query("ALTER TABLE execucoes ADD COLUMN IF NOT EXISTS observacao TEXT;");
+    await pool.query("ALTER TABLE execucoes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();");
     console.log('✅ ensured optional columns on execucoes');
   } catch (err) {
     console.warn('⚠️ Could not ensure optional columns for execucoes:', err.message || err);
