@@ -2660,11 +2660,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
                     Limpar
                   </Button>
                 </div>
-              ) : hasSelectedUser && canReprogram && (
-                <span className="text-xs text-gray-400 mr-2 hidden sm:block">
-                  💡 Passe o mouse sobre uma atividade para selecioná-la
-                </span>
-              )}
+              ) : hasSelectedUser && canReprogram && null}
               {hasSelectedUser && (
                 <>
                   {(!isColaborador && !isApoio) && (
