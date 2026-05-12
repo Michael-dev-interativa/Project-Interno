@@ -90,6 +90,19 @@ function DocumentoItem({
     return s;
   }, [localPlanejamentos, doc.id]);
 
+  // Set of etapas concluded via planejamento_documentos for this document.
+  // When a PlanejamentoDocumento is concluded, all activities of that etapa are considered done.
+  const concludedEtapasSet = useMemo(() => {
+    const s = new Set();
+    for (const p of (localPlanejamentos || [])) {
+      if (p == null) continue;
+      if (String(p.documento_id) === String(doc.id) && p.tipo_plano === 'documento' && p.status === 'concluido' && p.etapa) {
+        s.add(p.etapa);
+      }
+    }
+    return s;
+  }, [localPlanejamentos, doc.id]);
+
   // Set of atividade IDs that are planned (have a planejamento_atividades record) for this document.
   const plannedAtivIdSet = useMemo(() => {
     const s = new Set();
@@ -405,11 +418,13 @@ function DocumentoItem({
   // When collapsed, use a lightweight discipline/subdiscipline count so the badge
   // shows correctly on page load without requiring the user to expand first.
   const docFullyCompleted = useMemo(() => {
-    if (concludedAtivIdSet.size === 0) return false;
+    if (concludedAtivIdSet.size === 0 && concludedEtapasSet.size === 0) return false;
+
+    const isAtvDone = (a) => concludedAtivIdSet.has(String(a.id)) || concludedEtapasSet.has(a.etapa);
 
     // Accurate path: row is expanded and we have the full activity list
     if (isExpanded && atividadesDoc.length > 0) {
-      return atividadesDoc.every(a => concludedAtivIdSet.has(String(a.id)));
+      return atividadesDoc.every(isAtvDone);
     }
 
     // Lightweight path: count expected activities without expanding
@@ -443,9 +458,16 @@ function DocumentoItem({
     }
 
     const expectedCount = idsSeen.size;
-    return expectedCount > 0 && concludedAtivIdSet.size >= expectedCount;
+    const concludedCount = [...idsSeen].filter(id => {
+      if (concludedAtivIdSet.has(id)) return true;
+      // Check etapa-based conclusion: find activity and check its etapa
+      const allA = [...(allAtividades || []), ...(atividadesEmpCache || [])];
+      const a = allA.find(x => String(x.id) === id);
+      return a ? concludedEtapasSet.has(a.etapa) : false;
+    }).length;
+    return expectedCount > 0 && concludedCount >= expectedCount;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [concludedAtivIdSet, isExpanded, atividadesDoc, allAtividades, atividadesEmpCache,
+  }, [concludedAtivIdSet, concludedEtapasSet, isExpanded, atividadesDoc, allAtividades, atividadesEmpCache,
     doc.id, doc.disciplinas, doc.disciplina, doc.subdisciplinas]);
 
   const executorAtual = doc.executor_principal;
@@ -646,7 +668,7 @@ function DocumentoItem({
 
       {isExpanded && (() => {
         // isConcluido: check concludedAtivIdSet which is derived from persisted localPlanejamentos
-        const isAtivConcluida = (a) => concludedAtivIdSet.has(String(a.id));
+        const isAtivConcluida = (a) => concludedAtivIdSet.has(String(a.id)) || concludedEtapasSet.has(a.etapa);
         const isAtivPlanejada = (a) =>
           !concludedAtivIdSet.has(String(a.id)) && (
             plannedAtivIdSet.has(String(a.id)) ||
