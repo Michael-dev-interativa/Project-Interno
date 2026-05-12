@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Loader2, Zap, Clock, Play, Users, CheckCircle2, XCircle, History, Edit2, RotateCcw, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Zap, Clock, Play, Users, CheckCircle2, XCircle, History, Edit2, RotateCcw, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { ActivityTimerContext } from '@/components/contexts/ActivityTimerContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -81,6 +81,10 @@ export default function AtividadesRapidasPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedExecucao, setSelectedExecucao] = useState(null);
   const [editDescricao, setEditDescricao] = useState('');
+
+  const [showGlobais, setShowGlobais] = useState(() => {
+    try { return localStorage.getItem('ar_show_globais') !== 'false'; } catch { return true; }
+  });
 
   // Estados para adicionar nova atividade
   const [showAddModal, setShowAddModal] = useState(false);
@@ -368,8 +372,18 @@ export default function AtividadesRapidasPage() {
 
                   {atividadesGlobais.length > 0 && (
                     <>
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 mt-4">Atividades Padrão</p>
-                      {atividadesGlobais.map(atividade => (
+                      <button
+                        onClick={() => {
+                          const next = !showGlobais;
+                          setShowGlobais(next);
+                          try { localStorage.setItem('ar_show_globais', String(next)); } catch {}
+                        }}
+                        className="flex items-center gap-1 text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 mt-4 hover:text-gray-600 transition-colors"
+                      >
+                        {showGlobais ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                        Atividades Padrão ({atividadesGlobais.length})
+                      </button>
+                      {showGlobais && atividadesGlobais.map(atividade => (
                         <div
                           key={atividade.id}
                           className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
