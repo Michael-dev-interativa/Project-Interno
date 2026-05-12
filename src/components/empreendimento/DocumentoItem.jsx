@@ -102,14 +102,8 @@ function DocumentoItem({
     return s;
   }, [localPlanejamentos, doc.id]);
 
-  // Whether this document has ANY planning record (any etapa) — if so, all its activities are "planned"
-  const docIsPlanned = useMemo(() => {
-    return (localPlanejamentos || []).some(p =>
-      p != null && String(p.documento_id) === String(doc.id) && p.tipo_plano === 'documento'
-    ) || !!doc.inicio_planejado;
-  }, [localPlanejamentos, doc.id, doc.inicio_planejado]);
-
-  // Set of etapas covered by planejamento_documentos for this document (kept for specific etapa matching).
+  // Set of etapas covered by planejamento_documentos for this document.
+  // Only activities whose etapa is in this set are shown as "Planejada".
   const plannedEtapasSet = useMemo(() => {
     const s = new Set();
     for (const p of (localPlanejamentos || [])) {
@@ -655,7 +649,6 @@ function DocumentoItem({
         const isAtivConcluida = (a) => concludedAtivIdSet.has(String(a.id));
         const isAtivPlanejada = (a) =>
           !concludedAtivIdSet.has(String(a.id)) && (
-            docIsPlanned ||
             plannedAtivIdSet.has(String(a.id)) ||
             plannedEtapasSet.has(a.etapa)
           );
