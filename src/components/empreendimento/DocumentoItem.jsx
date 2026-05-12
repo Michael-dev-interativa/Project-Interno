@@ -90,6 +90,30 @@ function DocumentoItem({
     return s;
   }, [localPlanejamentos, doc.id]);
 
+  // Set of atividade IDs that are planned (have a planejamento_atividades record) for this document.
+  const plannedAtivIdSet = useMemo(() => {
+    const s = new Set();
+    for (const p of (localPlanejamentos || [])) {
+      if (p == null) continue;
+      if (String(p.documento_id) === String(doc.id) && p.tipo_plano === 'atividade') {
+        if (p.atividade_id != null) s.add(String(p.atividade_id));
+      }
+    }
+    return s;
+  }, [localPlanejamentos, doc.id]);
+
+  // Set of etapas covered by planejamento_documentos for this document.
+  const plannedEtapasSet = useMemo(() => {
+    const s = new Set();
+    for (const p of (localPlanejamentos || [])) {
+      if (p == null) continue;
+      if (String(p.documento_id) === String(doc.id) && p.tipo_plano === 'documento' && p.etapa) {
+        s.add(p.etapa);
+      }
+    }
+    return s;
+  }, [localPlanejamentos, doc.id]);
+
   // Estado do mini-modal de data
   const [dateModalOpen, setDateModalOpen] = useState(false);
   const [pendingExecutor, setPendingExecutor] = useState(null);
@@ -622,12 +646,14 @@ function DocumentoItem({
       {isExpanded && (() => {
         // isConcluido: check concludedAtivIdSet which is derived from persisted localPlanejamentos
         const isAtivConcluida = (a) => concludedAtivIdSet.has(String(a.id));
+        const isAtivPlanejada = (a) =>
+          plannedAtivIdSet.has(String(a.id)) || plannedEtapasSet.has(a.etapa) || concludedAtivIdSet.has(String(a.id));
 
         const selectableAtivs = atividadesDoc.filter(a => !isAtivConcluida(a));
         const allSelected = selectableAtivs.length > 0 && selectableAtivs.every(a => selectedAtivIds.has(a.id));
         const someSelected = selectedAtivIds.size > 0;
         const totalTempo = atividadesDoc.reduce((sum, a) => sum + (a.tempo || 0), 0);
-        const planejadas = atividadesDoc.filter(a => a.inicio_planejado).length;
+        const planejadas = atividadesDoc.filter(a => isAtivPlanejada(a)).length;
 
         return (
           <tr>
@@ -685,10 +711,11 @@ function DocumentoItem({
                   {atividadesDoc.map(ativ => {
                     const isSelectable = !readOnly;
                     const isConcluido = isAtivConcluida(ativ);
+                    const isPlanejada = !isConcluido && isAtivPlanejada(ativ);
                     const isCatalog = ativ.empreendimento_id == null;
                     const isPending = pendingAtivIds.has(String(ativ.id));
                     return (
-                      <div key={ativ.id} className={`flex items-center gap-3 px-4 py-2.5 ${isConcluido ? 'bg-green-50/50' : 'hover:bg-gray-50'}`}>
+                      <div key={ativ.id} className={`flex items-center gap-3 px-4 py-2.5 ${isConcluido ? 'bg-green-50/50' : isPlanejada ? 'bg-blue-50/40' : 'hover:bg-gray-50'}`}>
                         {/* Checkbox */}
                         <div className="w-5 flex-shrink-0 flex justify-center">
                           {isSelectable && !isConcluido ? (
@@ -710,6 +737,11 @@ function DocumentoItem({
                             {isConcluido && (
                               <span className="inline-flex items-center text-xs bg-gray-100 text-gray-600 border border-gray-200 rounded px-1.5 py-0.5 font-medium whitespace-nowrap">
                                 Concluída Manualmente
+                              </span>
+                            )}
+                            {isPlanejada && (
+                              <span className="inline-flex items-center text-xs bg-blue-100 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5 font-medium whitespace-nowrap">
+                                Planejada
                               </span>
                             )}
                           </div>
