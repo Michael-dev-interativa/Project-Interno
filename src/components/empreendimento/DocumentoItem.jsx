@@ -737,6 +737,7 @@ function DocumentoItem({
                   {atividadesDoc.map(ativ => {
                     const isSelectable = !readOnly;
                     const isConcluido = isAtivConcluida(ativ);
+                    const isConcluidoByExecutor = !concludedAtivIdSet.has(String(ativ.id)) && concludedEtapasSet.has(ativ.etapa);
                     const isPlanejada = !isConcluido && isAtivPlanejada(ativ);
                     const isCatalog = ativ.empreendimento_id == null;
                     const isPending = pendingAtivIds.has(String(ativ.id));
@@ -762,7 +763,7 @@ function DocumentoItem({
                             </span>
                             {isConcluido && (
                               <span className="inline-flex items-center text-xs bg-gray-100 text-gray-600 border border-gray-200 rounded px-1.5 py-0.5 font-medium whitespace-nowrap">
-                                Concluída Manualmente
+                                {isConcluidoByExecutor ? 'Concluída pelo Executor' : 'Concluída Manualmente'}
                               </span>
                             )}
                             {isPlanejada && (
@@ -783,7 +784,7 @@ function DocumentoItem({
                               {ativ.tempo ? formatHoras(ativ.tempo) : '—'}
                             </div>
                             {isConcluido && (
-                              <div className="text-xs text-gray-400">Concluída manualmente</div>
+                              <div className="text-xs text-gray-400">{isConcluidoByExecutor ? 'Concluída pelo executor' : 'Concluída manualmente'}</div>
                             )}
                           </div>
                           {!readOnly && (
