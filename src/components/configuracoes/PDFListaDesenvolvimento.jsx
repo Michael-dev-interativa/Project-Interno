@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { FileText, Loader2 } from "lucide-react";
-import { Atividade, Empreendimento, Documento } from "@/entities/all";
+import { Atividade, Empreendimento } from "@/entities/all";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import jsPDF from 'jspdf';
@@ -13,143 +13,75 @@ export default function PDFListaDesenvolvimento({ empreendimentoId = null }) {
 
   const buscarDadosCompletos = async () => {
     try {
-      const empreendimentos = await Empreendimento.filter({ id: empreendimentoId });
-      
-      let dadosCliente = { construtora: "", empreendimento: "" };
-      
-      if (empreendimentos && empreendimentos.length > 0) {
-        const emp = empreendimentos[0];
-        dadosCliente = {
-          construtora: emp.cliente || "",
-          empreendimento: emp.nome || ""
-        };
-      }
-
-      // Buscar atividades específicas do empreendimento e genéricas
-      const [atividadesEmpreendimento, todasAtividades, documentos] = await Promise.all([
-        Atividade.filter({ empreendimento_id: empreendimentoId }),
-        Atividade.list(),
-        Documento.filter({ empreendimento_id: empreendimentoId })
+      const [empreendimentos, atividadesEmp, todasAtividades] = await Promise.all([
+        Empreendimento.filter({ id: empreendimentoId }),
+        Atividade.filter({ empreendimento_id: empreendimentoId, limit: 5000 }),
+        Atividade.list()
       ]);
-      
-      
-      // Mapear atividades genéricas
-      const atividadesGenericasMap = new Map(
-        (todasAtividades || [])
-          .filter(a => !a.empreendimento_id)
-          .map(a => [a.id, a])
-      );
-      
-      // Mapear exclusões
+
+      const emp = empreendimentos?.[0] || {};
+      const dadosCliente = {
+        construtora: emp.cliente || "",
+        empreendimento: emp.nome || ""
+      };
+
+      // IDs excluídos globalmente via override com tempo=-999
       const excludedActivitiesSet = new Set();
-      const excludedFromDocumentMap = new Map();
-      
-      (atividadesEmpreendimento || []).forEach(pa => {
-        if (pa.id_atividade && pa.tempo === -999) {
-          if (pa.documento_id) {
-            if (!excludedFromDocumentMap.has(pa.id_atividade)) {
-              excludedFromDocumentMap.set(pa.id_atividade, new Set());
-            }
-            excludedFromDocumentMap.get(pa.id_atividade).add(pa.documento_id);
-          } else {
-            excludedActivitiesSet.add(pa.id_atividade);
-          }
+      (atividadesEmp || []).forEach(pa => {
+        if (pa.id_atividade && pa.tempo === -999 && !pa.documento_id) {
+          excludedActivitiesSet.add(pa.id_atividade);
         }
       });
-      
-      // Agrupar por ATIVIDADE (mostrar todas as atividades e em quais etapas elas aparecem)
-      const atividadesPorNome = {};
-      
-      // Adicionar atividades específicas do projeto
-      atividadesEmpreendimento.forEach(atividade => {
-        if (atividade.tempo === -999 || atividade.id_atividade) return; // Pular exclusões e overrides
-        
-        const nomeAtividade = atividade.atividade;
-        const etapa = atividade.etapa;
-        const disciplina = atividade.disciplina;
-        
-        if (nomeAtividade) {
-          if (!atividadesPorNome[nomeAtividade]) {
-            atividadesPorNome[nomeAtividade] = {
-              disciplina: disciplina || 'Sem disciplina',
-              subdisciplina: atividade.subdisciplina || '',
-              etapas: []
-            };
-          }
-          
-          if (etapa && !atividadesPorNome[nomeAtividade].etapas.includes(etapa)) {
-            atividadesPorNome[nomeAtividade].etapas.push(etapa);
-          }
-        }
-      });
-      
-      // Adicionar atividades do catálogo que se aplicam aos documentos
-      documentos.forEach(doc => {
-        const subdisciplinasDoc = doc.subdisciplinas || [];
-        const disciplinaDoc = doc.disciplina;
-        
-        atividadesGenericasMap.forEach(baseAtividade => {
-          const isExcludedFromProject = excludedActivitiesSet.has(baseAtividade.id);
-          const isExcludedFromThisDoc = excludedFromDocumentMap.has(baseAtividade.id) && 
-                                        excludedFromDocumentMap.get(baseAtividade.id).has(doc.id);
-          
-          if (isExcludedFromProject || isExcludedFromThisDoc) {
-            return;
-          }
 
-          const disciplinaMatch = baseAtividade.disciplina === disciplinaDoc;
-          const subdisciplinaMatch = subdisciplinasDoc.includes(baseAtividade.subdisciplina);
+      // Mapa de deduplicação: chave = "nome|||etapa"
+      const atividadesMap = new Map();
 
-          if (disciplinaMatch && subdisciplinaMatch) {
-            const nomeAtividade = baseAtividade.atividade;
-            const etapa = baseAtividade.etapa;
-            const disciplina = baseAtividade.disciplina;
-            
-            if (nomeAtividade) {
-              if (!atividadesPorNome[nomeAtividade]) {
-                atividadesPorNome[nomeAtividade] = {
-                  disciplina: disciplina || 'Sem disciplina',
-                  subdisciplina: baseAtividade.subdisciplina || '',
-                  etapas: []
-                };
-              }
-              
-              if (etapa && !atividadesPorNome[nomeAtividade].etapas.includes(etapa)) {
-                atividadesPorNome[nomeAtividade].etapas.push(etapa);
-              }
-            }
-          }
-        });
-      });
-
-      
-      // Reorganizar atividades por etapa
-      const atividadesPorEtapa = {};
-      
-      Object.entries(atividadesPorNome).forEach(([nomeAtividade, dados]) => {
-        dados.etapas.forEach(etapa => {
-          if (!atividadesPorEtapa[etapa]) {
-            atividadesPorEtapa[etapa] = [];
-          }
-          atividadesPorEtapa[etapa].push({
-            nome: nomeAtividade,
-            disciplina: dados.disciplina,
-            subdisciplina: dados.subdisciplina
+      const addAtividade = (nome, etapa, disciplina, subdisciplina) => {
+        if (!nome) return;
+        const key = `${nome}|||${etapa || ''}`;
+        if (!atividadesMap.has(key)) {
+          atividadesMap.set(key, {
+            nome,
+            etapa: etapa || '',
+            disciplina: disciplina || 'Sem disciplina',
+            subdisciplina: subdisciplina || '',
           });
-        });
+        }
+      };
+
+      // 1. Atividades específicas do projeto (não overrides, não exclusões)
+      (atividadesEmp || []).forEach(pa => {
+        if (pa.tempo === -999 || pa.id_atividade) return;
+        addAtividade(pa.atividade, pa.etapa, pa.disciplina, pa.subdisciplina);
       });
-      
-      // Ordenar etapas na ordem correta
+
+      // 2. Todas as atividades do catálogo (sem empreendimento_id), exceto as excluídas
+      (todasAtividades || [])
+        .filter(a => !a.empreendimento_id)
+        .forEach(a => {
+          if (excludedActivitiesSet.has(a.id)) return;
+          addAtividade(a.atividade, a.etapa, a.disciplina, a.subdisciplina);
+        });
+
+      // Agrupar por etapa
+      const atividadesPorEtapa = {};
+      atividadesMap.forEach(({ nome, etapa, disciplina, subdisciplina }) => {
+        const k = etapa || 'Outras';
+        if (!atividadesPorEtapa[k]) atividadesPorEtapa[k] = [];
+        atividadesPorEtapa[k].push({ nome, disciplina, subdisciplina });
+      });
+
+      // Ordenar etapas e atividades dentro de cada etapa
       const ordemEtapas = ['Concepção', 'Planejamento', 'Estudo Preliminar', 'Ante-Projeto', 'Projeto Básico', 'Projeto Executivo', 'Liberado para Obra'];
       const etapasOrdenadas = {};
       ordemEtapas.forEach(etapa => {
         if (atividadesPorEtapa[etapa]) {
-          etapasOrdenadas[etapa] = atividadesPorEtapa[etapa].sort((a, b) => 
+          etapasOrdenadas[etapa] = atividadesPorEtapa[etapa].sort((a, b) =>
             a.nome.localeCompare(b.nome, 'pt-BR')
           );
         }
       });
-      
+
       return { dadosCliente, atividadesPorEtapa: etapasOrdenadas };
     } catch (error) {
       console.error("Erro ao buscar dados:", error);
