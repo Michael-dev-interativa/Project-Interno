@@ -548,3 +548,13 @@ COMMENT ON COLUMN controle_os.observacoes IS 'Observações gerais';
 ALTER TABLE equipes ADD COLUMN IF NOT EXISTS cor VARCHAR(50) DEFAULT '#3B82F6';
 ALTER TABLE equipes ADD COLUMN IF NOT EXISTS descricao TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS equipe_id INTEGER REFERENCES equipes(id) ON DELETE SET NULL;
+
+-- Atividades rápidas genéricas (por usuário)
+CREATE TABLE IF NOT EXISTS atividades_genericas (
+  id SERIAL PRIMARY KEY,
+  nome TEXT NOT NULL,
+  usuario_id INTEGER REFERENCES users(id) ON DELETE CASCADE
+);
+
+ALTER TABLE atividades_genericas ADD COLUMN IF NOT EXISTS id SERIAL;
+ALTER TABLE atividades_genericas ADD COLUMN IF NOT EXISTS usuario_id INTEGER REFERENCES users(id) ON DELETE CASCADE;

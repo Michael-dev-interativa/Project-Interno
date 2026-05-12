@@ -1935,22 +1935,42 @@ app.post('/api/atividades', async (req, res) => {
   }
 });
 
-// Atividades genéricas (tabela dedicada: atividades_genericas)
+// Atividades genéricas (por usuário — filtradas pelo token de autenticação)
+function _mapAtividadeGenerica(r) {
+  return {
+    id: r.id,
+    nome: r.nome || '',
+    atividade: r.nome || '',
+    usuario_id: r.usuario_id ?? null,
+    is_global: r.usuario_id === null || r.usuario_id === undefined,
+  };
+}
+
 app.get('/api/atividades_genericas', async (req, res) => {
   try {
+    const token = getBearerToken(req);
+    const payload = verifySessionToken(token);
+    const userId = payload?.sub ?? null;
     const limit = parseInt(req.query.limit || '200', 10);
-    const result = await pool.query(
-      `SELECT nome FROM atividades_genericas ORDER BY nome ASC LIMIT $1`,
-      [limit]
-    );
 
-    const rows = result.rows.map(r => ({
-      id: r.nome || '',
-      nome: r.nome || '',
-      atividade: r.nome || ''
-    }));
+    let result;
+    if (userId) {
+      result = await pool.query(
+        `SELECT id, nome, usuario_id FROM atividades_genericas
+         WHERE usuario_id = $1 OR usuario_id IS NULL
+         ORDER BY nome ASC LIMIT $2`,
+        [userId, limit]
+      );
+    } else {
+      result = await pool.query(
+        `SELECT id, nome, usuario_id FROM atividades_genericas
+         WHERE usuario_id IS NULL
+         ORDER BY nome ASC LIMIT $1`,
+        [limit]
+      );
+    }
 
-    res.json(rows);
+    res.json(result.rows.map(_mapAtividadeGenerica));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1958,22 +1978,19 @@ app.get('/api/atividades_genericas', async (req, res) => {
 
 app.get('/api/atividades_genericas/:id', async (req, res) => {
   try {
-    const key = String(req.params.id || '').trim();
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID inválido.' });
+
     const result = await pool.query(
-      `SELECT nome FROM atividades_genericas WHERE nome = $1 LIMIT 1`,
-      [key]
+      `SELECT id, nome, usuario_id FROM atividades_genericas WHERE id = $1 LIMIT 1`,
+      [id]
     );
 
     if (!result.rows.length) {
       return res.status(404).json({ error: 'Atividade genérica não encontrada.' });
     }
 
-    const r = result.rows[0];
-    return res.json({
-      id: r.nome || '',
-      nome: r.nome || '',
-      atividade: r.nome || ''
-    });
+    return res.json(_mapAtividadeGenerica(result.rows[0]));
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -1981,24 +1998,26 @@ app.get('/api/atividades_genericas/:id', async (req, res) => {
 
 app.post('/api/atividades_genericas', async (req, res) => {
   try {
-    const payload = { ...(req.body || {}) };
-    const nome = String(payload.nome || payload.atividade || '').trim();
+    const token = getBearerToken(req);
+    const payload = verifySessionToken(token);
+    if (!payload?.sub) {
+      return res.status(401).json({ error: 'Autenticação necessária.' });
+    }
+    const userId = payload.sub;
+
+    const body = { ...(req.body || {}) };
+    const nome = String(body.nome || body.atividade || '').trim();
 
     if (!nome) {
       return res.status(400).json({ error: 'Campo "nome" é obrigatório.' });
     }
 
     const insert = await pool.query(
-      'INSERT INTO atividades_genericas (nome) VALUES ($1) RETURNING nome',
-      [nome]
+      'INSERT INTO atividades_genericas (nome, usuario_id) VALUES ($1, $2) RETURNING id, nome, usuario_id',
+      [nome, userId]
     );
-    const created = insert.rows[0];
 
-    return res.status(201).json({
-      id: created.nome || '',
-      nome: created.nome || '',
-      atividade: created.nome || '',
-    });
+    return res.status(201).json(_mapAtividadeGenerica(insert.rows[0]));
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -2006,30 +2025,40 @@ app.post('/api/atividades_genericas', async (req, res) => {
 
 app.patch('/api/atividades_genericas/:id', async (req, res) => {
   try {
-    const payload = { ...(req.body || {}) };
-    const nome = String(payload.nome || payload.atividade || '').trim();
+    const token = getBearerToken(req);
+    const payload = verifySessionToken(token);
+    if (!payload?.sub) {
+      return res.status(401).json({ error: 'Autenticação necessária.' });
+    }
+    const userId = payload.sub;
 
-    if (!nome) {
-      return res.status(400).json({ error: 'Campo "nome" é obrigatório.' });
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID inválido.' });
+
+    const body = { ...(req.body || {}) };
+    const nome = String(body.nome || body.atividade || '').trim();
+    if (!nome) return res.status(400).json({ error: 'Campo "nome" é obrigatório.' });
+
+    const existing = await pool.query(
+      'SELECT id, usuario_id FROM atividades_genericas WHERE id = $1',
+      [id]
+    );
+    if (!existing.rows.length) return res.status(404).json({ error: 'Atividade genérica não encontrada.' });
+
+    const atividade = existing.rows[0];
+    const userRow = await pool.query('SELECT role FROM users WHERE id = $1', [userId]);
+    const isAdmin = userRow.rows[0]?.role === 'admin';
+
+    if (!isAdmin && atividade.usuario_id !== userId) {
+      return res.status(403).json({ error: 'Sem permissão para editar esta atividade.' });
     }
 
-    const key = String(req.params.id || '').trim();
-    const updatedResult = await pool.query(
-      'UPDATE atividades_genericas SET nome = $1 WHERE nome = $2 RETURNING nome',
-      [nome, key]
+    const updated = await pool.query(
+      'UPDATE atividades_genericas SET nome = $1 WHERE id = $2 RETURNING id, nome, usuario_id',
+      [nome, id]
     );
 
-    if (!updatedResult.rows.length) {
-      return res.status(404).json({ error: 'Atividade genérica não encontrada.' });
-    }
-
-    const updated = updatedResult.rows[0];
-
-    return res.json({
-      id: updated.nome || '',
-      nome: updated.nome || '',
-      atividade: updated.nome || '',
-    });
+    return res.json(_mapAtividadeGenerica(updated.rows[0]));
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -2037,13 +2066,32 @@ app.patch('/api/atividades_genericas/:id', async (req, res) => {
 
 app.delete('/api/atividades_genericas/:id', async (req, res) => {
   try {
-    const key = String(req.params.id || '').trim();
-    const existing = await pool.query('SELECT nome FROM atividades_genericas WHERE nome = $1 LIMIT 1', [key]);
-    if (!existing.rows.length) {
-      return res.status(404).json({ error: 'Atividade genérica não encontrada.' });
+    const token = getBearerToken(req);
+    const payload = verifySessionToken(token);
+    if (!payload?.sub) {
+      return res.status(401).json({ error: 'Autenticação necessária.' });
+    }
+    const userId = payload.sub;
+
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID inválido.' });
+
+    const existing = await pool.query(
+      'SELECT id, usuario_id FROM atividades_genericas WHERE id = $1',
+      [id]
+    );
+    if (!existing.rows.length) return res.status(404).json({ error: 'Atividade genérica não encontrada.' });
+
+    const atividade = existing.rows[0];
+    const userRow = await pool.query('SELECT role FROM users WHERE id = $1', [userId]);
+    const isAdmin = userRow.rows[0]?.role === 'admin';
+
+    const canDelete = isAdmin || (atividade.usuario_id !== null && atividade.usuario_id === userId);
+    if (!canDelete) {
+      return res.status(403).json({ error: 'Sem permissão para remover esta atividade.' });
     }
 
-    await pool.query('DELETE FROM atividades_genericas WHERE nome = $1', [key]);
+    await pool.query('DELETE FROM atividades_genericas WHERE id = $1', [id]);
     return res.status(204).end();
   } catch (err) {
     return res.status(500).json({ error: err.message });

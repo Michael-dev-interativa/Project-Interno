@@ -92,7 +92,7 @@ export default function PlaylistTrigger() {
 
   // Buscar nome da atividade selecionada
   const atividadeNome = useMemo(() => {
-    const ativ = atividadesGenericas.find(a => a.id === selectedAtividade);
+    const ativ = atividadesGenericas.find(a => String(a.id) === selectedAtividade);
     return ativ?.nome || '';
   }, [selectedAtividade, atividadesGenericas]);
 
@@ -100,7 +100,7 @@ export default function PlaylistTrigger() {
   const handleQuickStart = async () => {
     if (!selectedAtividade) return;
 
-    const atividade = atividadesGenericas.find(a => a.id === selectedAtividade);
+    const atividade = atividadesGenericas.find(a => String(a.id) === selectedAtividade);
     if (!atividade) return;
 
     const empreendimentoId = selectedEmpreendimento === 'none' ? null : selectedEmpreendimento;
@@ -121,7 +121,7 @@ export default function PlaylistTrigger() {
   const handleHelpStart = async () => {
     if (!selectedAtividade || !selectedUsuarioAjuda) return;
 
-    const atividade = atividadesGenericas.find(a => a.id === selectedAtividade);
+    const atividade = atividadesGenericas.find(a => String(a.id) === selectedAtividade);
     if (!atividade) return;
 
     const empreendimentoId = selectedEmpreendimento === 'none' ? null : selectedEmpreendimento;
@@ -246,7 +246,7 @@ export default function PlaylistTrigger() {
                       </SelectTrigger>
                       <SelectContent className="max-h-60">
                         {atividadesGenericas.map(ag => (
-                          <SelectItem key={ag.id} value={ag.id}>{ag.nome}</SelectItem>
+                          <SelectItem key={ag.id} value={String(ag.id)}>{ag.nome}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -375,7 +375,7 @@ export default function PlaylistTrigger() {
                       </SelectTrigger>
                       <SelectContent className="max-h-60">
                         {atividadesGenericas.map(ag => (
-                          <SelectItem key={ag.id} value={ag.id}>{ag.nome}</SelectItem>
+                          <SelectItem key={ag.id} value={String(ag.id)}>{ag.nome}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

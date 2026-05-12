@@ -1,18 +1,67 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { base44 } from '@/api/base44Client';
-import { AtividadeGenerica, Usuario, Execucao, Empreendimento } from '@/entities/all';
+import { Usuario, Execucao, Empreendimento } from '@/entities/all';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Zap, Clock, Play, Users, CheckCircle2, XCircle, History, Edit2, RotateCcw } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Loader2, Zap, Clock, Play, Users, CheckCircle2, XCircle, History, Edit2, RotateCcw, Plus, Trash2 } from 'lucide-react';
 import { ActivityTimerContext } from '@/components/contexts/ActivityTimerContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+
+const LOCAL_AUTH_TOKEN_KEY = 'project_auth_token';
+const PROD_BACKEND = 'https://project-interno-rati.onrender.com';
+
+function getApiBase() {
+  if (typeof window === 'undefined') return '';
+  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? ''
+    : PROD_BACKEND;
+}
+
+function getAuthHeaders() {
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem(LOCAL_AUTH_TOKEN_KEY) : null;
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+async function fetchAtividadesGenericas() {
+  const res = await fetch(`${getApiBase()}/api/atividades_genericas`, {
+    headers: getAuthHeaders(),
+  });
+  return res.ok ? res.json() : [];
+}
+
+async function createAtividadeGenerica(nome) {
+  const res = await fetch(`${getApiBase()}/api/atividades_genericas`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ nome }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Erro ao criar atividade');
+  }
+  return res.json();
+}
+
+async function deleteAtividadeGenerica(id) {
+  const res = await fetch(`${getApiBase()}/api/atividades_genericas/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Erro ao remover atividade');
+  }
+}
 
 export default function AtividadesRapidasPage() {
   const { user, startExecution, userProfile } = useContext(ActivityTimerContext);
@@ -22,19 +71,21 @@ export default function AtividadesRapidasPage() {
   const [execucoes, setExecucoes] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
-  
-  // Estados do modal
+
+  // Estados do modal de iniciar
   const [showModal, setShowModal] = useState(false);
   const [selectedAtividade, setSelectedAtividade] = useState(null);
-  const [modalData, setModalData] = useState({
-    usuario_ajudado: '',
-    empreendimento_id: ''
-  });
+  const [modalData, setModalData] = useState({ usuario_ajudado: '', empreendimento_id: '' });
 
   // Estados para editar descrição
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedExecucao, setSelectedExecucao] = useState(null);
   const [editDescricao, setEditDescricao] = useState('');
+
+  // Estados para adicionar nova atividade
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newActivityName, setNewActivityName] = useState('');
+  const [isLoadingAdd, setIsLoadingAdd] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -42,14 +93,14 @@ export default function AtividadesRapidasPage() {
 
   const loadData = async () => {
     if (!user) return;
-    
+
     setIsLoadingData(true);
     try {
       const [atividadesData, usuariosData, empreendimentosData, execucoesData] = await Promise.all([
-        AtividadeGenerica.list(),
+        fetchAtividadesGenericas(),
         Usuario.list(),
         Empreendimento.list(),
-        Execucao.filter({ usuario: user.email, planejamento_id: null }, '-inicio', 50)
+        Execucao.filter({ usuario: user.email, planejamento_id: null }, '-inicio', 50),
       ]);
 
       setAtividadesGenericas(atividadesData || []);
@@ -66,20 +117,14 @@ export default function AtividadesRapidasPage() {
 
   const handleOpenModal = (atividade) => {
     setSelectedAtividade(atividade);
-    setModalData({
-      usuario_ajudado: '',
-      empreendimento_id: ''
-    });
+    setModalData({ usuario_ajudado: '', empreendimento_id: '' });
     setShowModal(true);
   };
 
   const handleCloseModal = () => {
     setShowModal(false);
     setSelectedAtividade(null);
-    setModalData({
-      usuario_ajudado: '',
-      empreendimento_id: ''
-    });
+    setModalData({ usuario_ajudado: '', empreendimento_id: '' });
   };
 
   const handleOpenEditModal = (execucao) => {
@@ -105,9 +150,8 @@ export default function AtividadesRapidasPage() {
         descritivo: execucao.descritivo,
         base_descritivo: execucao.descritivo.split(' - ')[1] || execucao.descritivo,
         empreendimento_id: execucao.empreendimento_id || null,
-        usuario_ajudado: execucao.usuario_ajudado || null
+        usuario_ajudado: execucao.usuario_ajudado || null,
       });
-
       alert('✅ Atividade retomada com sucesso!');
       await loadData();
     } catch (error) {
@@ -123,13 +167,9 @@ export default function AtividadesRapidasPage() {
       alert('Descrição não pode estar vazia');
       return;
     }
-
     setIsLoading(true);
     try {
-      await Execucao.update(selectedExecucao.id, {
-        descritivo: editDescricao.trim()
-      });
-      
+      await Execucao.update(selectedExecucao.id, { descritivo: editDescricao.trim() });
       alert('✅ Descrição atualizada com sucesso!');
       await loadData();
       handleCloseEditModal();
@@ -143,40 +183,53 @@ export default function AtividadesRapidasPage() {
 
   const handleConfirmStart = async () => {
     if (!selectedAtividade) return;
-
     setIsLoading(true);
-
     try {
       let descritivo = selectedAtividade.nome;
-      
-      // Adicionar contexto de ajuda ao descritivo
       if (modalData.usuario_ajudado) {
         const usuarioAjudado = usuarios.find(u => u.email === modalData.usuario_ajudado);
         descritivo = `Ajudando ${usuarioAjudado?.nome || modalData.usuario_ajudado} - ${descritivo}`;
       }
-
       await startExecution({
-        descritivo: descritivo,
+        descritivo,
         base_descritivo: selectedAtividade.nome,
         empreendimento_id: modalData.empreendimento_id || null,
-        usuario_ajudado: modalData.usuario_ajudado || null
+        usuario_ajudado: modalData.usuario_ajudado || null,
       });
-
       alert('✅ Atividade iniciada com sucesso!');
-      
-      // Recarregar execuções
       await loadData();
-      
-      // Fechar modal
       handleCloseModal();
-
-      // **REMOVIDO**: Redirecionamento automático para o dashboard
-
     } catch (error) {
       console.error('❌ Erro ao iniciar atividade:', error);
       alert('Erro ao iniciar atividade: ' + (error.message || 'Tente novamente.'));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleAddActivity = async () => {
+    const nome = newActivityName.trim();
+    if (!nome) return;
+    setIsLoadingAdd(true);
+    try {
+      await createAtividadeGenerica(nome);
+      setNewActivityName('');
+      setShowAddModal(false);
+      await loadData();
+    } catch (error) {
+      alert('Erro ao adicionar atividade: ' + (error.message || 'Tente novamente.'));
+    } finally {
+      setIsLoadingAdd(false);
+    }
+  };
+
+  const handleDeleteActivity = async (atividade) => {
+    if (!window.confirm(`Remover "${atividade.nome}" da sua lista?`)) return;
+    try {
+      await deleteAtividadeGenerica(atividade.id);
+      await loadData();
+    } catch (error) {
+      alert('Erro ao remover atividade: ' + (error.message || 'Tente novamente.'));
     }
   };
 
@@ -198,9 +251,7 @@ export default function AtividadesRapidasPage() {
       const parsed = Number(sanitized);
       return Number.isFinite(parsed) ? parsed : 0;
     };
-
-    const numericTempo = sanitize(tempo);
-    return `${numericTempo.toFixed(1)}h`;
+    return `${sanitize(tempo).toFixed(1)}h`;
   };
 
   const formatData = (dataString) => {
@@ -212,7 +263,6 @@ export default function AtividadesRapidasPage() {
     }
   };
 
-  // Bloquear acesso para perfil consultor
   if (userProfile?.perfil === 'consultor') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
@@ -246,6 +296,9 @@ export default function AtividadesRapidasPage() {
     );
   }
 
+  const minhasAtividades = atividadesGenericas.filter(a => !a.is_global);
+  const atividadesGlobais = atividadesGenericas.filter(a => a.is_global);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
       <div className="max-w-7xl mx-auto">
@@ -263,32 +316,88 @@ export default function AtividadesRapidasPage() {
           {/* Coluna Esquerda: Atividades Disponíveis */}
           <Card className="shadow-lg">
             <CardHeader className="border-b border-gray-100">
-              <CardTitle className="text-lg">Atividades Disponíveis</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Atividades Disponíveis</CardTitle>
+                <Button
+                  onClick={() => { setNewActivityName(''); setShowAddModal(true); }}
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  Nova Atividade
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="p-6">
               <ScrollArea className="h-[600px] pr-4">
                 <div className="space-y-2">
-                  {atividadesGenericas.map(atividade => (
-                    <div
-                      key={atividade.id}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-gray-900 truncate">
-                          {atividade.nome}
-                        </h4>
-                      </div>
-                      <Button
-                        onClick={() => handleOpenModal(atividade)}
-                        disabled={isLoading}
-                        size="sm"
-                        className="ml-3 bg-blue-600 hover:bg-blue-700"
-                      >
-                        <Play className="w-4 h-4 mr-1" />
-                        Iniciar
-                      </Button>
+                  {minhasAtividades.length > 0 && (
+                    <>
+                      <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">Minhas Atividades</p>
+                      {minhasAtividades.map(atividade => (
+                        <div
+                          key={atividade.id}
+                          className="flex items-center justify-between p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors border border-blue-200"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-gray-900 truncate">{atividade.nome}</h4>
+                          </div>
+                          <div className="flex items-center gap-2 ml-3">
+                            <Button
+                              onClick={() => handleOpenModal(atividade)}
+                              disabled={isLoading}
+                              size="sm"
+                              className="bg-blue-600 hover:bg-blue-700"
+                            >
+                              <Play className="w-4 h-4 mr-1" />
+                              Iniciar
+                            </Button>
+                            <Button
+                              onClick={() => handleDeleteActivity(atividade)}
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {atividadesGlobais.length > 0 && (
+                    <>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 mt-4">Atividades Padrão</p>
+                      {atividadesGlobais.map(atividade => (
+                        <div
+                          key={atividade.id}
+                          className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-gray-900 truncate">{atividade.nome}</h4>
+                          </div>
+                          <Button
+                            onClick={() => handleOpenModal(atividade)}
+                            disabled={isLoading}
+                            size="sm"
+                            className="ml-3 bg-blue-600 hover:bg-blue-700"
+                          >
+                            <Play className="w-4 h-4 mr-1" />
+                            Iniciar
+                          </Button>
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {atividadesGenericas.length === 0 && (
+                    <div className="text-center py-12">
+                      <Zap className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-500">Nenhuma atividade disponível.</p>
+                      <p className="text-sm text-gray-400 mt-1">Clique em "Nova Atividade" para adicionar.</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </ScrollArea>
             </CardContent>
@@ -318,57 +427,51 @@ export default function AtividadesRapidasPage() {
                         className="p-4 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all"
                       >
                         <div className="flex items-start justify-between mb-2">
-                           <h4 className="font-medium text-gray-900 flex-1 mr-2">
-                             {exec.descritivo}
-                           </h4>
-                           <div className="flex items-center gap-2">
-                             {exec.status === 'Finalizado' && (
-                               <Button
-                                 onClick={() => handleOpenEditModal(exec)}
-                                 variant="ghost"
-                                 size="sm"
-                                 disabled={isLoading}
-                               >
-                                 <Edit2 className="w-4 h-4 text-blue-600" />
-                               </Button>
-                             )}
-                             {exec.status === 'Paralisado' && (
-                               <Button
-                                 onClick={() => handleRetryExecution(exec)}
-                                 variant="ghost"
-                                 size="sm"
-                                 disabled={isLoading}
-                               >
-                                 <RotateCcw className="w-4 h-4 text-orange-600" />
-                               </Button>
-                             )}
-                             {getStatusBadge(exec.status)}
-                           </div>
-                         </div>
-                        
+                          <h4 className="font-medium text-gray-900 flex-1 mr-2">{exec.descritivo}</h4>
+                          <div className="flex items-center gap-2">
+                            {exec.status === 'Finalizado' && (
+                              <Button
+                                onClick={() => handleOpenEditModal(exec)}
+                                variant="ghost"
+                                size="sm"
+                                disabled={isLoading}
+                              >
+                                <Edit2 className="w-4 h-4 text-blue-600" />
+                              </Button>
+                            )}
+                            {exec.status === 'Paralisado' && (
+                              <Button
+                                onClick={() => handleRetryExecution(exec)}
+                                variant="ghost"
+                                size="sm"
+                                disabled={isLoading}
+                              >
+                                <RotateCcw className="w-4 h-4 text-orange-600" />
+                              </Button>
+                            )}
+                            {getStatusBadge(exec.status)}
+                          </div>
+                        </div>
+
                         {exec.usuario_ajudado && (
                           <p className="text-sm text-purple-600 mb-2">
                             <Users className="w-3 h-3 inline mr-1" />
                             Ajudando {usuarios.find(u => u.email === exec.usuario_ajudado)?.nome || exec.usuario_ajudado}
                           </p>
                         )}
-                        
+
                         <div className="flex items-center justify-between text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             {formatData(exec.inicio)}
                           </span>
                           {exec.tempo_total && (
-                            <span className="font-semibold text-blue-600">
-                              {formatTempo(exec.tempo_total)}
-                            </span>
+                            <span className="font-semibold text-blue-600">{formatTempo(exec.tempo_total)}</span>
                           )}
                         </div>
-                        
+
                         {exec.observacao && (
-                          <p className="text-xs text-gray-600 mt-2 italic">
-                            {exec.observacao}
-                          </p>
+                          <p className="text-xs text-gray-600 mt-2 italic">{exec.observacao}</p>
                         )}
                       </div>
                     ))}
@@ -380,7 +483,49 @@ export default function AtividadesRapidasPage() {
         </div>
       </div>
 
-      {/* Modal de Configuração */}
+      {/* Modal: Nova Atividade */}
+      <Dialog open={showAddModal} onOpenChange={(open) => { if (!open) setShowAddModal(false); }}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5 text-green-600" />
+              Nova Atividade Rápida
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="new-activity-name">Nome da atividade</Label>
+              <Input
+                id="new-activity-name"
+                value={newActivityName}
+                onChange={(e) => setNewActivityName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddActivity(); }}
+                placeholder="Ex: Revisão de documentos"
+                className="mt-1"
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddModal(false)} disabled={isLoadingAdd}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleAddActivity}
+              disabled={isLoadingAdd || !newActivityName.trim()}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isLoadingAdd ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Adicionando...</>
+              ) : (
+                <><Plus className="w-4 h-4 mr-2" />Adicionar</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Iniciar Atividade */}
       <Dialog open={showModal} onOpenChange={handleCloseModal}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -430,14 +575,11 @@ export default function AtividadesRapidasPage() {
                 <SelectContent>
                   <SelectItem value={null}>Nenhum empreendimento</SelectItem>
                   {empreendimentos.map(emp => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.nome}
-                    </SelectItem>
+                    <SelectItem key={emp.id} value={emp.id}>{emp.nome}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
           </div>
 
           <DialogFooter>
@@ -446,22 +588,16 @@ export default function AtividadesRapidasPage() {
             </Button>
             <Button onClick={handleConfirmStart} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700">
               {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Iniciando...
-                </>
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Iniciando...</>
               ) : (
-                <>
-                  <Play className="w-4 h-4 mr-2" />
-                  Iniciar Atividade
-                </>
+                <><Play className="w-4 h-4 mr-2" />Iniciar Atividade</>
               )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal para Editar Descrição */}
+      {/* Modal: Editar Descrição */}
       <Dialog open={showEditModal} onOpenChange={handleCloseEditModal}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -490,15 +626,9 @@ export default function AtividadesRapidasPage() {
             </Button>
             <Button onClick={handleSaveDescricao} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700">
               {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Salvando...
-                </>
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Salvando...</>
               ) : (
-                <>
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                  Salvar
-                </>
+                <><CheckCircle2 className="w-4 h-4 mr-2" />Salvar</>
               )}
             </Button>
           </DialogFooter>

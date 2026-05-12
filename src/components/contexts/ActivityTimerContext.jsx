@@ -773,7 +773,15 @@ export const ActivityTimerProvider = ({ children }) => {
             try {
 
                 const [genericas, empreendimentos] = await Promise.all([
-                    retryWithBackoff(() => AtividadeGenerica.list(), 3, 3000, 'loadGenericasForPlaylist'),
+                    retryWithBackoff(async () => {
+                        const token = typeof localStorage !== 'undefined' ? localStorage.getItem('project_auth_token') : null;
+                        const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+                        const base = isLocal ? '' : 'https://project-interno-rati.onrender.com';
+                        const res = await fetch(`${base}/api/atividades_genericas`, {
+                            headers: token ? { Authorization: `Bearer ${token}` } : {}
+                        });
+                        return res.ok ? res.json() : [];
+                    }, 3, 3000, 'loadGenericasForPlaylist'),
                     retryWithBackoff(() => Empreendimento.list(), 3, 3000, 'loadEmpreendimentosForPlaylist'),
                 ]);
                 if (isMounted) {
