@@ -102,7 +102,14 @@ function DocumentoItem({
     return s;
   }, [localPlanejamentos, doc.id]);
 
-  // Set of etapas covered by planejamento_documentos for this document.
+  // Whether this document has ANY planning record (any etapa) — if so, all its activities are "planned"
+  const docIsPlanned = useMemo(() => {
+    return (localPlanejamentos || []).some(p =>
+      p != null && String(p.documento_id) === String(doc.id) && p.tipo_plano === 'documento'
+    ) || !!doc.inicio_planejado;
+  }, [localPlanejamentos, doc.id, doc.inicio_planejado]);
+
+  // Set of etapas covered by planejamento_documentos for this document (kept for specific etapa matching).
   const plannedEtapasSet = useMemo(() => {
     const s = new Set();
     for (const p of (localPlanejamentos || [])) {
@@ -647,7 +654,11 @@ function DocumentoItem({
         // isConcluido: check concludedAtivIdSet which is derived from persisted localPlanejamentos
         const isAtivConcluida = (a) => concludedAtivIdSet.has(String(a.id));
         const isAtivPlanejada = (a) =>
-          plannedAtivIdSet.has(String(a.id)) || plannedEtapasSet.has(a.etapa) || concludedAtivIdSet.has(String(a.id));
+          !concludedAtivIdSet.has(String(a.id)) && (
+            docIsPlanned ||
+            plannedAtivIdSet.has(String(a.id)) ||
+            plannedEtapasSet.has(a.etapa)
+          );
 
         const selectableAtivs = atividadesDoc.filter(a => !isAtivConcluida(a));
         const allSelected = selectableAtivs.length > 0 && selectableAtivs.every(a => selectedAtivIds.has(a.id));
