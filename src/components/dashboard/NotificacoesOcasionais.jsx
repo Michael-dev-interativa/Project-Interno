@@ -165,7 +165,7 @@ export default function NotificacoesOcasionais() {
 
   return (
     <Dialog open={showModal} onOpenChange={setShowModal}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <Bell className="w-5 h-5 text-amber-500" />
