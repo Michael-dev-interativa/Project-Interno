@@ -42,7 +42,7 @@ async function dispararNotificacoesOcasionais() {
           // Se existe mas email não foi enviado, tentar enviar agora
           const notifExistente = await pool.query(
             `SELECT id, token_resposta FROM notificacoes_atividade
-             WHERE usuario_email = $1 AND atividade_funcao_id = $2 AND data_notificacao >= $3 AND email_enviado = FALSE LIMIT 1`,
+             WHERE usuario_email = $1 AND atividade_funcao_id = $2 AND data_notificacao >= $3 AND email_enviado IS NOT TRUE LIMIT 1`,
             [user.email, atv.id, semanaInicio]
           );
           if (notifExistente.rows.length > 0) {

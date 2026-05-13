@@ -83,7 +83,10 @@ const calculateActivityStatus = (plano, allPlanejamentos = []) => {
     return plano.status;
   }
 
-  // **PRIORIDADE 1**: Se está marcada explicitamente como concluída no banco
+  // **PRIORIDADE 1**: Se está marcada explicitamente como concluída (com ou sem atraso)
+  if (plano.status === 'concluido_com_atraso') {
+    return 'concluido_com_atraso';
+  }
   if (plano.status === 'concluido') {
     return 'concluido';
   }
@@ -287,6 +290,7 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
       case 'em_andamento': return '#3b82f6'; // Azul
       case 'pausado': return '#f59e0b'; // Amarelo
       case 'concluido': return '#10b981'; // Verde
+      case 'concluido_com_atraso': return '#ef4444'; // Vermelho (concluído com atraso)
       case 'atrasado':
       case 'replanejado_atrasado': return '#ef4444'; // Vermelho para atraso e replanejado com atraso
       case 'impactado_por_atraso': return '#8b5cf6'; // Roxo (violet-500)
@@ -341,7 +345,7 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
       horasDoDia = horasExecutadasNoDia;
     }
     // Prioridade 2: Se concluída mas horas_executadas_por_dia vazio, distribuir tempo_executado
-    else if (plano.status === 'concluido' && tempoExecutado > 0 && Object.keys(plano.horas_executadas_por_dia || {}).length === 0) {
+    else if ((plano.status === 'concluido' || plano.status === 'concluido_com_atraso') && tempoExecutado > 0 && Object.keys(plano.horas_executadas_por_dia || {}).length === 0) {
       // Distribuir tempo_executado entre os dias planejados
       const diasPlanejados = Object.keys(plano.horas_por_dia || {});
       if (diasPlanejados.length > 0 && diasPlanejados.includes(dayKey)) {
@@ -431,12 +435,14 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
     }
   };
 
+  const isConcluded = realStatus === 'concluido' || realStatus === 'concluido_com_atraso';
+
   const handleStartActivity = async () => {
     if (activeExecution) {
       alert("Uma atividade já está em progresso. Pare a atividade atual antes de iniciar uma nova.");
       return;
     }
-    if (realStatus === 'concluido') {
+    if (isConcluded) {
       alert("Esta atividade já foi concluída e não pode ser iniciada novamente.");
       return;
     }
@@ -545,7 +551,7 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
 
   const shouldShowEditDescricaoButton = () => {
     // Apenas Direção, Admin ou Líder - para atividades finalizadas ou não iniciadas
-    return (hasPermission('admin') || hasPermission('lider') || hasPermission('direcao')) && (plano.status === 'concluido' || plano.status === 'nao_iniciado');
+    return (hasPermission('admin') || hasPermission('lider') || hasPermission('direcao')) && (plano.status === 'concluido' || plano.status === 'concluido_com_atraso' || plano.status === 'nao_iniciado');
   };
 
   const handleOpenEditDescricao = () => {
@@ -608,6 +614,7 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
         style={{
           ...provided.draggableProps.style,
           backgroundColor: isSelected ? '#e0e7ff' : // Destaque azul para selecionadas
+            realStatus === 'concluido_com_atraso' ? '#fef2f2' :
             realStatus === 'atrasado' || realStatus === 'replanejado_atrasado' ? '#fef2f2' :
               realStatus === 'impactado_por_atraso' ? '#f5f3ff' :
                 realStatus === 'em_andamento' ? '#eff6ff' :
@@ -625,7 +632,7 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
         )}
 
         {/* Checkbox de Seleção - visível no hover ou quando há seleções ativas */}
-        {plano.status !== 'concluido' && !plano.isLegacyExecution && (
+        {plano.status !== 'concluido' && plano.status !== 'concluido_com_atraso' && !plano.isLegacyExecution && (
           <div className={`absolute right-1 top-1 z-20 transition-opacity ${hasSelections || isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
             <input
               type="checkbox"
@@ -739,23 +746,35 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
             {/* Botão de status unificado (Iniciar/Pausar/Atrasado) */}
             <button
               onClick={handleStartActivity}
-              disabled={!!activeExecution || isStarting || realStatus === 'concluido'}
+              disabled={!!activeExecution || isStarting || isConcluded}
               className={`p-1.5 rounded-md transition-colors ${activeExecution?.planejamento_id === plano.id
                 ? 'bg-yellow-500 hover:bg-yellow-600 animate-pulse'
-                : (realStatus === 'atrasado' || realStatus === 'replanejado_atrasado')
-                  ? 'bg-red-500 hover:bg-red-600'
-                  : 'bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed'
+                : realStatus === 'concluido'
+                  ? 'bg-green-500 cursor-not-allowed'
+                  : realStatus === 'concluido_com_atraso'
+                    ? 'bg-red-500 cursor-not-allowed'
+                    : (realStatus === 'atrasado' || realStatus === 'replanejado_atrasado')
+                      ? 'bg-red-500 hover:bg-red-600'
+                      : 'bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed'
                 }`}
               title={
                 activeExecution?.planejamento_id === plano.id
                   ? "Atividade em andamento"
-                  : (realStatus === 'atrasado' || realStatus === 'replanejado_atrasado')
-                    ? "Atividade atrasada"
-                    : isStarting ? "Iniciando..." : "Iniciar atividade"
+                  : realStatus === 'concluido'
+                    ? "Atividade concluída"
+                    : realStatus === 'concluido_com_atraso'
+                      ? "Concluída com atraso"
+                      : (realStatus === 'atrasado' || realStatus === 'replanejado_atrasado')
+                        ? "Atividade atrasada"
+                        : isStarting ? "Iniciando..." : "Iniciar atividade"
               }
             >
               {activeExecution?.planejamento_id === plano.id ? (
                 <Clock className="w-3.5 h-3.5 text-white" />
+              ) : realStatus === 'concluido' ? (
+                <span className="text-white text-xs font-bold">✓</span>
+              ) : realStatus === 'concluido_com_atraso' ? (
+                <span className="text-white text-xs font-bold">✓</span>
               ) : (realStatus === 'atrasado' || realStatus === 'replanejado_atrasado') ? (
                 <span className="text-white text-xs font-bold">✕</span>
               ) : (
@@ -905,7 +924,7 @@ const DailyActivityGroup = ({ empreendimento, executor, atividades, isExpanded, 
           horasDoDia = horasExecutadasNoDia;
         }
         // Prioridade 2: Se concluída mas horas_executadas_por_dia vazio, distribuir tempo_executado
-        else if (atividade.status === 'concluido' && tempoExecutado > 0 && Object.keys(atividade.horas_executadas_por_dia || {}).length === 0) {
+        else if ((atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso') && tempoExecutado > 0 && Object.keys(atividade.horas_executadas_por_dia || {}).length === 0) {
           const diasPlanejados = Object.keys(atividade.horas_por_dia || {});
           if (diasPlanejados.length > 0 && diasPlanejados.includes(dayKey)) {
             horasDoDia = tempoExecutado / diasPlanejados.length;
@@ -949,7 +968,10 @@ const DailyActivityGroup = ({ empreendimento, executor, atividades, isExpanded, 
     if (statusCounts['atrasado'] > 0 || statusCounts['replanejado_atrasado'] > 0) return 'atrasado';
     if (statusCounts['impactado_por_atraso'] > 0) return 'impactado_por_atraso';
     if (statusCounts['em_andamento'] > 0) return 'em_andamento';
-    if (atividades.length > 0 && statusCounts['concluido'] === atividades.length) return 'concluido';
+    const totalConcluidos = (statusCounts['concluido'] || 0) + (statusCounts['concluido_com_atraso'] || 0);
+    if (atividades.length > 0 && totalConcluidos === atividades.length) {
+      return statusCounts['concluido_com_atraso'] > 0 ? 'concluido_com_atraso' : 'concluido';
+    }
     if (statusCounts['pausado'] > 0) return 'pausado';
     return 'nao_iniciado';
   };
@@ -959,6 +981,7 @@ const DailyActivityGroup = ({ empreendimento, executor, atividades, isExpanded, 
       case 'em_andamento': return '#3b82f6';
       case 'pausado': return '#f59e0b';
       case 'concluido': return '#10b981';
+      case 'concluido_com_atraso': return '#ef4444';
       case 'atrasado': return '#ef4444';
       case 'impactado_por_atraso': return '#8b5cf6';
       default: return '#6b7280';
@@ -974,11 +997,11 @@ const DailyActivityGroup = ({ empreendimento, executor, atividades, isExpanded, 
 
   const canDragGroup = canReprogram &&
     empreendimentoNome !== 'Atividades Rápidas' &&
-    !atividades.some(a => a.status === 'concluido' || a.isLegacyExecution);
+    !atividades.some(a => a.status === 'concluido' || a.status === 'concluido_com_atraso' || a.isLegacyExecution);
 
   // Seleção em grupo
   const selectableIds = atividades
-    .filter(a => a.status !== 'concluido' && !a.isLegacyExecution)
+    .filter(a => a.status !== 'concluido' && a.status !== 'concluido_com_atraso' && !a.isLegacyExecution)
     .map(a => normalizeActivityId(a.id));
   const isGroupSelected = selectableIds.length > 0 && selectableIds.every(id => selectedActivities.has(id));
   const isGroupPartial = !isGroupSelected && selectableIds.some(id => selectedActivities.has(id));
@@ -1003,6 +1026,7 @@ const DailyActivityGroup = ({ empreendimento, executor, atividades, isExpanded, 
         style={{
           borderLeft: `6px solid ${statusColor}`,
           backgroundColor: isDragging ? '#e0e7ff' :
+            groupStatus === 'concluido_com_atraso' ? '#fff1f2' :
             groupStatus === 'atrasado' ? '#fff1f2' :
               groupStatus === 'impactado_por_atraso' ? '#f5f3ff' :
                 groupStatus === 'em_andamento' ? '#eff6ff' :
@@ -1127,7 +1151,7 @@ const DailyActivityGroup = ({ empreendimento, executor, atividades, isExpanded, 
                 key={atividade.id}
                 draggableId={`${atividade.id}`}
                 index={index}
-                isDragDisabled={!canReprogram || atividade.status === 'concluido' || atividade.isLegacyExecution || normalizeActivityId(isReprogramando) === normalizeActivityId(atividade.id)}
+                isDragDisabled={!canReprogram || atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso' || atividade.isLegacyExecution || normalizeActivityId(isReprogramando) === normalizeActivityId(atividade.id)}
               >
                 {(provided, snapshot) => (
                   <ActivityItem
@@ -1216,13 +1240,13 @@ const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKe
 
       // Para atividades rápidas, verificar execução OU alocação OU se está concluída (mesmo com 0h)
       if (atividade.isQuickActivity || atividade.is_quick_activity) {
-        return horasExecutadas >= 0.05 || horasAlocadas >= 0.05 || atividade.status === 'concluido' || atividade.status === 'em_andamento';
+        return horasExecutadas >= 0.05 || horasAlocadas >= 0.05 || atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso' || atividade.status === 'em_andamento';
       }
 
       // Para atividades normais, verificar se tem horas significativas
       // Fallback: atividades concluídas com 0h (ex: planos fantasmas de atividades rápidas sem is_quick_activity)
       return horasAlocadas >= 0.05 || horasExecutadas >= 0.05 ||
-        (atividade.status === 'concluido' && !atividade.atividade_id);
+        ((atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso') && !atividade.atividade_id);
     });
 
     return (
@@ -1232,7 +1256,7 @@ const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKe
             key={atividade.id}
             draggableId={`${atividade.id}`}
             index={index}
-            isDragDisabled={!canReprogram || atividade.status === 'concluido' || atividade.isLegacyExecution || normalizeActivityId(isReprogramando) === normalizeActivityId(atividade.id)}
+            isDragDisabled={!canReprogram || atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso' || atividade.isLegacyExecution || normalizeActivityId(isReprogramando) === normalizeActivityId(atividade.id)}
           >
             {(provided, snapshot) => (
               <ActivityItem
@@ -1265,7 +1289,7 @@ const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKe
 
       if (atividade.isLegacyExecution) return tempoExecutado >= 0.05;
       if (atividade.isQuickActivity || atividade.is_quick_activity) {
-        return horasExecutadas >= 0.05 || horasAlocadas >= 0.05 || atividade.status === 'concluido' || atividade.status === 'em_andamento';
+        return horasExecutadas >= 0.05 || horasAlocadas >= 0.05 || atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso' || atividade.status === 'em_andamento';
       }
       return horasAlocadas >= 0.05 || horasExecutadas >= 0.05;
     });
@@ -1296,7 +1320,7 @@ const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKe
         // **CORRIGIDO**: Remover restrição de "Atividades Gerais", apenas bloquear "Atividades Rápidas" (Legado) e concluídas
         const canDragGroup = canReprogram &&
           groupDataFiltrado.empreendimento?.nome !== 'Atividades Rápidas' &&
-          !groupDataFiltrado.atividades.some(a => a.status === 'concluido' || a.isLegacyExecution);
+          !groupDataFiltrado.atividades.some(a => a.status === 'concluido' || a.status === 'concluido_com_atraso' || a.isLegacyExecution);
 
         // Se pode arrastar o grupo, envolve em Draggable
         if (canDragGroup) {
@@ -1368,7 +1392,7 @@ const DayCell = ({ day, dayActivities, date, isToday, disciplinas, onActivityDel
   // **NOVO**: Verificar se pode arrastar o dia inteiro
   const hasMovableActivities = dayActivities.some(a =>
     !a.isLegacyExecution && // Exclude old quick activities (exec-)
-    a.status !== 'concluido'
+    a.status !== 'concluido' && a.status !== 'concluido_com_atraso'
   );
 
   const canDragDay = canReprogram && hasMovableActivities && dayActivities.length > 0;
@@ -1929,7 +1953,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       if (atividadeParaMover.isLegacyExecution) {
         throw new Error("Atividades rápidas antigas (não planejadas) não podem ser reprogramadas via arrastar e soltar.");
       }
-      if (atividadeParaMover.status === 'concluido') {
+      if (atividadeParaMover.status === 'concluido' || atividadeParaMover.status === 'concluido_com_atraso') {
         throw new Error("Atividades concluídas não podem ser reprogramadas.");
       }
 
@@ -2021,7 +2045,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
 
       // Filtrar apenas atividades que podem ser movidas
       const movableActivities = dayActivities.filter(a => {
-        const canMove = !a.isLegacyExecution && a.status !== 'concluido';
+        const canMove = !a.isLegacyExecution && a.status !== 'concluido' && a.status !== 'concluido_com_atraso';
         return canMove;
       });
 
@@ -2108,7 +2132,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
 
 
       const invalidActivities = groupActivities.filter(a =>
-        a.isLegacyExecution || a.status === 'concluido'
+        a.isLegacyExecution || a.status === 'concluido' || a.status === 'concluido_com_atraso'
       );
 
       if (invalidActivities.length > 0) {
@@ -2151,7 +2175,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
 
     const invalidActivities = activitiesToMove.filter(id => {
       const atividade = (enrichedData || []).find(p => normalizeActivityId(p.id) === normalizeActivityId(id));
-      return !atividade || atividade.isLegacyExecution || atividade.status === 'concluido';
+      return !atividade || atividade.isLegacyExecution || atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso';
     });
 
     if (invalidActivities.length > 0) {
@@ -2225,6 +2249,10 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
     filteredPlanejamentos.forEach(plano => {
       if (plano.isLegacyExecution) {
         statusMap.set(normalizeActivityId(plano.id), plano.status);
+        return;
+      }
+      if (plano.status === 'concluido_com_atraso') {
+        statusMap.set(normalizeActivityId(plano.id), 'concluido_com_atraso');
         return;
       }
       if (plano.status === 'concluido') {
@@ -2314,7 +2342,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
           });
           // Fallback adicional: se a atividade está concluída/em andamento mas com 0h registradas,
           // usar o dia com a entrada mais recente do horas_executadas_por_dia
-          if (!hasSignificantExecutionHours && (plano.status === 'concluido' || plano.status === 'em_andamento')) {
+          if (!hasSignificantExecutionHours && (plano.status === 'concluido' || plano.status === 'concluido_com_atraso' || plano.status === 'em_andamento')) {
             const dias = Object.keys(plano.horas_executadas_por_dia);
             if (dias.length > 0) {
               // Usar o último dia registrado
@@ -2428,8 +2456,10 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
         const statusA = activityStatusMap.get(normalizeActivityId(a.id)) || a.status || 'nao_iniciado';
         const statusB = activityStatusMap.get(normalizeActivityId(b.id)) || b.status || 'nao_iniciado';
 
-        if (statusA === 'concluido' && statusB !== 'concluido') return 1;
-        if (statusA !== 'concluido' && statusB === 'concluido') return -1;
+        const isConcludedA = statusA === 'concluido' || statusA === 'concluido_com_atraso';
+        const isConcludedB = statusB === 'concluido' || statusB === 'concluido_com_atraso';
+        if (isConcludedA && !isConcludedB) return 1;
+        if (!isConcludedA && isConcludedB) return -1;
 
         if (statusA === 'pausado' && statusB === 'em_andamento') return 1;
         if (statusA !== 'pausado' && statusB === 'em_andamento') return -1;
@@ -2511,7 +2541,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
           horasDia = horasExecutadasNoDia;
         }
         // Prioridade 2: Se concluída mas horas_executadas_por_dia vazio, distribuir tempo_executado
-        else if (atividade.status === 'concluido' && tempoExecutado > 0 && Object.keys(atividade.horas_executadas_por_dia || {}).length === 0) {
+        else if ((atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso') && tempoExecutado > 0 && Object.keys(atividade.horas_executadas_por_dia || {}).length === 0) {
           const diasPlanejados = Object.keys(atividade.horas_por_dia || {});
           if (diasPlanejados.length > 0 && diasPlanejados.includes(dayKey)) {
             horasDia = tempoExecutado / diasPlanejados.length;

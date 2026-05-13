@@ -23,6 +23,7 @@ const statusColors = {
   nao_iniciado: "bg-gray-100 text-gray-800",
   em_andamento: "bg-blue-100 text-blue-800",
   concluido: "bg-green-100 text-green-800",
+  concluido_com_atraso: "bg-red-100 text-red-800",
   atrasado: "bg-red-100 text-red-800",
   pausado: "bg-yellow-100 text-yellow-800"
 };
@@ -31,6 +32,7 @@ const statusLabels = {
   nao_iniciado: "Não Iniciado",
   em_andamento: "Em Andamento",
   concluido: "Concluído",
+  concluido_com_atraso: "Concluído c/ Atraso",
   atrasado: "Atrasado",
   pausado: "Pausado"
 };
@@ -530,7 +532,8 @@ export default function PlanejamentoTab({ empreendimentoId }) {
                 <SelectItem value="todos">Todos os Status</SelectItem>
                 <SelectItem value="nao_iniciado">Não Iniciado</SelectItem>
                 <SelectItem value="em_andamento">Em Andamento</SelectItem>
-                <SelectItem value="concluido">Concluido</SelectItem>
+                <SelectItem value="concluido">Concluído</SelectItem>
+                <SelectItem value="concluido_com_atraso">Concluído c/ Atraso</SelectItem>
                 <SelectItem value="atrasado">Atrasado</SelectItem>
                 <SelectItem value="pausado">Pausado</SelectItem>
               </SelectContent>

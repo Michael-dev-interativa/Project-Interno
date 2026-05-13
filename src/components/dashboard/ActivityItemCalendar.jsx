@@ -56,18 +56,19 @@ export default function ActivityItemCalendar({
   const [editedDescritivo, setEditedDescritivo] = useState('');
 
   const realStatus = useMemo(() => {
-    // Verificar primeiro se está explicitamente marcada como concluída
+    if (plano.status === 'concluido_com_atraso') {
+      return 'concluido_com_atraso';
+    }
     if (plano.status === 'concluido') {
       return 'concluido';
     }
-    
-    // Se tempo executado >= tempo planejado, considerar concluída
+
     const tempoExec = Number(plano.tempo_executado) || 0;
     const tempoPlanj = Number(plano.tempo_planejado) || 0;
     if (tempoPlanj > 0 && tempoExec >= tempoPlanj) {
       return 'concluido';
     }
-    
+
     return plano.status || 'nao_iniciado';
   }, [plano.status, plano.tempo_executado, plano.tempo_planejado]);
 
@@ -76,6 +77,7 @@ export default function ActivityItemCalendar({
       case 'em_andamento': return '#3b82f6';
       case 'pausado': return '#f59e0b';
       case 'concluido': return '#10b981';
+      case 'concluido_com_atraso': return '#ef4444';
       case 'atrasado':
       case 'replanejado_atrasado': return '#ef4444';
       case 'impactado_por_atraso': return '#8b5cf6';
@@ -236,7 +238,8 @@ export default function ActivityItemCalendar({
     }
   };
 
-  const shouldShowStartButton = () => realStatus !== 'concluido' && !activeExecution && !plano.isLegacyExecution;
+  const isConcluded = realStatus === 'concluido' || realStatus === 'concluido_com_atraso';
+  const shouldShowStartButton = () => !isConcluded && !activeExecution && !plano.isLegacyExecution;
   
   const shouldShowDeleteButton = () => {
     if (!user) return false;
@@ -246,15 +249,15 @@ export default function ActivityItemCalendar({
   };
 
   const shouldShowAdjustButton = () => {
-    return user && (user.role === 'admin' || user.perfil === 'coordenador') && !plano.isLegacyExecution && plano.status !== 'concluido';
+    return user && (user.role === 'admin' || user.perfil === 'coordenador') && !plano.isLegacyExecution && !isConcluded;
   };
 
   const shouldShowFinalizarButton = () => {
-    return realStatus !== 'concluido' && !plano.isLegacyExecution && tempoExecutado > 0;
+    return !isConcluded && !plano.isLegacyExecution && tempoExecutado > 0;
   };
 
   const shouldShowEditButton = () => {
-    return realStatus === 'concluido' && (plano.isQuickActivity || plano.is_quick_activity);
+    return isConcluded && (plano.isQuickActivity || plano.is_quick_activity);
   };
 
   const handleEditDescritivo = () => {
@@ -294,6 +297,7 @@ export default function ActivityItemCalendar({
           ...provided.draggableProps.style,
           borderLeft: `3px solid ${getStatusColor(realStatus)}`,
           backgroundColor: isSelected ? '#e0e7ff' :
+                         realStatus === 'concluido_com_atraso' ? '#fef2f2' :
                          realStatus === 'atrasado' ? '#fef2f2' :
                          realStatus === 'em_andamento' ? '#eff6ff' :
                          realStatus === 'concluido' ? '#f0fdf4' :
@@ -426,6 +430,12 @@ export default function ActivityItemCalendar({
                   <span className="text-green-600 font-medium">Concluída</span>
                 </div>
               )}
+              {realStatus === 'concluido_com_atraso' && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="w-2 h-2 bg-red-500 rounded-full shrink-0"></div>
+                  <span className="text-red-600 font-medium">Concluída c/ Atraso</span>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
@@ -437,6 +447,11 @@ export default function ActivityItemCalendar({
 
               {realStatus === 'concluido' && (
                 <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shrink-0">
+                  <span className="text-white text-xs font-bold">✓</span>
+                </div>
+              )}
+              {realStatus === 'concluido_com_atraso' && (
+                <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center shrink-0">
                   <span className="text-white text-xs font-bold">✓</span>
                 </div>
               )}
