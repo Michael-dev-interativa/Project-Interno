@@ -189,14 +189,16 @@ export default function NotificacoesOcasionais() {
 
           <div className="space-y-2">
             <label className="text-sm font-medium">Quando você quer realizar esta atividade?</label>
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={setSelectedDate}
-              locale={ptBR}
-              disabled={(date) => date < new Date() || date.getDay() === 0 || date.getDay() === 6}
-              className="rounded-md border w-full"
-            />
+            <div style={{ '--rdp-cell-size': 'auto' }} className="w-full">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={setSelectedDate}
+                locale={ptBR}
+                disabled={(date) => date < new Date() || date.getDay() === 0 || date.getDay() === 6}
+                className="rounded-md border w-full"
+              />
+            </div>
           </div>
         </div>
 
