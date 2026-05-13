@@ -24,6 +24,7 @@ const atasModel = require('./models/atasReuniao');
 const notificacaoModel = require('./models/notificacaoAtividade');
 const atividadeFuncaoModel = require('./models/atividadeFuncao');
 const { dispararNotificacoesOcasionais } = require('./services/notificacaoOcasionalService');
+const { sendNotificacaoOcasional } = require('./services/emailService');
 const cron = require('node-cron');
 const sobraModel = require('./models/sobraUsuario');
 const alteracaoModel = require('./models/alteracaoEtapa');
@@ -1467,6 +1468,38 @@ app.post('/api/notificacoes/disparar', async (req, res) => {
   try {
     const resultado = await dispararNotificacoesOcasionais();
     res.json(resultado);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/notificacoes/test-email', async (req, res) => {
+  try {
+    const {
+      to,
+      nome = 'Colaborador Teste',
+      atividade_nome = 'Atividade de Teste',
+      tempo_estimado = 2,
+    } = req.body;
+
+    if (!to) {
+      return res.status(400).json({ error: 'Campo "to" (email destinatário) é obrigatório.' });
+    }
+
+    const token = require('crypto').randomUUID();
+    const enviado = await sendNotificacaoOcasional({
+      to,
+      usuario_nome: nome,
+      atividade_nome,
+      tempo_estimado,
+      token,
+    });
+
+    if (enviado) {
+      res.json({ ok: true, message: `Email de teste enviado para ${to}` });
+    } else {
+      res.status(500).json({ ok: false, message: 'Resend não configurado ou erro no envio. Verifique RESEND_API_KEY/SMTP_PASS e SMTP_FROM.' });
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
