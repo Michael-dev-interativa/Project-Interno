@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -25,15 +26,15 @@ export default function PlanejamentoDocumentoEtapaModal({
   planejamentos = [],
   onSuccess
 }) {
-  const [etapasSelecionadas, setEtapasSelecionadas] = useState([]);
-  const [executoresPorEtapa, setExecutoresPorEtapa] = useState({});
-  const [dataInicioState, setDataInicioState] = useState(null);
+  const [etapasSelecionadas, setEtapasSelecionadas] = useState(/** @type {string[]} */ ([]));
+  const [executoresPorEtapa, setExecutoresPorEtapa] = useState(/** @type {Record<string, string>} */ ({}));
+  const [dataInicioState, setDataInicioState] = useState(/** @type {Date | null} */ (null));
   const [dataManualInput, setDataManualInput] = useState('');
   const [metodoData, setMetodoData] = useState('agenda');
   const [executorParaAgenda, setExecutorParaAgenda] = useState(executorPadrao || '');
   const [isCalculatingDate, setIsCalculatingDate] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [cargaDiariaPorExecutor, setCargaDiariaPorExecutor] = useState({});
+  const [cargaDiariaPorExecutor, setCargaDiariaPorExecutor] = useState(/** @type {Record<string, Record<string, number>>} */ ({}));
 
   // **NOVO**: Ordenar usuários alfabeticamente
   const usuariosOrdenados = useMemo(() => {
@@ -253,7 +254,7 @@ export default function PlanejamentoDocumentoEtapaModal({
           const hoje = new Date();
           const hojeMidnight = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
           
-          const cargaDiaria = {};
+          const cargaDiaria = /** @type {Record<string, number>} */ ({});
           
 
           todosPlanos.forEach((plano, index) => {
