@@ -10,8 +10,25 @@ async function createAtividadeFuncao(data) {
   return res.rows[0];
 }
 
-async function listAtividadeFuncoes() {
-  const res = await pool.query('SELECT * FROM atividade_funcoes ORDER BY id');
+async function listAtividadeFuncoes(filters = {}) {
+  const conditions = [];
+  const values = [];
+
+  if (filters.funcao) {
+    values.push(filters.funcao);
+    conditions.push(`funcao = $${values.length}`);
+  }
+  if (filters.frequencia) {
+    values.push(filters.frequencia);
+    conditions.push(`frequencia = $${values.length}`);
+  }
+  if (filters.id) {
+    values.push(filters.id);
+    conditions.push(`id = $${values.length}`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const res = await pool.query(`SELECT * FROM atividade_funcoes ${where} ORDER BY id`, values);
   return res.rows;
 }
 

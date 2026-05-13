@@ -60,7 +60,7 @@ export default function NotificationGenerator() {
               () => NotificacaoAtividade.create({
                 usuario_email: user.email,
                 atividade_funcao_id: atividade.id,
-                atividade_nome: atividade.atividade,
+                atividade_nome: atividade.nome,
                 tempo_estimado: atividade.tempo_estimado,
                 status: 'pendente',
                 data_notificacao: hojeStr

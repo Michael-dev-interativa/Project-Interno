@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Bell } from 'lucide-react';
 import { ActivityTimerContext } from '../contexts/ActivityTimerContext';
-import { NotificacaoAtividade, AtividadeFuncao, PlanejamentoAtividade } from '@/entities/all';
+import { NotificacaoAtividade, PlanejamentoAtividade } from '@/entities/all';
 import { retryWithBackoff } from '../utils/apiUtils';
 import { format, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -54,21 +54,12 @@ export default function NotificacoesOcasionais() {
 
     setIsProcessing(true);
     try {
-      // Buscar a atividade função
-      const atividadeFuncao = await retryWithBackoff(
-        () => AtividadeFuncao.filter({ id: currentNotification.atividade_funcao_id }, null, 1),
-        3, 1000, 'getAtividadeFuncao'
-      );
-
-      if (!atividadeFuncao || atividadeFuncao.length === 0) {
-        throw new Error('Atividade não encontrada');
-      }
-
-      const atividade = atividadeFuncao[0];
+      const nomeAtividade = currentNotification.atividade_nome || 'Atividade';
+      const tempoEstimado = Number(currentNotification.tempo_estimado) || 1;
 
       // Buscar planejamentos existentes para calcular carga
       const planejamentosExistentes = await retryWithBackoff(
-        () => PlanejamentoAtividade.filter({ 
+        () => PlanejamentoAtividade.filter({
           executor_principal: user.email,
           status: { $ne: 'concluido' }
         }),
@@ -88,7 +79,7 @@ export default function NotificacoesOcasionais() {
       // Distribuir horas respeitando a agenda
       const resultado = distribuirHorasPorDias(
         selectedDate,
-        atividade.tempo_estimado,
+        tempoEstimado,
         8,
         cargaDiaria,
         false
@@ -97,9 +88,9 @@ export default function NotificacoesOcasionais() {
       // Criar planejamento
       const novoPlanejamento = await retryWithBackoff(
         () => PlanejamentoAtividade.create({
-          descritivo: atividade.atividade,
-          base_descritivo: atividade.atividade,
-          tempo_planejado: atividade.tempo_estimado,
+          descritivo: nomeAtividade,
+          base_descritivo: nomeAtividade,
+          tempo_planejado: tempoEstimado,
           executor_principal: user.email,
           executores: [user.email],
           status: 'nao_iniciado',

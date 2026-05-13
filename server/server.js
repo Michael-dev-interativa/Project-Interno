@@ -23,6 +23,8 @@ const pavimentoModel = require('./models/pavimento');
 const atasModel = require('./models/atasReuniao');
 const notificacaoModel = require('./models/notificacaoAtividade');
 const atividadeFuncaoModel = require('./models/atividadeFuncao');
+const { dispararNotificacoesOcasionais } = require('./services/notificacaoOcasionalService');
+const cron = require('node-cron');
 const sobraModel = require('./models/sobraUsuario');
 const alteracaoModel = require('./models/alteracaoEtapa');
 const osModel = require('./models/osManual');
@@ -1374,8 +1376,97 @@ app.post('/api/notificacoes', async (req, res) => {
 
 app.get('/api/notificacoes', async (req, res) => {
   try {
-    const rows = await notificacaoModel.listNotificacoes();
+    const { usuario_email, status } = req.query;
+    // Handle MongoDB-style operators: data_notificacao[$gte]=date
+    const raw_data = req.query['data_notificacao'];
+    let data_notificacao_gte;
+    if (raw_data && typeof raw_data === 'object' && raw_data.$gte) {
+      data_notificacao_gte = raw_data.$gte;
+    } else if (req.query['data_notificacao[$gte]']) {
+      data_notificacao_gte = req.query['data_notificacao[$gte]'];
+    }
+    const rows = await notificacaoModel.listNotificacoes({ usuario_email, status, data_notificacao_gte });
     res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Responder notificação via link de email (deve vir antes de /:id)
+app.get('/api/notificacoes/responder', async (req, res) => {
+  const { token, data, ignorar } = req.query;
+
+  const html = (titulo, msg, cor = '#10b981') => `<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${titulo}</title></head>
+<body style="font-family:Arial,sans-serif;background:#f3f4f6;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;">
+  <div style="background:#fff;border-radius:10px;padding:40px;max-width:400px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.1);">
+    <div style="font-size:48px;margin-bottom:16px;">${cor === '#10b981' ? '✅' : cor === '#f59e0b' ? '🔔' : '❌'}</div>
+    <h2 style="color:${cor};margin:0 0 12px;">${titulo}</h2>
+    <p style="color:#6b7280;margin:0;">${msg}</p>
+  </div>
+</body></html>`;
+
+  if (!token) return res.status(400).send(html('Token inválido', 'O link utilizado é inválido ou está incompleto.', '#ef4444'));
+
+  try {
+    const notif = await notificacaoModel.getByToken(token);
+    if (!notif) return res.status(404).send(html('Não encontrado', 'Esta notificação não existe ou o link expirou.', '#ef4444'));
+    if (notif.status !== 'pendente') {
+      return res.send(html('Já respondida', `Esta atividade já foi ${notif.status === 'agendada' ? 'agendada' : 'dispensada'} anteriormente.`, '#f59e0b'));
+    }
+
+    if (ignorar === 'true') {
+      await notificacaoModel.updateNotificacao(notif.id, { status: 'ignorada' });
+      return res.send(html('Dispensado', `A atividade "<strong>${notif.atividade_nome}</strong>" não será realizada esta semana.`, '#6b7280'));
+    }
+
+    if (data) {
+      // Criar planejamento simples para a data escolhida
+      const horas = Number(notif.tempo_estimado) || 1;
+      const novoPlanejamento = await planejamentoModel.createPlanejamentoAtividade({
+        descritivo: notif.atividade_nome,
+        executor_principal: notif.usuario_email,
+        executores: [notif.usuario_email],
+        tempo_planejado: horas,
+        inicio_planejado: data,
+        termino_planejado: data,
+        horas_por_dia: { [data]: horas },
+        status: 'nao_iniciado',
+      });
+
+      await notificacaoModel.updateNotificacao(notif.id, {
+        status: 'agendada',
+        data_agendada: data,
+        planejamento_id: novoPlanejamento.id,
+      });
+
+      const [dia, mes] = data.split('-').slice(1).reverse().map(s => s.padStart(2, '0'));
+      return res.send(html('Agendado!', `A atividade "<strong>${notif.atividade_nome}</strong>" foi agendada para ${dia}/${mes}.`));
+    }
+
+    return res.status(400).send(html('Ação inválida', 'Nenhuma ação reconhecida no link.', '#ef4444'));
+  } catch (err) {
+    console.error('Erro ao responder notificação:', err);
+    return res.status(500).send(html('Erro', 'Ocorreu um erro ao processar sua resposta. Tente pelo sistema.', '#ef4444'));
+  }
+});
+
+app.patch('/api/notificacoes/:id', async (req, res) => {
+  try {
+    const row = await notificacaoModel.updateNotificacao(req.params.id, req.body);
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json(row);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Disparo manual de notificações ocasionais (útil para testes e fallback)
+app.post('/api/notificacoes/disparar', async (req, res) => {
+  try {
+    const resultado = await dispararNotificacoesOcasionais();
+    res.json(resultado);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1393,7 +1484,8 @@ app.post('/api/atividade-funcoes', async (req, res) => {
 
 app.get('/api/atividade-funcoes', async (req, res) => {
   try {
-    const rows = await atividadeFuncaoModel.listAtividadeFuncoes();
+    const { funcao, frequencia, id } = req.query;
+    const rows = await atividadeFuncaoModel.listAtividadeFuncoes({ funcao, frequencia, id });
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2614,6 +2706,16 @@ async function startServer() {
     console.warn('Warning: failed to apply migrations on startup:', err.message || err);
     console.warn('The server will continue starting, but database schema may be outdated.');
   }
+
+  // Cron: toda sexta-feira às 8h dispara notificações de atividades ocasionais
+  cron.schedule('0 8 * * 5', async () => {
+    console.log('⏰ Cron sexta-feira: disparando notificações ocasionais...');
+    try {
+      await dispararNotificacoesOcasionais();
+    } catch (err) {
+      console.error('❌ Erro no cron de notificações:', err.message);
+    }
+  }, { timezone: 'America/Sao_Paulo' });
 
   const server = app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);

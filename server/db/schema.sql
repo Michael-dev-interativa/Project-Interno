@@ -316,6 +316,21 @@ ALTER TABLE atividade_funcoes ADD COLUMN IF NOT EXISTS dias_semana    INTEGER[];
 ALTER TABLE atividade_funcoes ADD COLUMN IF NOT EXISTS dia_mes        INTEGER;
 ALTER TABLE atividade_funcoes ADD COLUMN IF NOT EXISTS created_date   TIMESTAMPTZ DEFAULT now();
 
+-- Cargo (função/papel do usuário) para matching com atividade_funcoes
+ALTER TABLE users ADD COLUMN IF NOT EXISTS cargo VARCHAR(255);
+
+-- Campos extras para notificações de atividades ocasionais
+ALTER TABLE notificacoes_atividade ADD COLUMN IF NOT EXISTS usuario_email    VARCHAR(255);
+ALTER TABLE notificacoes_atividade ADD COLUMN IF NOT EXISTS atividade_funcao_id INTEGER;
+ALTER TABLE notificacoes_atividade ADD COLUMN IF NOT EXISTS atividade_nome   VARCHAR(255);
+ALTER TABLE notificacoes_atividade ADD COLUMN IF NOT EXISTS tempo_estimado   NUMERIC(10,2);
+ALTER TABLE notificacoes_atividade ADD COLUMN IF NOT EXISTS status           VARCHAR(50) DEFAULT 'pendente';
+ALTER TABLE notificacoes_atividade ADD COLUMN IF NOT EXISTS data_notificacao DATE DEFAULT CURRENT_DATE;
+ALTER TABLE notificacoes_atividade ADD COLUMN IF NOT EXISTS data_agendada    DATE;
+ALTER TABLE notificacoes_atividade ADD COLUMN IF NOT EXISTS planejamento_id  INTEGER;
+ALTER TABLE notificacoes_atividade ADD COLUMN IF NOT EXISTS token_resposta   VARCHAR(255);
+ALTER TABLE notificacoes_atividade ADD COLUMN IF NOT EXISTS email_enviado    BOOLEAN DEFAULT FALSE;
+
 -- Sobras por usuário (ajustes/horas sobrando) - legacy table
 CREATE TABLE IF NOT EXISTS sobras_usuario (
   id SERIAL PRIMARY KEY,
