@@ -13,7 +13,8 @@ function Calendar({
   return (
     (<DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn("p-3 [--rdp-cell-size:auto]", className)}
+      className={cn("p-3", className)}
+      style={{ '--rdp-cell-size': 'auto' }}
       classNames={{
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 w-full",
         month: "space-y-4 w-full",
@@ -39,7 +40,7 @@ function Calendar({
         ),
         day: cn(
           buttonVariants({ variant: "ghost" }),
-          "h-10 w-full p-0 font-normal aria-selected:opacity-100"
+          "h-9 w-full p-0 font-normal aria-selected:opacity-100 min-w-0"
         ),
         day_range_start: "day-range-start",
         day_range_end: "day-range-end",
