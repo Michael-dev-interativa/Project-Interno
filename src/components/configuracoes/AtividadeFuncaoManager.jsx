@@ -135,7 +135,7 @@ export default function AtividadeFuncaoManager() {
     }
     setIsSaving(true);
     try {
-      const dataToSave = { ...formData, tempo_estimado: Number(formData.tempo_estimado), dia_mes: Number(formData.dia_mes) };
+      const dataToSave = { ...formData, nome: formData.atividade, tempo_estimado: Number(formData.tempo_estimado), dia_mes: Number(formData.dia_mes) };
       if (editingAtividade) {
         await retryWithBackoff(() => AtividadeFuncao.update(editingAtividade.id, dataToSave), 3, 1000, 'updateAtividadeFuncao');
       } else {
