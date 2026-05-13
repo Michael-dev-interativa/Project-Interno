@@ -1400,6 +1400,25 @@ app.get('/api/atividade-funcoes', async (req, res) => {
   }
 });
 
+app.patch('/api/atividade-funcoes/:id', async (req, res) => {
+  try {
+    const row = await atividadeFuncaoModel.updateAtividadeFuncao(req.params.id, req.body);
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json(row);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/atividade-funcoes/:id', async (req, res) => {
+  try {
+    await atividadeFuncaoModel.deleteAtividadeFuncao(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Sobras (full CRUD for the SobraUsuario entity used by the frontend)
 app.get('/api/sobras', async (req, res) => {
   try {

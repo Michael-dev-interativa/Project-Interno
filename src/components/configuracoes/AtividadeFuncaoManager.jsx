@@ -48,7 +48,7 @@ export default function AtividadeFuncaoManager() {
 
   const [formData, setFormData] = useState({
     funcao: '',
-    atividade: '',
+    nome: '',
     frequencia: 'semanal',
     tempo_estimado: 1,
     dias_semana: [1, 2, 3, 4, 5],
@@ -106,7 +106,7 @@ export default function AtividadeFuncaoManager() {
 
   const handleAddNew = () => {
     setEditingAtividade(null);
-    setFormData({ funcao: '', atividade: '', frequencia: 'semanal', tempo_estimado: 1, dias_semana: [1, 2, 3, 4, 5], dia_mes: 1 });
+    setFormData({ funcao: '', nome: '', frequencia: 'semanal', tempo_estimado: 1, dias_semana: [1, 2, 3, 4, 5], dia_mes: 1 });
     setShowForm(true);
   };
 
@@ -129,13 +129,13 @@ export default function AtividadeFuncaoManager() {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!formData.funcao || !formData.atividade || !formData.tempo_estimado) {
+    if (!formData.funcao || !formData.nome || !formData.tempo_estimado) {
       alert("Por favor, preencha Função, Atividade e Tempo Estimado.");
       return;
     }
     setIsSaving(true);
     try {
-      const dataToSave = { ...formData, nome: formData.atividade, tempo_estimado: Number(formData.tempo_estimado), dia_mes: Number(formData.dia_mes) };
+      const dataToSave = { ...formData, tempo_estimado: Number(formData.tempo_estimado), dia_mes: Number(formData.dia_mes) };
       if (editingAtividade) {
         await retryWithBackoff(() => AtividadeFuncao.update(editingAtividade.id, dataToSave), 3, 1000, 'updateAtividadeFuncao');
       } else {
@@ -233,7 +233,7 @@ export default function AtividadeFuncaoManager() {
 
           if (deveCriar && isWorkingDay(dataAtual)) {
             setPlanejamentoStatus({
-              message: `Planejando "${modelo.atividade}" em ${format(dataAtual, 'dd/MM/yyyy')}...`,
+              message: `Planejando "${modelo.nome}" em ${format(dataAtual, 'dd/MM/yyyy')}...`,
               error: false
             });
 
@@ -246,8 +246,8 @@ export default function AtividadeFuncaoManager() {
               const fim = dataTermino ? format(dataTermino, 'yyyy-MM-dd') : inicio;
 
               await PlanejamentoAtividade.create({
-                descritivo: modelo.atividade,
-                base_descritivo: modelo.atividade,
+                descritivo: modelo.nome,
+                base_descritivo: modelo.nome,
                 executor_principal: planejamentoUsuario,
                 executores: [planejamentoUsuario],
                 tempo_planejado: modelo.tempo_estimado,
@@ -389,7 +389,7 @@ export default function AtividadeFuncaoManager() {
                                 {item.frequencia === 'ocasional' && (
                                   <Bell className="w-4 h-4 text-amber-500" title="Atividade Ocasional" />
                                 )}
-                                {item.atividade}
+                                {item.nome}
                               </div>
                             </TableCell>
                             <TableCell>
@@ -522,8 +522,8 @@ export default function AtividadeFuncaoManager() {
                 <Input id="funcao" value={formData.funcao} onChange={(e) => setFormData(prev => ({...prev, funcao: e.target.value}))} placeholder="Ex: Projetista" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="atividade">Atividade</Label>
-                <Input id="atividade" value={formData.atividade} onChange={(e) => setFormData(prev => ({...prev, atividade: e.target.value}))} placeholder="Ex: Reunião de alinhamento semanal" />
+                <Label htmlFor="nome">Atividade</Label>
+                <Input id="nome" value={formData.nome} onChange={(e) => setFormData(prev => ({...prev, nome: e.target.value}))} placeholder="Ex: Reunião de alinhamento semanal" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

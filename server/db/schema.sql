@@ -309,6 +309,12 @@ CREATE TABLE IF NOT EXISTS atividade_funcoes (
   nome VARCHAR(255) NOT NULL,
   descricao TEXT
 );
+ALTER TABLE atividade_funcoes ADD COLUMN IF NOT EXISTS funcao         VARCHAR(255);
+ALTER TABLE atividade_funcoes ADD COLUMN IF NOT EXISTS frequencia     VARCHAR(50);
+ALTER TABLE atividade_funcoes ADD COLUMN IF NOT EXISTS tempo_estimado NUMERIC(10,2);
+ALTER TABLE atividade_funcoes ADD COLUMN IF NOT EXISTS dias_semana    INTEGER[];
+ALTER TABLE atividade_funcoes ADD COLUMN IF NOT EXISTS dia_mes        INTEGER;
+ALTER TABLE atividade_funcoes ADD COLUMN IF NOT EXISTS created_date   TIMESTAMPTZ DEFAULT now();
 
 -- Sobras por usuário (ajustes/horas sobrando) - legacy table
 CREATE TABLE IF NOT EXISTS sobras_usuario (
