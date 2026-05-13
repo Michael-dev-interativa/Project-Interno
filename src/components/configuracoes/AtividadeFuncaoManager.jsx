@@ -399,7 +399,7 @@ export default function AtividadeFuncaoManager() {
                                 formatFrequencia(item)
                               )}
                             </TableCell>
-                            <TableCell>{Number(item.tempo_estimado) % 1 === 0 ? Number(item.tempo_estimado) : item.tempo_estimado}h</TableCell>
+                            <TableCell>{parseFloat(item.tempo_estimado)}h</TableCell>
                             <TableCell className="text-right">
                               <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
                                 <Edit className="h-4 w-4" />
