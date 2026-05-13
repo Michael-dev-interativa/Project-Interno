@@ -4,9 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Bell } from 'lucide-react';
 import { ActivityTimerContext } from '../contexts/ActivityTimerContext';
-import { NotificacaoAtividade, PlanejamentoAtividade } from '@/entities/all';
+import { NotificacaoAtividade, AtividadeFuncao, PlanejamentoAtividade } from '@/entities/all';
 import { retryWithBackoff } from '../utils/apiUtils';
-import { format } from 'date-fns';
+import { format, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { distribuirHorasPorDias } from '../utils/DateCalculator';
 
@@ -26,10 +26,16 @@ export default function NotificacoesOcasionais() {
 
   const checkForNotifications = async () => {
     try {
+      // Verificar se hoje é sexta-feira
+      const hoje = new Date();
+      const inicioDaSemana = format(startOfWeek(hoje, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+
+      // Buscar notificações pendentes desta semana
       const notificacoes = await retryWithBackoff(
         () => NotificacaoAtividade.filter({
           usuario_email: user.email,
           status: 'pendente',
+          data_notificacao: { $gte: inicioDaSemana }
         }),
         3, 1000, 'checkNotifications'
       );
@@ -39,7 +45,8 @@ export default function NotificacoesOcasionais() {
         setCurrentNotification(notificacoes[0]);
         setShowModal(true);
       }
-    } catch {
+    } catch (error) {
+      console.error('Erro ao verificar notificações:', error);
     }
   };
 
@@ -48,12 +55,21 @@ export default function NotificacoesOcasionais() {
 
     setIsProcessing(true);
     try {
-      const nomeAtividade = currentNotification.atividade_nome || 'Atividade';
-      const tempoEstimado = Number(currentNotification.tempo_estimado) || 1;
+      // Buscar a atividade função
+      const atividadeFuncao = await retryWithBackoff(
+        () => AtividadeFuncao.filter({ id: currentNotification.atividade_funcao_id }, null, 1),
+        3, 1000, 'getAtividadeFuncao'
+      );
+
+      if (!atividadeFuncao || atividadeFuncao.length === 0) {
+        throw new Error('Atividade não encontrada');
+      }
+
+      const atividade = atividadeFuncao[0];
 
       // Buscar planejamentos existentes para calcular carga
       const planejamentosExistentes = await retryWithBackoff(
-        () => PlanejamentoAtividade.filter({
+        () => PlanejamentoAtividade.filter({ 
           executor_principal: user.email,
           status: { $ne: 'concluido' }
         }),
@@ -73,7 +89,7 @@ export default function NotificacoesOcasionais() {
       // Distribuir horas respeitando a agenda
       const resultado = distribuirHorasPorDias(
         selectedDate,
-        tempoEstimado,
+        atividade.tempo_estimado,
         8,
         cargaDiaria,
         false
@@ -82,9 +98,9 @@ export default function NotificacoesOcasionais() {
       // Criar planejamento
       const novoPlanejamento = await retryWithBackoff(
         () => PlanejamentoAtividade.create({
-          descritivo: nomeAtividade,
-          base_descritivo: nomeAtividade,
-          tempo_planejado: tempoEstimado,
+          descritivo: atividade.atividade,
+          base_descritivo: atividade.atividade,
+          tempo_planejado: atividade.tempo_estimado,
           executor_principal: user.email,
           executores: [user.email],
           status: 'nao_iniciado',
@@ -119,6 +135,7 @@ export default function NotificacoesOcasionais() {
         setCurrentNotification(null);
       }
     } catch (error) {
+      console.error('Erro ao agendar atividade:', error);
       alert('Erro ao agendar atividade: ' + error.message);
     } finally {
       setIsProcessing(false);
@@ -148,7 +165,8 @@ export default function NotificacoesOcasionais() {
         setNotificacoesPendentes([]);
         setCurrentNotification(null);
       }
-    } catch {
+    } catch (error) {
+      console.error('Erro ao ignorar notificação:', error);
       alert('Erro ao ignorar notificação');
     } finally {
       setIsProcessing(false);
@@ -159,7 +177,7 @@ export default function NotificacoesOcasionais() {
 
   return (
     <Dialog open={showModal} onOpenChange={setShowModal}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <Bell className="w-5 h-5 text-amber-500" />
@@ -189,7 +207,7 @@ export default function NotificacoesOcasionais() {
               onSelect={setSelectedDate}
               locale={ptBR}
               disabled={(date) => date < new Date() || date.getDay() === 0 || date.getDay() === 6}
-              className="rounded-md border w-full"
+              className="rounded-md border"
             />
           </div>
         </div>
