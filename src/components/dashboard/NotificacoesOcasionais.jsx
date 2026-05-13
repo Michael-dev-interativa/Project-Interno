@@ -1,10 +1,11 @@
+// @ts-nocheck
 import { useState, useEffect, useContext } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Bell } from 'lucide-react';
 import { ActivityTimerContext } from '../contexts/ActivityTimerContext';
-import { NotificacaoAtividade, AtividadeFuncao, PlanejamentoAtividade } from '@/entities/all';
+import { NotificacaoAtividade, PlanejamentoAtividade } from '@/entities/all';
 import { retryWithBackoff } from '../utils/apiUtils';
 import { format, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -55,28 +56,17 @@ export default function NotificacoesOcasionais() {
 
     setIsProcessing(true);
     try {
-      // Buscar a atividade função
-      const atividadeFuncao = await retryWithBackoff(
-        () => AtividadeFuncao.filter({ id: currentNotification.atividade_funcao_id }, null, 1),
-        3, 1000, 'getAtividadeFuncao'
-      );
+      const nomeAtividade = currentNotification.atividade_nome || 'Atividade';
+      const tempoEstimado = Number(currentNotification.tempo_estimado) || 1;
 
-      if (!atividadeFuncao || atividadeFuncao.length === 0) {
-        throw new Error('Atividade não encontrada');
-      }
-
-      const atividade = atividadeFuncao[0];
-
-      // Buscar planejamentos existentes para calcular carga
       const planejamentosExistentes = await retryWithBackoff(
-        () => PlanejamentoAtividade.filter({ 
+        () => PlanejamentoAtividade.filter({
           executor_principal: user.email,
           status: { $ne: 'concluido' }
         }),
         3, 1000, 'getPlanejamentosExistentes'
       );
 
-      // Construir mapa de carga diária
       const cargaDiaria = {};
       (planejamentosExistentes || []).forEach(plano => {
         if (plano.horas_por_dia && typeof plano.horas_por_dia === 'object') {
@@ -86,21 +76,19 @@ export default function NotificacoesOcasionais() {
         }
       });
 
-      // Distribuir horas respeitando a agenda
       const resultado = distribuirHorasPorDias(
         selectedDate,
-        atividade.tempo_estimado,
+        tempoEstimado,
         8,
         cargaDiaria,
         false
       );
 
-      // Criar planejamento
       const novoPlanejamento = await retryWithBackoff(
         () => PlanejamentoAtividade.create({
-          descritivo: atividade.atividade,
-          base_descritivo: atividade.atividade,
-          tempo_planejado: atividade.tempo_estimado,
+          descritivo: nomeAtividade,
+          base_descritivo: nomeAtividade,
+          tempo_planejado: tempoEstimado,
           executor_principal: user.email,
           executores: [user.email],
           status: 'nao_iniciado',
@@ -177,7 +165,7 @@ export default function NotificacoesOcasionais() {
 
   return (
     <Dialog open={showModal} onOpenChange={setShowModal}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md w-full">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <Bell className="w-5 h-5 text-amber-500" />
@@ -201,14 +189,16 @@ export default function NotificacoesOcasionais() {
 
           <div className="space-y-2">
             <label className="text-sm font-medium">Quando você quer realizar esta atividade?</label>
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={setSelectedDate}
-              locale={ptBR}
-              disabled={(date) => date < new Date() || date.getDay() === 0 || date.getDay() === 6}
-              className="rounded-md border mx-auto"
-            />
+            <div className="flex justify-center">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={setSelectedDate}
+                locale={ptBR}
+                disabled={(date) => date < new Date() || date.getDay() === 0 || date.getDay() === 6}
+                className="rounded-md border w-full"
+              />
+            </div>
           </div>
         </div>
 
