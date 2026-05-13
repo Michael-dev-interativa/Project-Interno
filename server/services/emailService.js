@@ -1,5 +1,3 @@
-const nodemailer = require('nodemailer');
-
 const APP_URL = process.env.APP_URL || 'http://localhost:3001';
 
 function getNextWorkingDays(count = 5) {
@@ -74,28 +72,34 @@ function buildEmailHtml({ atividade_nome, tempo_estimado, token, usuario_nome })
 }
 
 async function sendNotificacaoOcasional({ to, usuario_nome, atividade_nome, tempo_estimado, token }) {
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER) {
-    console.warn('⚠️  SMTP não configurado (SMTP_HOST/SMTP_USER ausentes). Email não enviado.');
+  const apiKey = process.env.RESEND_API_KEY || process.env.SMTP_PASS;
+  const from = process.env.SMTP_FROM;
+
+  if (!apiKey || !from) {
+    console.warn('⚠️  Resend não configurado (RESEND_API_KEY/SMTP_FROM ausentes). Email não enviado.');
     return false;
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: `Sistema de Planejamento <${from}>`,
+        to: [to],
+        subject: `Atividade Ocasional: ${atividade_nome}`,
+        html: buildEmailHtml({ atividade_nome, tempo_estimado, token, usuario_nome }),
+      }),
     });
 
-    await transporter.sendMail({
-      from: `"Sistema de Planejamento" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
-      to,
-      subject: `🔔 Atividade Ocasional: ${atividade_nome}`,
-      html: buildEmailHtml({ atividade_nome, tempo_estimado, token, usuario_nome }),
-    });
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`❌ Resend retornou ${res.status} para ${to}:`, body);
+      return false;
+    }
 
     console.log(`✅ Email enviado para ${to} — ${atividade_nome}`);
     return true;
