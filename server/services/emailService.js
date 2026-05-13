@@ -98,14 +98,17 @@ async function sendNotificacaoOcasional({ to, usuario_nome, atividade_nome, temp
     if (!res.ok) {
       const body = await res.text();
       console.error(`❌ Resend retornou ${res.status} para ${to}:`, body);
-      return false;
+      const err = new Error(`Resend ${res.status}: ${body}`);
+      err.resendStatus = res.status;
+      err.resendBody = body;
+      throw err;
     }
 
     console.log(`✅ Email enviado para ${to} — ${atividade_nome}`);
     return true;
   } catch (err) {
     console.error(`❌ Falha ao enviar email para ${to}:`, err.message);
-    return false;
+    throw err;
   }
 }
 

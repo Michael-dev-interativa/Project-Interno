@@ -2,12 +2,8 @@ import { useEffect, useContext } from 'react';
 import { ActivityTimerContext } from '../contexts/ActivityTimerContext';
 import { NotificacaoAtividade, AtividadeFuncao } from '@/entities/all';
 import { retryWithBackoff } from './apiUtils';
-import { format, startOfWeek, isFriday } from 'date-fns';
+import { format, startOfWeek } from 'date-fns';
 
-/**
- * Hook que verifica e cria notificações de atividades ocasionais
- * quando o usuário acessa o sistema às sextas-feiras
- */
 export default function NotificationGenerator() {
   const { user } = useContext(ActivityTimerContext);
 
@@ -17,11 +13,6 @@ export default function NotificationGenerator() {
     const gerarNotificacoes = async () => {
       try {
         const hoje = new Date();
-        
-        // Só processar às sextas-feiras
-        if (!isFriday(hoje)) {
-          return;
-        }
 
         const inicioDaSemana = format(startOfWeek(hoje, { weekStartsOn: 1 }), 'yyyy-MM-dd');
         const hojeStr = format(hoje, 'yyyy-MM-dd');
