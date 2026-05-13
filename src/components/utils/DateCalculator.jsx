@@ -146,7 +146,7 @@ export const calcularDataInicioPorPredecessora = (
 
 export const isActivityOverdue = (plano, hoje = new Date()) => {
   try {
-    if (!plano || plano.status === 'concluido') {
+    if (!plano || plano.status === 'concluido' || plano.status === 'concluido_com_atraso') {
       return false;
     }
 
@@ -162,7 +162,10 @@ export const isActivityOverdue = (plano, hoje = new Date()) => {
 
     let dataTerminoObj;
     if (typeof dataTermino === 'string') {
-      dataTerminoObj = parseISO(dataTermino);
+      // Extrair apenas YYYY-MM-DD para evitar shift de timezone com TIMESTAMPTZ
+      const datePart = dataTermino.substring(0, 10);
+      const [year, month, day] = datePart.split('-').map(Number);
+      dataTerminoObj = new Date(year, month - 1, day);
     } else if (dataTermino instanceof Date) {
       dataTerminoObj = dataTermino;
     } else {
