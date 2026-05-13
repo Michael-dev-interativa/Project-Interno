@@ -1,6 +1,6 @@
 const { pool } = require('../db/pool');
 
-const ALLOWED_USER_FIELDS = new Set(['email', 'name', 'password_hash', 'role', 'equipe_id', 'datas_indisponiveis', 'usuarios_permitidos_visualizar']);
+const ALLOWED_USER_FIELDS = new Set(['email', 'name', 'password_hash', 'role', 'cargo', 'equipe_id', 'datas_indisponiveis', 'usuarios_permitidos_visualizar']);
 const JSON_USER_FIELDS = new Set(['datas_indisponiveis', 'usuarios_permitidos_visualizar']);
 
 async function createUser(payload = {}) {
@@ -14,9 +14,10 @@ async function createUser(payload = {}) {
   const usuarios_permitidos_visualizar = Array.isArray(payload.usuarios_permitidos_visualizar)
     ? payload.usuarios_permitidos_visualizar
     : [];
+  const cargo = payload.cargo || null;
   const result = await pool.query(
-    `INSERT INTO users (email, name, password_hash, role, datas_indisponiveis, usuarios_permitidos_visualizar) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [email, name, password_hash, role, JSON.stringify(datas_indisponiveis), JSON.stringify(usuarios_permitidos_visualizar)]
+    `INSERT INTO users (email, name, password_hash, role, cargo, datas_indisponiveis, usuarios_permitidos_visualizar) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [email, name, password_hash, role, cargo, JSON.stringify(datas_indisponiveis), JSON.stringify(usuarios_permitidos_visualizar)]
   );
   return result.rows[0];
 }
@@ -37,6 +38,7 @@ async function updateUser(id, fields = {}) {
   if ('nome' in mapped) mapped.name = mapped.nome;
   if ('perfil' in mapped) mapped.role = mapped.perfil;
   if ('email' in mapped) mapped.email = String(mapped.email || '').trim().toLowerCase();
+  if ('equipe_id' in mapped && (mapped.equipe_id === '' || mapped.equipe_id === 'sem_equipe')) mapped.equipe_id = null;
 
   // only allow updating known columns
   const keys = Object.keys(mapped).filter(k => ALLOWED_USER_FIELDS.has(k));

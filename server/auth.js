@@ -60,6 +60,8 @@ function toPublicUser(user) {
     full_name: user.name || null,
     role,
     perfil: profile,
+    cargo: user.cargo || null,
+    equipe_id: user.equipe_id || null,
     datas_indisponiveis: Array.isArray(user.datas_indisponiveis) ? user.datas_indisponiveis : [],
     usuarios_permitidos_visualizar: Array.isArray(user.usuarios_permitidos_visualizar) ? user.usuarios_permitidos_visualizar : [],
     created_at: user.created_at,

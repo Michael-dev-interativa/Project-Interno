@@ -385,7 +385,7 @@ app.get('/api/users', async (req, res) => {
       return res.json(out);
     }
     // fallback: return basic list from DB
-    const result = await pool.query('SELECT id, email, name, role, equipe_id, datas_indisponiveis, usuarios_permitidos_visualizar, created_at, updated_at FROM users ORDER BY id DESC LIMIT 200');
+    const result = await pool.query('SELECT id, email, name, role, cargo, equipe_id, datas_indisponiveis, usuarios_permitidos_visualizar, created_at, updated_at FROM users ORDER BY id DESC LIMIT 200');
     const rows = result.rows.map(r => ({
       ...r,
       nome: r.name,
