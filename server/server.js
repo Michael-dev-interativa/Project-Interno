@@ -1,5 +1,5 @@
 
-require('dotenv').config();
+require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
 
 // --- AJUSTE: Usar variáveis padrão do Render ---
 // DATABASE_URL já está OK no pool.js
