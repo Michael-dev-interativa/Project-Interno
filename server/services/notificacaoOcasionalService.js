@@ -39,7 +39,30 @@ async function dispararNotificacoesOcasionais() {
         );
 
         if (existing.rows.length > 0) {
-          totalJaExistiam++;
+          // Se existe mas email não foi enviado, tentar enviar agora
+          const notifExistente = await pool.query(
+            `SELECT id, token_resposta FROM notificacoes_atividade
+             WHERE usuario_email = $1 AND atividade_funcao_id = $2 AND data_notificacao >= $3 AND email_enviado = FALSE LIMIT 1`,
+            [user.email, atv.id, semanaInicio]
+          );
+          if (notifExistente.rows.length > 0) {
+            const n = notifExistente.rows[0];
+            const enviado = await sendNotificacaoOcasional({
+              to: user.email,
+              usuario_nome: user.name,
+              atividade_nome: atv.nome,
+              tempo_estimado: atv.tempo_estimado,
+              token: n.token_resposta,
+            });
+            if (enviado) {
+              await notificacaoModel.updateNotificacao(n.id, { email_enviado: true });
+              totalEnviados++;
+            } else {
+              totalJaExistiam++;
+            }
+          } else {
+            totalJaExistiam++;
+          }
           continue;
         }
 
