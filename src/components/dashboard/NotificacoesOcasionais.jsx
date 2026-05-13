@@ -6,7 +6,7 @@ import { Bell } from 'lucide-react';
 import { ActivityTimerContext } from '../contexts/ActivityTimerContext';
 import { NotificacaoAtividade, PlanejamentoAtividade } from '@/entities/all';
 import { retryWithBackoff } from '../utils/apiUtils';
-import { format, startOfWeek } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { distribuirHorasPorDias } from '../utils/DateCalculator';
 
@@ -26,16 +26,10 @@ export default function NotificacoesOcasionais() {
 
   const checkForNotifications = async () => {
     try {
-      // Verificar se hoje é sexta-feira
-      const hoje = new Date();
-      const inicioDaSemana = format(startOfWeek(hoje, { weekStartsOn: 1 }), 'yyyy-MM-dd');
-
-      // Buscar notificações pendentes desta semana
       const notificacoes = await retryWithBackoff(
         () => NotificacaoAtividade.filter({
           usuario_email: user.email,
           status: 'pendente',
-          data_notificacao: { $gte: inicioDaSemana }
         }),
         3, 1000, 'checkNotifications'
       );
