@@ -320,6 +320,10 @@ export default function AtaPlanejamento() {
   const [viewMode, setViewMode] = useState('list'); // 'list', 'edit', 'new'
   const [currentAtaId, setCurrentAtaId] = useState(null);
   const autoSaveTimeoutRef = React.useRef(null);
+  const changeVersionRef = React.useRef(0);
+  const latestAtaDataRef = React.useRef(null);
+  const latestProvidenciasRef = React.useRef([]);
+  const latestCurrentAtaIdRef = React.useRef(null);
 
   // Dados da ATA
   const [ataData, setAtaData] = useState({
@@ -354,47 +358,14 @@ export default function AtaPlanejamento() {
     loadData();
   }, []);
 
-  // Auto-save com debounce
-  useEffect(() => {
-    if (hasUnsavedChanges && (viewMode === 'edit' || viewMode === 'new')) {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
-
-      autoSaveTimeoutRef.current = setTimeout(async () => {
-        try {
-          const ataToSave = {
-            ...ataData,
-            providencias: providencias.map(p => ({
-              projeto: p.projeto || '',
-              providencias: p.providencias || '',
-              respostas: p.respostas || [],
-              responsaveis: p.responsaveis || [],
-              dataReuniao: p.dataReuniao || '',
-              dataRetorno: p.dataRetorno || '',
-              status: p.status || 'pendente'
-            }))
-          };
-
-          if (currentAtaId) {
-            await AtaReuniao.update(currentAtaId, ataToSave);
-          } else {
-            const newAta = await AtaReuniao.create(ataToSave);
-            setCurrentAtaId(newAta.id);
-          }
-          setHasUnsavedChanges(false);
-        } catch (error) {
-          console.error('Erro no auto-save:', error);
-        }
-      }, 3000);
-    }
-
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
-    };
-  }, [hasUnsavedChanges, ataData, providencias, currentAtaId, viewMode]);
+  // Sincroniza refs com o estado mais recente para uso nos callbacks assíncronos
+  useEffect(() => { latestAtaDataRef.current = ataData; }, [ataData]);
+  useEffect(() => { latestProvidenciasRef.current = providencias; }, [providencias]);
+  useEffect(() => { latestCurrentAtaIdRef.current = currentAtaId; }, [currentAtaId]);
+  // Cancela timer ao desmontar
+  useEffect(() => () => {
+    if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
+  }, []);
 
   // Aviso ao sair com mudanças não salvas
   useEffect(() => {
@@ -427,6 +398,41 @@ export default function AtaPlanejamento() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const scheduleAutoSave = () => {
+    if (viewMode !== 'edit' && viewMode !== 'new') return;
+    setHasUnsavedChanges(true);
+    if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
+    const versionAtSchedule = ++changeVersionRef.current;
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        const ataToSave = {
+          ...latestAtaDataRef.current,
+          providencias: latestProvidenciasRef.current.map(p => ({
+            projeto: p.projeto || '',
+            providencias: p.providencias || '',
+            respostas: p.respostas || [],
+            responsaveis: p.responsaveis || [],
+            dataReuniao: p.dataReuniao || '',
+            dataRetorno: p.dataRetorno || '',
+            status: p.status || 'pendente'
+          }))
+        };
+        if (latestCurrentAtaIdRef.current) {
+          await AtaReuniao.update(latestCurrentAtaIdRef.current, ataToSave);
+        } else {
+          const newAta = await AtaReuniao.create(ataToSave);
+          setCurrentAtaId(newAta.id);
+        }
+        // Só limpa o flag se nenhuma nova mudança chegou durante o save
+        if (changeVersionRef.current === versionAtSchedule) {
+          setHasUnsavedChanges(false);
+        }
+      } catch (error) {
+        console.error('Erro no auto-save:', error);
+      }
+    }, 3000);
   };
 
   const handleSaveAta = async (silent = false) => {
@@ -587,7 +593,7 @@ export default function AtaPlanejamento() {
   };
 
   const toggleParticipante = (email) => {
-    setHasUnsavedChanges(true);
+    scheduleAutoSave();
     setAtaData(prev => ({
       ...prev,
       participantes: prev.participantes.includes(email)
@@ -611,7 +617,7 @@ export default function AtaPlanejamento() {
       status: linha.status
     }));
 
-    setHasUnsavedChanges(true);
+    scheduleAutoSave();
     setProvidencias(prev => [...prev, ...novasProvidencias]);
     setNovaProvidencia({
       projeto: '',
@@ -642,7 +648,7 @@ export default function AtaPlanejamento() {
       ...providencias.slice(index + 1)
     ];
 
-    setHasUnsavedChanges(true);
+    scheduleAutoSave();
     setProvidencias(novasProvidencias);
   };
 
@@ -669,7 +675,7 @@ export default function AtaPlanejamento() {
   };
 
   const handleUpdateProvidencia = (id, field, value) => {
-    setHasUnsavedChanges(true);
+    scheduleAutoSave();
     setProvidencias(prev => prev.map(p =>
       p.id === id ? { ...p, [field]: value } : p
     ));
@@ -677,7 +683,7 @@ export default function AtaPlanejamento() {
 
   const handleDeleteProvidencia = (id) => {
     if (confirm('Deseja excluir esta providência?')) {
-      setHasUnsavedChanges(true);
+      scheduleAutoSave();
       setProvidencias(prev => prev.filter(p => p.id !== id));
     }
   };
@@ -964,8 +970,9 @@ export default function AtaPlanejamento() {
                   type="text"
                   value={ataData.assunto}
                   onChange={(e) => {
-                    setHasUnsavedChanges(true);
-                    setAtaData(prev => ({ ...prev, assunto: e.target.value }));
+                    const v = e.target.value;
+                    setAtaData(prev => ({ ...prev, assunto: v }));
+                    scheduleAutoSave();
                   }}
                   className="border-none outline-none bg-transparent print:bg-transparent flex-1 w-full"
                 />
@@ -987,8 +994,9 @@ export default function AtaPlanejamento() {
                   type="text"
                   value={ataData.local}
                   onChange={(e) => {
-                    setHasUnsavedChanges(true);
-                    setAtaData(prev => ({ ...prev, local: e.target.value }));
+                    const v = e.target.value;
+                    setAtaData(prev => ({ ...prev, local: v }));
+                    scheduleAutoSave();
                   }}
                   className="border-none outline-none bg-transparent print:bg-transparent"
                 />
@@ -999,8 +1007,9 @@ export default function AtaPlanejamento() {
                   type="text"
                   value={ataData.horario}
                   onChange={(e) => {
-                    setHasUnsavedChanges(true);
-                    setAtaData(prev => ({ ...prev, horario: e.target.value }));
+                    const v = e.target.value;
+                    setAtaData(prev => ({ ...prev, horario: v }));
+                    scheduleAutoSave();
                   }}
                   className="border-none outline-none bg-transparent print:bg-transparent"
                 />
@@ -1245,15 +1254,20 @@ export default function AtaPlanejamento() {
                                       key={rIdx}
                                       value={resp}
                                       onChange={(newValue) => {
-                                        setHasUnsavedChanges(true);
-                                        const novasRespostas = [...(prov.respostas || [])];
-                                        novasRespostas[rIdx] = newValue;
-                                        handleUpdateProvidencia(prov.id, 'respostas', novasRespostas);
+                                        scheduleAutoSave();
+                                        setProvidencias(prev => prev.map(p => {
+                                          if (p.id !== prov.id) return p;
+                                          const novasRespostas = [...(p.respostas || [])];
+                                          novasRespostas[rIdx] = newValue;
+                                          return { ...p, respostas: novasRespostas };
+                                        }));
                                       }}
                                       onRemove={() => {
-                                        setHasUnsavedChanges(true);
-                                        const novasRespostas = (prov.respostas || []).filter((_, i) => i !== rIdx);
-                                        handleUpdateProvidencia(prov.id, 'respostas', novasRespostas);
+                                        scheduleAutoSave();
+                                        setProvidencias(prev => prev.map(p => {
+                                          if (p.id !== prov.id) return p;
+                                          return { ...p, respostas: (p.respostas || []).filter((_, i) => i !== rIdx) };
+                                        }));
                                       }}
                                     />
                                   ))}
@@ -1264,9 +1278,11 @@ export default function AtaPlanejamento() {
                                   </div>
                                   <button
                                     onClick={() => {
-                                      setHasUnsavedChanges(true);
-                                      const novasRespostas = [...(prov.respostas || []), ''];
-                                      handleUpdateProvidencia(prov.id, 'respostas', novasRespostas);
+                                      scheduleAutoSave();
+                                      setProvidencias(prev => prev.map(p => {
+                                        if (p.id !== prov.id) return p;
+                                        return { ...p, respostas: [...(p.respostas || []), ''] };
+                                      }));
                                     }}
                                     className="text-blue-600 hover:text-blue-800 text-xs flex items-center gap-1 print:hidden"
                                   >
