@@ -213,11 +213,15 @@ export default function ActivityItemCalendar({
       const horasExecutadasPorDia = { ...plano.horas_executadas_por_dia || {} };
       horasExecutadasPorDia[dayKey] = timeValue;
 
+      const hoje = format(new Date(), 'yyyy-MM-dd');
+      const terminoPlanejado = plano.termino_ajustado || plano.termino_planejado;
+      const statusFinal = terminoPlanejado && hoje > terminoPlanejado ? 'concluido_com_atraso' : 'concluido';
+
       await retryWithBackoff(
         () => entityToUpdate.update(plano.id, {
           tempo_executado: timeValue,
-          status: 'concluido',
-          termino_real: format(new Date(), 'yyyy-MM-dd'),
+          status: statusFinal,
+          termino_real: hoje,
           horas_executadas_por_dia: horasExecutadasPorDia
         }),
         3, 1000, 'adjustTime'

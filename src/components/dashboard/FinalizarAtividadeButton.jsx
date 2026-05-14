@@ -46,10 +46,14 @@ export default function FinalizarAtividadeButton({ plano, displayName, onSuccess
 
       const entityToUpdate = plano.tipo_planejamento === 'documento' ? PlanejamentoDocumento : PlanejamentoAtividade;
 
+      const hoje = format(new Date(), 'yyyy-MM-dd');
+      const terminoPlanejado = plano.termino_ajustado || plano.termino_planejado;
+      const statusFinal = terminoPlanejado && hoje > terminoPlanejado ? 'concluido_com_atraso' : 'concluido';
+
       const updateData = {
         tempo_executado: tempoTotalExecutado,
-        status: 'concluido',
-        termino_real: format(new Date(), 'yyyy-MM-dd'),
+        status: statusFinal,
+        termino_real: hoje,
         horas_executadas_por_dia: horasExecutadasPorDia
       };
 
