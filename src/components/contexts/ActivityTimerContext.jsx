@@ -172,8 +172,11 @@ export const ActivityTimerProvider = ({ children }) => {
             updateData.horas_executadas_por_dia = horasExecutadasPorDia;
 
             if (finalStatus === 'concluido') {
-                updateData.status = 'concluido';
-                updateData.termino_real = format(new Date(), 'yyyy-MM-dd');
+                const hoje = format(new Date(), 'yyyy-MM-dd');
+                const terminoPlanejado = planejamento.termino_ajustado || planejamento.termino_planejado;
+                const statusFinal = terminoPlanejado && hoje > terminoPlanejado ? 'concluido_com_atraso' : 'concluido';
+                updateData.status = statusFinal;
+                updateData.termino_real = hoje;
                 if (!planejamento.inicio_real) {
                     updateData.inicio_real = diaParaRegistrar;
                 }
@@ -212,6 +215,7 @@ export const ActivityTimerProvider = ({ children }) => {
             // Mantido para compatibilidade, mas sem log
 
             triggerUpdate();
+            return updateData.status;
         } catch (error) {
             console.error('[updatePlanejamento] Erro ao atualizar planejamento:', planejamentoId, error?.message || error);
         }
@@ -546,14 +550,14 @@ export const ActivityTimerProvider = ({ children }) => {
 
             if (execution.planejamento_id) {
                 const diaExecucao = format(new Date(), 'yyyy-MM-dd');
-                await updatePlanejamento(execution.planejamento_id, tempoDecorridoHoras, 'concluido', observacao, diaExecucao);
+                const statusUsado = await updatePlanejamento(execution.planejamento_id, tempoDecorridoHoras, 'concluido', observacao, diaExecucao);
 
-                // Safety net: garantir que o status sempre seja 'concluido' mesmo que updatePlanejamento falhe silenciosamente
+                // Safety net: garantir que o status seja salvo mesmo que updatePlanejamento falhe silenciosamente
                 try {
                     const entityToUpdate = execution.tipo_planejamento === 'documento' ? PlanejamentoDocumento : PlanejamentoAtividade;
                     await retryWithBackoff(
                         () => entityToUpdate.update(execution.planejamento_id, {
-                            status: 'concluido',
+                            status: statusUsado || 'concluido',
                             termino_real: diaExecucao,
                         }),
                         3, 1000, 'finishExecution.statusFallback'
