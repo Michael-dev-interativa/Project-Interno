@@ -42,19 +42,16 @@ const perfilColors = {
 
 const ALL_PROFILES = [
   { value: 'user', label: 'Colaborador' },
-  { value: 'coordenador', label: 'Coordenador' },
   { value: 'apoio', label: 'Apoio' },
+  { value: 'coordenador', label: 'Coordenador' },
   { value: 'gestao', label: 'Gestão' },
-  { value: 'lider', label: 'Líder' },
-  { value: 'direcao', label: 'Direção' },
   { value: 'admin', label: 'Administrador' },
 ];
 
-const LIDER_PROFILES = [
+const GESTAO_PROFILES = [
   { value: 'user', label: 'Colaborador' },
-  { value: 'coordenador', label: 'Coordenador' },
   { value: 'apoio', label: 'Apoio' },
-  { value: 'gestao', label: 'Gestão' },
+  { value: 'coordenador', label: 'Coordenador' },
 ];
 
 export default function UsuarioCard({ usuario, onEdit, onDelete, onRefresh }) {
@@ -74,10 +71,10 @@ export default function UsuarioCard({ usuario, onEdit, onDelete, onRefresh }) {
   const status = String(usuario.status || '').toLowerCase() === 'inativo' ? 'inativo' : 'ativo';
 
   const availableProfiles =
-    user?.role === 'admin' || user?.perfil === 'direcao'
+    user?.role === 'admin'
       ? ALL_PROFILES
-      : user?.perfil === 'lider'
-      ? LIDER_PROFILES
+      : user?.perfil === 'gestao'
+      ? GESTAO_PROFILES
       : [{ value: 'user', label: 'Colaborador' }];
 
   const openAccessModal = () => {

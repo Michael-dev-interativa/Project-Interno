@@ -154,35 +154,25 @@ export default function UsuarioForm({ usuario, onSubmit, onCancel, allUsers, equ
     }
   };
 
-  // **NOVO**: Determinar perfis disponíveis baseado no usuário logado
   const getAvailableProfiles = () => {
-    // Admin e Direção têm acesso a todos os perfis
-    if (user?.role === 'admin' || user?.perfil === 'direcao') {
+    if (user?.role === 'admin') {
       return [
         { value: 'user', label: 'Colaborador' },
-        { value: 'coordenador', label: 'Coordenador' },
         { value: 'apoio', label: 'Apoio' },
+        { value: 'coordenador', label: 'Coordenador' },
         { value: 'gestao', label: 'Gestão' },
-        { value: 'lider', label: 'Líder' },
-        { value: 'direcao', label: 'Direção' },
         { value: 'admin', label: 'Administrador' },
       ];
     }
-    
-    // Líder pode criar apenas colaboradores, coordenadores, apoio e gestão
-    if (user?.perfil === 'lider') {
+    // Gestão pode criar até coordenador
+    if (user?.perfil === 'gestao') {
       return [
         { value: 'user', label: 'Colaborador' },
-        { value: 'coordenador', label: 'Coordenador' },
         { value: 'apoio', label: 'Apoio' },
-        { value: 'gestao', label: 'Gestão' },
+        { value: 'coordenador', label: 'Coordenador' },
       ];
     }
-    
-    // Outros usuários (não deveriam chegar aqui, mas por segurança)
-    return [
-      { value: 'user', label: 'Colaborador' },
-    ];
+    return [{ value: 'user', label: 'Colaborador' }];
   };
 
   const availableProfiles = getAvailableProfiles();
@@ -369,11 +359,6 @@ export default function UsuarioForm({ usuario, onSubmit, onCancel, allUsers, equ
                     ))}
                   </SelectContent>
                 </Select>
-                {(user?.role === 'admin' || user?.perfil === 'direcao') && (
-                  <p className="text-xs text-gray-500">
-                    <strong>Direção:</strong> Acesso completo incluindo aba de Gestão nos empreendimentos
-                  </p>
-                )}
               </div>
 
               <div className="space-y-3">
