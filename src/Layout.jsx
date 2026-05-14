@@ -78,8 +78,8 @@ const LayoutComponent = ({ children, currentPageName }) => {
       });
     }
 
-    // Relatórios: coordenador e consultor
-    if (hasPermission('coordenador') || perfilAtual === 'consultor' || showAll) {
+    // Relatórios: coordenador+
+    if (hasPermission('coordenador') || showAll) {
       items.push({
         title: "Relatórios",
         url: createPageUrl("Relatorios"),
@@ -88,8 +88,8 @@ const LayoutComponent = ({ children, currentPageName }) => {
       });
     }
 
-    // ATA de Reunião: coordenador e consultor
-    if (hasPermission('coordenador') || perfilAtual === 'consultor' || showAll) {
+    // ATA de Reunião: coordenador+
+    if (hasPermission('coordenador') || showAll) {
       items.push({
         title: "ATA de Reunião",
         url: createPageUrl("AtaPlanejamento"),
@@ -98,18 +98,16 @@ const LayoutComponent = ({ children, currentPageName }) => {
       });
     }
 
-    // Atividades Rápidas: todos EXCETO consultor
-    if (perfilAtual !== 'consultor' || showAll) {
-      items.push({
-        title: "Atividades Rápidas",
-        url: createPageUrl("AtividadesRapidas"),
-        icon: Zap,
-        show: true
-      });
-    }
+    // Atividades Rápidas: todos os usuários
+    items.push({
+      title: "Atividades Rápidas",
+      url: createPageUrl("AtividadesRapidas"),
+      icon: Zap,
+      show: true
+    });
 
-    // Usuários: apenas para Lider, Direção e Admin (não para Gestão)
-    if (isAdmin || perfilAtual === 'lider' || perfilAtual === 'direcao' || showAll) {
+    // Usuários: gestão+
+    if (hasPermission('gestao') || showAll) {
       items.push({
         title: "Usuários",
         url: createPageUrl("Usuarios"),

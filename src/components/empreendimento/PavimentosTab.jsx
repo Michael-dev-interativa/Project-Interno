@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Pavimento } from "@/entities/all";
 import { Plus, Edit, Trash2 } from "lucide-react";
 
-export default function PavimentosTab({ empreendimentoId, onUpdate }) {
+export default function PavimentosTab({ empreendimentoId, onUpdate, readOnly = false }) {
   const [pavimentos, setPavimentos] = useState([]);
   const [formData, setFormData] = useState({ nome: '', area: '', escala: '' });
   const [editingPavimento, setEditingPavimento] = useState(null);
@@ -92,7 +92,7 @@ export default function PavimentosTab({ empreendimentoId, onUpdate }) {
           <h3 className="font-semibold mb-4 text-lg">
             {editingPavimento ? 'Editar Pavimento' : 'Adicionar Novo Pavimento'}
           </h3>
-          {showForm && (
+          {!readOnly && showForm && (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <Label htmlFor="nome">Nome do Pavimento</Label>
@@ -136,9 +136,9 @@ export default function PavimentosTab({ empreendimentoId, onUpdate }) {
                   <Plus className="w-4 h-4 mr-2" />
                   {editingPavimento ? 'Salvar Alterações' : 'Adicionar Pavimento'}
                 </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
+                <Button
+                  type="button"
+                  variant="outline"
                   onClick={() => {
                     setShowForm(false);
                     setEditingPavimento(null);
@@ -150,7 +150,7 @@ export default function PavimentosTab({ empreendimentoId, onUpdate }) {
               </div>
             </form>
           )}
-          {!showForm && (
+          {!readOnly && !showForm && (
             <Button onClick={() => setShowForm(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Adicionar Pavimento
@@ -171,26 +171,28 @@ export default function PavimentosTab({ empreendimentoId, onUpdate }) {
                     <p className="font-medium">{pav.nome}</p>
                     <p className="text-sm text-gray-500">{displayText}</p>
                   </div>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => {
-                        setEditingPavimento(pav);
-                        setFormData({ 
-                          nome: pav.nome, 
-                          area: String(pav.area),
-                          escala: pav.escala || ''
-                        });
-                        setShowForm(true);
-                      }}
-                    >
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(pav.id)}>
-                      <Trash2 className="w-4 h-4 text-red-500" />
-                    </Button>
-                  </div>
+                  {!readOnly && (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setEditingPavimento(pav);
+                          setFormData({
+                            nome: pav.nome,
+                            area: String(pav.area),
+                            escala: pav.escala || ''
+                          });
+                          setShowForm(true);
+                        }}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(pav.id)}>
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               );
             })}

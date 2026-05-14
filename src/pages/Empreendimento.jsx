@@ -98,27 +98,16 @@ export default function EmpreendimentoPage() {
   const empreendimentoFilterId = empreendimento?.id || null;
 
   const { user, hasPermission, perfilAtual } = useContext(ActivityTimerContext);
-  const hasAccessToGestao = user && (
-    user.role === 'admin' ||
-    user.perfil === 'lider' ||
-    user.perfil === 'direcao'
-  );
-   const hasChecklistAccess = hasPermission('coordenador') || perfilAtual === 'consultor';
-
-  const canEdit = user && (
-    user.role === 'admin' ||
-    user.perfil === 'lider' ||
-    user.perfil === 'coordenador' ||
-    user.perfil === 'gestao' ||
-    user.perfil === 'direcao'
-  );
+  const hasAccessToGestao = hasPermission('gestao');
+  const hasChecklistAccess = hasPermission('coordenador');
+  const canEdit = hasPermission('coordenador');
 
   const visibleTabsForUser = useMemo(() => {
     if (canEdit) {
       return ['documentos', 'cadastro', 'pavimentos', 'atividades_projeto', 'pre', 'controle_os', 'gestao'];
     }
-    // Usuários comuns veem apenas: Documentos, Cadastro, PRE
-    return ['documentos', 'cadastro', 'pre'];
+    // Padrão/Apoio: visualização de Documentos, Cadastro, Pavimentos e PRE
+    return ['documentos', 'cadastro', 'pavimentos', 'pre'];
   }, [canEdit]);
 
   const loadEmpreendimento = useCallback(async () => {
@@ -368,7 +357,7 @@ export default function EmpreendimentoPage() {
   const isGestaoLoaded = sharedData.loaded && tabData.documentos.loaded && tabData.pavimentos.loaded;
   const tabsGridClass = canEdit
     ? (hasAccessToGestao ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-8' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-7')
-    : 'grid-cols-3';
+    : 'grid-cols-4';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -434,6 +423,7 @@ export default function EmpreendimentoPage() {
                   loadTabData('pavimentos');
                 }}
                 isLoading={false}
+                readOnly={!canEdit}
               />
             ) : null}
           </TabsContent>
