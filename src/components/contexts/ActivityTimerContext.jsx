@@ -57,6 +57,11 @@ export const ActivityTimerProvider = ({ children }) => {
         setUpdateKey(prevKey => prevKey + 1);
     }, []);
 
+    const triggerImmediateReload = useCallback(() => {
+        setUpdateKey(prevKey => prevKey + 1);
+        setCompletionKey(prevKey => prevKey + 1);
+    }, []);
+
     const { perfilAtual, nivelUsuario, isAdmin, isColaborador, isGestao, isCoordenador } = useMemo(() => {
         const perfil = (userProfile && userProfile.perfil) ? userProfile.perfil : (user && user.perfil) ? user.perfil : 'user';
         const nivel = PERFIS_HIERARQUIA[perfil] || 1;
@@ -394,7 +399,7 @@ export const ActivityTimerProvider = ({ children }) => {
                 }
             }
 
-            triggerUpdate();
+            triggerImmediateReload();
 
         } catch (error) {
             // Log removido para produção
@@ -414,7 +419,7 @@ export const ActivityTimerProvider = ({ children }) => {
         } finally {
             setIsStarting(null);
         }
-    }, [user, triggerUpdate, activeExecution, getPlanejamento, isStarting]);
+    }, [user, triggerUpdate, triggerImmediateReload, activeExecution, getPlanejamento, isStarting]);
 
     const pauseExecution = useCallback(async (observacao = '', triggeredById = null) => {
         if (!activeExecution) {
@@ -896,6 +901,7 @@ export const ActivityTimerProvider = ({ children }) => {
         updateKey,
         completionKey,
         triggerUpdate,
+        triggerImmediateReload,
         deleteExecution,
         isStarting,
         isFinishing,
@@ -918,7 +924,7 @@ export const ActivityTimerProvider = ({ children }) => {
         perfilAtual,
     }), [
         activeExecution, isLoading, startExecution, finishExecution, pauseExecution,
-        refreshActiveExecution, user, userProfile, updateKey, completionKey, triggerUpdate, deleteExecution,
+        refreshActiveExecution, user, userProfile, updateKey, completionKey, triggerUpdate, triggerImmediateReload, deleteExecution,
         isStarting, isFinishing, isPausing, playlist, addToPlaylist, removeFromPlaylist,
         startFromPlaylist, allPlanejamentos, isLoadingPlanejamentos, atividadesGenericas,
         allEmpreendimentos, allUsers, hasPermission, isAdmin, isColaborador, isGestao,

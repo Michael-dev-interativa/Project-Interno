@@ -35,7 +35,8 @@ export default function Dashboard() {
     hasPermission,
     isAdmin,
     nivelUsuario,
-    triggerUpdate
+    triggerUpdate,
+    triggerImmediateReload
   } = useContext(ActivityTimerContext);
 
   const [disciplinas, setDisciplinas] = useState([]);
@@ -254,7 +255,7 @@ export default function Dashboard() {
           atividades={atividades}
           onSuccess={() => {
             setShowNovoPlanejamentoModal(false);
-            triggerUpdate(); // Atualiza o calendário mantendo o usuário filtrado
+            triggerImmediateReload();
           }}
         />
       )}
