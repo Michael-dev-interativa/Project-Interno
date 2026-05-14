@@ -94,6 +94,9 @@ export default function PRE() {
   const [lastSavedTime, setLastSavedTime] = useState(null);
   const [autoSaveInProgress, setAutoSaveInProgress] = useState(false);
   const autoSaveTimerRef = useRef(null);
+  const changeVersionRef = useRef(0);
+  const latestItemsRef = useRef([]);
+  const latestSelectedEmpRef = useRef(null);
   const [headerData, setHeaderData] = useState({
     cliente: '',
     obra: '',
@@ -122,6 +125,12 @@ export default function PRE() {
       setItems([]);
     }
   }, [selectedEmp]);
+
+  useEffect(() => { latestItemsRef.current = items; }, [items]);
+  useEffect(() => { latestSelectedEmpRef.current = selectedEmp; }, [selectedEmp]);
+  useEffect(() => () => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+  }, []);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -228,25 +237,21 @@ export default function PRE() {
     ));
   };
 
-  // Salvamento automático com debounce
+  // Salvamento automático com debounce — usa refs para sempre capturar o estado mais recente
   const triggerAutoSave = () => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    
-    autoSaveTimerRef.current = setTimeout(() => {
-      handleAutoSave();
-    }, 2000); // Aguarda 2 segundos de inatividade antes de salvar
-  };
+    const versionAtSchedule = ++changeVersionRef.current;
 
-  const handleAutoSave = async () => {
-    if (!selectedEmp || autoSaveInProgress) return;
+    autoSaveTimerRef.current = setTimeout(async () => {
+      const empId = latestSelectedEmpRef.current;
+      if (!empId) return;
 
-    setAutoSaveInProgress(true);
-    try {
-      for (const item of items) {
-        // Apenas salvar itens que foram modificados ou são novos
-        if (item.id.toString().startsWith('temp-') || item.isNew) {
+      setAutoSaveInProgress(true);
+      try {
+        const currentItems = latestItemsRef.current;
+        for (const item of currentItems) {
           const itemData = {
-            empreendimento_id: selectedEmp,
+            empreendimento_id: empId,
             item: item.item,
             data: item.data,
             de: item.de,
@@ -261,34 +266,21 @@ export default function PRE() {
 
           if (item.isNew || item.id.toString().startsWith('temp-')) {
             const created = await retryWithBackoff(() => ItemPRE.create(itemData), 3, 2000, 'PRE-AutoCreate');
-            // Atualizar item na lista com ID real
             setItems(prev => prev.map(i => i.id === item.id ? { ...created, isNew: false } : i));
+          } else {
+            await retryWithBackoff(() => ItemPRE.update(item.id, itemData), 3, 2000, `PRE-AutoUpdate-${item.id}`);
           }
-        } else {
-          // Para itens existentes, atualizar com os dados mais recentes
-          const itemData = {
-            empreendimento_id: selectedEmp,
-            item: item.item,
-            data: item.data,
-            de: item.de,
-            descritiva: item.descritiva,
-            localizacao: item.localizacao,
-            assunto: item.assunto,
-            comentario: item.comentario,
-            status: item.status || '',
-            resposta: item.resposta,
-            imagens: item.imagens || []
-          };
-
-          await retryWithBackoff(() => ItemPRE.update(item.id, itemData), 3, 2000, `PRE-AutoUpdate-${item.id}`);
         }
+        // Só marca como salvo se nenhuma nova mudança chegou durante o save
+        if (changeVersionRef.current === versionAtSchedule) {
+          setLastSavedTime(new Date());
+        }
+      } catch (error) {
+        console.error('Erro no auto-save:', error);
+      } finally {
+        setAutoSaveInProgress(false);
       }
-      setLastSavedTime(new Date());
-    } catch (error) {
-      console.error('Erro no auto-save:', error);
-    } finally {
-      setAutoSaveInProgress(false);
-    }
+    }, 2000);
   };
 
   const handleSave = async () => {
