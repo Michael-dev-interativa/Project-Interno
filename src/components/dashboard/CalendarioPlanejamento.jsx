@@ -512,12 +512,16 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
         novasHorasPorDia[hoje] = timeValue;
       }
 
+      const hoje = format(new Date(), 'yyyy-MM-dd');
+      const terminoPlanejado = plano.termino_ajustado || plano.termino_planejado;
+      const statusFinal = terminoPlanejado && hoje > terminoPlanejado ? 'concluido_com_atraso' : 'concluido';
+
       await retryWithBackoff(
         () => entityToUpdate.update(plano.id, {
           tempo_executado: timeValue,
           horas_executadas_por_dia: novasHorasPorDia,
-          status: 'concluido',
-          termino_real: format(new Date(), 'yyyy-MM-dd')
+          status: statusFinal,
+          termino_real: hoje
         }),
         3, 1000, 'adjustTime'
       );
@@ -525,9 +529,8 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
       setShowTimeAdjustModal(false);
       setAdjustedTime('');
 
-      // Usa o trigger do contexto para garantir que tudo seja recarregado
-      if (onDelete) { // Chamada ao onDelete do componente pai para recarregar os dados do calendário
-        onDelete();
+      if (onDelete) {
+        onDelete({ id: plano.id, status: statusFinal, tempo_executado: timeValue, horas_executadas_por_dia: novasHorasPorDia });
       }
     } catch (error) {
       // Log removido para otimização de desempenho
@@ -1713,7 +1716,7 @@ const DayView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShowP
 
 // --- Componente Principal ---
 export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefresh, isDashboardRefreshing }) {
-  const { user, userProfile, isColaborador, isGestao, hasPermission, triggerUpdate, perfilAtual, updateKey, allUsers } = useContext(ActivityTimerContext);
+  const { user, userProfile, isColaborador, isGestao, hasPermission, triggerUpdate, perfilAtual, updateKey, completionKey, allUsers } = useContext(ActivityTimerContext);
 
   const [currentDate, setCurrentDate] = useState(() => startOfWeek(new Date(), { locale: ptBR }));
   const [viewMode, setViewMode] = useState('week');
@@ -1912,14 +1915,25 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
     return () => clearTimeout(timer);
   }, [updateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleActivityDelete = useCallback(() => {
+  // Recarregar imediatamente quando uma atividade for finalizada via timer (sem debounce)
+  const prevCompletionKeyRef = useRef(completionKey);
+  useEffect(() => {
+    if (completionKey === prevCompletionKeyRef.current) return;
+    prevCompletionKeyRef.current = completionKey;
+    if (!filters.user) return;
+    loadCalendarData(filters.user);
+  }, [completionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleActivityDelete = useCallback((update = null) => {
+    if (update?.id) {
+      setEnrichedData(prev => prev.map(item =>
+        item.id === update.id ? { ...item, ...update } : item
+      ));
+    }
     if (hasSelectedUser) {
       loadCalendarData(filters.user);
     }
-    if (triggerUpdate) {
-      triggerUpdate();
-    }
-  }, [triggerUpdate, hasSelectedUser, filters.user, loadCalendarData]);
+  }, [hasSelectedUser, filters.user, loadCalendarData]);
 
   // **NOVO**: Função para alternar seleção de atividade
   const toggleActivitySelection = useCallback((activityId) => {

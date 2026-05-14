@@ -41,6 +41,7 @@ export const ActivityTimerProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
     const [updateKey, setUpdateKey] = useState(0);
+    const [completionKey, setCompletionKey] = useState(0);
     const [isStarting, setIsStarting] = useState(null);
     const [isFinishing, setIsFinishing] = useState(false);
     const [isPausing, setIsPausing] = useState(null);
@@ -570,6 +571,7 @@ export const ActivityTimerProvider = ({ children }) => {
             }
 
             triggerUpdate();
+            setCompletionKey(prev => prev + 1);
 
         } catch (error) {
             // Log removido para produção
@@ -892,6 +894,7 @@ export const ActivityTimerProvider = ({ children }) => {
         user,
         userProfile,
         updateKey,
+        completionKey,
         triggerUpdate,
         deleteExecution,
         isStarting,
@@ -915,7 +918,7 @@ export const ActivityTimerProvider = ({ children }) => {
         perfilAtual,
     }), [
         activeExecution, isLoading, startExecution, finishExecution, pauseExecution,
-        refreshActiveExecution, user, userProfile, updateKey, triggerUpdate, deleteExecution,
+        refreshActiveExecution, user, userProfile, updateKey, completionKey, triggerUpdate, deleteExecution,
         isStarting, isFinishing, isPausing, playlist, addToPlaylist, removeFromPlaylist,
         startFromPlaylist, allPlanejamentos, isLoadingPlanejamentos, atividadesGenericas,
         allEmpreendimentos, allUsers, hasPermission, isAdmin, isColaborador, isGestao,
