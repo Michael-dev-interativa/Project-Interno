@@ -493,6 +493,7 @@ export default function AtaPlanejamento() {
       status: 'rascunho'
     });
     setProvidencias([]);
+    setProjetosMinimizados({});
     setShowSelectAtaModal(false);
     setViewMode('edit');
   };
@@ -530,6 +531,11 @@ export default function AtaPlanejamento() {
         status: p.status || 'pendente'
       };
     }));
+    setProjetosMinimizados(prev => {
+      const projs = (ata.providencias || []).map(p => p.projeto || '').filter(Boolean);
+      const unique = [...new Set(projs)];
+      return Object.fromEntries(unique.map(p => [p, true]));
+    });
     setShowSelectAtaModal(false);
     setViewMode('edit');
   };
@@ -567,6 +573,9 @@ export default function AtaPlanejamento() {
         status: p.status || 'pendente'
       };
     }));
+    const projetos = (ata.providencias || []).map(p => p.projeto || '').filter(Boolean);
+    const projetosUnicos = [...new Set(projetos)];
+    setProjetosMinimizados(Object.fromEntries(projetosUnicos.map(p => [p, true])));
     setViewMode('edit');
   };
 
