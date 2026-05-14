@@ -5,6 +5,8 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
 // DATABASE_URL já está OK no pool.js
 // Para CORS, padronizar para ALLOWED_ORIGINS (Render) ou fallback para CORS_ALLOWED_ORIGINS
 const CORS_ORIGINS = process.env.ALLOWED_ORIGINS || process.env.CORS_ALLOWED_ORIGINS || '';
+const cluster = require('cluster');
+const os = require('os');
 const express = require('express');
 const path = require('path');
 const { runMigrations } = require('./db/init');
@@ -41,7 +43,18 @@ const checklistsModel = require('./models/checklists');
 const checklistItemsModel = require('./models/checklistItems');
 
 
-const app = express();
+if (cluster.isMaster) {
+  const numCPUs = process.env.WEB_CONCURRENCY ? Number(process.env.WEB_CONCURRENCY) : os.cpus().length;
+  console.log(`Master ${process.pid} is running. Forking ${numCPUs} workers...`);
+  for (let i = 0; i < numCPUs; i++) {
+    cluster.fork();
+  }
+  cluster.on('exit', (worker, code, signal) => {
+    console.log(`Worker ${worker.process.pid} died. Forking a new one...`);
+    cluster.fork();
+  });
+} else {
+  const app = express();
 
 // Rota amigável para a raiz da API
 app.get('/', (req, res) => {
@@ -2699,7 +2712,7 @@ app.get('/api/pages', (req, res) => {
 
 const PORT = Number(process.env.PORT || 4000);
 
-async function startServer() {
+  async function startServer() {
   try {
     await runMigrations();
     console.log('Database migrations applied successfully.');
@@ -2734,10 +2747,11 @@ async function startServer() {
   });
 }
 
-startServer().catch((err) => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+  startServer().catch((err) => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
+}
 
 // Ensure optional columns exist (backfill for older DBs)
 (async function ensureOptionalColumns() {
