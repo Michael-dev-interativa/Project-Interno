@@ -629,7 +629,7 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
           }`}
       >
         {orderIndex !== undefined && (
-          <span className="absolute left-1 top-1 z-20 w-4 h-4 flex items-center justify-center rounded-full bg-amber-500 text-white text-[9px] font-bold shadow-sm pointer-events-none">
+          <span className="absolute left-1 top-1 z-20 text-[9px] text-gray-400 font-medium pointer-events-none leading-none">
             {orderIndex + 1}
           </span>
         )}
