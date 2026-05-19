@@ -1031,8 +1031,8 @@ export default function DocumentosTab({
               <Button variant="outline" size="icon" onClick={handleRecalcularTodasHoras} disabled={isRecalculandoTodas} title="Recalcular Horas" className="border-orange-500 text-orange-600 hover:bg-orange-50">
                 {isRecalculandoTodas ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               </Button>
-              <Button size="icon" onClick={() => setShowForm(true)} title="Novo Documento" className="bg-blue-600 hover:bg-blue-700">
-                <Plus className="w-4 h-4" />
+              <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-700">
+                <Plus className="w-4 h-4 mr-2" />Novo Documento
               </Button>
             </div>
           )}
