@@ -2579,6 +2579,45 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       });
     }
 
+    // Ordenar documentos por cadeia de predecessoras dentro de cada dia
+    for (const dayKey in grouped) {
+      const activities = grouped[dayKey];
+      const docIndices = [];
+      const docs = [];
+      activities.forEach((a, i) => {
+        if (a.tipo_planejamento === 'documento') {
+          docIndices.push(i);
+          docs.push(a);
+        }
+      });
+      if (docs.length < 2) continue;
+
+      const docIdMap = new Map(docs.map(d => [normalizeActivityId(d.id), d]));
+      const depths = new Map();
+
+      const getDepth = (doc, seen = new Set()) => {
+        const id = normalizeActivityId(doc.id);
+        if (depths.has(id)) return depths.get(id);
+        if (seen.has(id)) { depths.set(id, 0); return 0; } // ciclo → profundidade 0
+        seen.add(id);
+        if (!doc.predecessora_id) { depths.set(id, 0); return 0; }
+        const pred = docIdMap.get(normalizeActivityId(doc.predecessora_id));
+        if (!pred) { depths.set(id, 0); return 0; }
+        const d = 1 + getDepth(pred, seen);
+        depths.set(id, d);
+        return d;
+      };
+
+      docs.forEach(d => getDepth(d));
+
+      const sorted = [...docs].sort((a, b) =>
+        (depths.get(normalizeActivityId(a.id)) || 0) - (depths.get(normalizeActivityId(b.id)) || 0)
+      );
+
+      // Reinsere os documentos ordenados nas mesmas posições que ocupavam
+      docIndices.forEach((pos, i) => { activities[pos] = sorted[i]; });
+    }
+
     // Aplicar ordem customizada por dia, se existir
     for (const dayKey in grouped) {
       const customOrder = activityOrder[dayKey];
