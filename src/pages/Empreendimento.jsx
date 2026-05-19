@@ -25,7 +25,7 @@ import GestaoTab from "../components/empreendimento/GestaoTab";
 import PRETab from "../components/empreendimento/PRETab";
 import CadastroTab from "../components/empreendimento/CadastroTab";
 import ControleOSTab from "../components/empreendimento/ControleOSTab";
-import { ChecklistCadastroTab } from "@/pages/ChecklistCadastro";
+import ChecklistCadastroTab from "@/pages/ChecklistCadastro";
 import { ActivityTimerContext } from "@/components/contexts/ActivityTimerContext";
 
 export default function EmpreendimentoPage() {
