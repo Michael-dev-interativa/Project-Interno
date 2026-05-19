@@ -294,8 +294,8 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
               <TableRow className="bg-gray-50">
                 <TableHead colSpan="4" className="border"></TableHead>
                 {documentosVisiveis.map((doc) => (
-                  <TableHead key={doc.id} className="border text-xs font-normal p-1" style={{ minWidth: 120, maxWidth: 160 }}>
-                    <div className="truncate" title={`${doc.numero}${doc.arquivo ? ' - ' + doc.arquivo : ''}`}>
+                  <TableHead key={doc.id} className="border text-xs font-normal p-1 text-center" style={{ minWidth: 120 }}>
+                    <div className="break-words whitespace-normal">
                       {doc.numero}{doc.arquivo ? ` - ${doc.arquivo}` : ''}
                     </div>
                   </TableHead>
