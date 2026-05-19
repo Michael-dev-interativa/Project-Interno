@@ -7,6 +7,17 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
 
+const ITEMS_INICIO_DE_PROJETO = [
+  { numero_item: '1.1', descricao: 'Verificar com o cliente se há padronização de projeto para carimbo, nomenclatura e/ou documentos:' },
+  { numero_item: '1.2', descricao: 'Enviar briefing para cliente solicitando preenchimento:' },
+  { numero_item: '1.3', descricao: 'Criação de lista mestra de documentos:' },
+  { numero_item: '1.4', descricao: 'Envio de documento entregas por etapa:' },
+  { numero_item: '1.5', descricao: 'Envio de documento projetos de terceiros:' },
+  { numero_item: '1.6', descricao: 'Criação de folhas e carimbos:' },
+  { numero_item: '1.7', descricao: 'Criação de bases de arquitetura A-, estrutura E-, textos T-, fundação F- e luminotécnico L-:' },
+  { numero_item: '1.8', descricao: 'Verificação de documentos recebidos pelo cliente com solicitações de pontos:' },
+];
+
 const ITEMS_BASES_E_FOLHAS = [
   { numero_item: '1.1', descricao: 'Checar se o A- está nas cores corretas (Alvenaria na cor branca, pilares na cor azul, eixos no layer A-EIXOS e cor vermelha e demais layers na cor 8 cinza):' },
   { numero_item: '1.2', descricao: 'Checar se todos os ambientes estão com texto de arquitetura:' },
@@ -111,7 +122,8 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
 
   const isCompatibilizacao = formData.tipo === 'Planejamento - COMPATIBILIZAÇÃO';
   const isBasesEFolhas = formData.tipo === 'Planejamento - BASES E FOLHAS';
-  const isTemplatePlanejamento = isCompatibilizacao || isBasesEFolhas;
+  const isInicioDeProjeto = formData.tipo === 'Planejamento - INÍCIO DE PROJETO';
+  const isTemplatePlanejamento = isCompatibilizacao || isBasesEFolhas || isInicioDeProjeto;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -145,6 +157,18 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
           await base44.entities.ChecklistItem.create({
             checklist_id: novoChecklist.id,
             secao: 'COMPATIBILIZAÇÃO',
+            numero_item: item.numero_item,
+            descricao: item.descricao,
+            ordem: i + 1,
+            status_por_periodo: {}
+          });
+        }
+      } else if (isInicioDeProjeto) {
+        for (let i = 0; i < ITEMS_INICIO_DE_PROJETO.length; i++) {
+          const item = ITEMS_INICIO_DE_PROJETO[i];
+          await base44.entities.ChecklistItem.create({
+            checklist_id: novoChecklist.id,
+            secao: 'INÍCIO DE PROJETO',
             numero_item: item.numero_item,
             descricao: item.descricao,
             ordem: i + 1,
@@ -212,6 +236,7 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
                   <SelectItem value="Sistemas Eletrônicos">Sistemas Eletrônicos</SelectItem>
                   <SelectItem value="Planejamento - COMPATIBILIZAÇÃO">Planejamento - COMPATIBILIZAÇÃO</SelectItem>
                   <SelectItem value="Planejamento - BASES E FOLHAS">Planejamento - BASES E FOLHAS</SelectItem>
+                  <SelectItem value="Planejamento - INÍCIO DE PROJETO">Planejamento - INÍCIO DE PROJETO</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -297,6 +322,10 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
           ) : isBasesEFolhas ? (
             <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
               <strong>11 itens serão criados automaticamente</strong> na seção BASES E FOLHAS, conforme o template padrão. Os períodos são opcionais para este tipo.
+            </div>
+          ) : isInicioDeProjeto ? (
+            <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
+              <strong>8 itens serão criados automaticamente</strong> na seção INÍCIO DE PROJETO, conforme o template padrão. Os períodos são opcionais para este tipo.
             </div>
           ) : (
             <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
