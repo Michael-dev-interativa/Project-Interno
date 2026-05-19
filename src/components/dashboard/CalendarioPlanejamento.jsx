@@ -1261,20 +1261,14 @@ const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKe
 
     return (
       <div className={`space-y-1 ${containerClass}`}>
-        {modoOrdenacao && (
-          <div className="flex items-center justify-between px-2 py-1.5 mb-1 bg-amber-50 border border-amber-200 rounded-lg">
-            <span className="text-xs font-medium text-amber-700 flex items-center gap-1">
-              <GripVertical className="w-3 h-3" />
-              Arraste para reordenar as atividades
-            </span>
-            {temOrdemCustomizada && (
-              <button
-                onClick={() => onClearDayOrder && onClearDayOrder(dayKey)}
-                className="text-xs text-amber-600 hover:text-amber-800 underline"
-              >
-                Restaurar ordem padrão
-              </button>
-            )}
+        {modoOrdenacao && temOrdemCustomizada && (
+          <div className="flex justify-end mb-1">
+            <button
+              onClick={() => onClearDayOrder && onClearDayOrder(dayKey)}
+              className="text-xs text-amber-600 hover:text-amber-800 underline"
+            >
+              Restaurar ordem padrão
+            </button>
           </div>
         )}
         {activitiesParaRenderizar.map((atividade, index) => (
