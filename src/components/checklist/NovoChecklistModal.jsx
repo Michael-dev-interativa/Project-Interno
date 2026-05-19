@@ -15,6 +15,49 @@ const SECOES_PADRAO = [
   'Elétrica'
 ];
 
+const ITEMS_COMPATIBILIZACAO = [
+  { numero_item: '1.1', descricao: 'Checar se estamos passando alguma instalação em pilar' },
+  { numero_item: '1.2', descricao: 'Checar se estamos passando alguma instalação em elevador' },
+  { numero_item: '1.3', descricao: 'Checar se foram indicadas as furações necessárias em viga e se o tamanho do furo está adequado' },
+  { numero_item: '1.4', descricao: 'Checar se temos alguma instalação passando no sentido vertical na viga' },
+  { numero_item: '1.5', descricao: 'Checar se temos algum conflito com vigas de transição' },
+  { numero_item: '1.6', descricao: 'Checar se temos algum conflito de pé direito ou forro' },
+  { numero_item: '1.7', descricao: 'Checar se foram atendidos os raios solicitados por impermeabilização' },
+  { numero_item: '1.8', descricao: 'Checar se foram atendidos os pontos de torneira solicitados por paisagismo' },
+  { numero_item: '1.9', descricao: 'Checar se foram atendidos os pontos de iluminação solicitados por paisagismo' },
+  { numero_item: '1.10', descricao: 'Checar se foram atendidos os pontos solicitados no projeto de interiores' },
+  { numero_item: '1.11', descricao: 'Checar se foram atendidos os pontos solicitados no projeto de reuso' },
+  { numero_item: '1.12', descricao: 'Checar se foram atendidos os pontos solicitados no projeto de irrigação' },
+  { numero_item: '1.13', descricao: 'Checar se foram atendidos os pontos solicitados no projeto de piscina' },
+  { numero_item: '1.14', descricao: 'Checar se foram atendidos todos os pontos de luminotécnico' },
+  { numero_item: '1.15', descricao: 'Checar se foram atendidos os pontos solicitados no projeto de elevador, se houver' },
+  { numero_item: '1.16', descricao: 'Checar se há algum outro projeto com necessidade de pontos' },
+  { numero_item: '1.17', descricao: 'Checar se foram atendidos pontos para carro elétrico, se houver' },
+  { numero_item: '1.18', descricao: 'Checar se todas as lajes possuem captação de água pluvial' },
+  { numero_item: '1.18b', descricao: 'Checar se tem parede diafragma, e se foi feita a captação' },
+  { numero_item: '1.19', descricao: 'Checar se shafts estão compatibilizados' },
+  { numero_item: '1.20', descricao: 'Checar se temos conflito de altura de instalações em forro e estacionamentos' },
+  { numero_item: '1.21', descricao: 'Checar se temos algum banheiro acima de área técnica elétrica' },
+  { numero_item: '1.22', descricao: 'Checar se temos algum banheiro acima de viga de transição' },
+  { numero_item: '1.23', descricao: 'Checar se todos os extintores e hidrantes estão locados a no máximo 5m da entrada' },
+  { numero_item: '1.24', descricao: 'Checar se foi locado o registro de recalque de coluna' },
+  { numero_item: '1.25', descricao: 'Para cozinhas industriais checar se foi locado o painel de registro de gás' },
+  { numero_item: '1.26', descricao: 'Checar se a posição dos quadros está adequada e alinhada com cliente' },
+  { numero_item: '1.27', descricao: 'Checar se shaft onde passa a prumada de gás está ventilado e se os ambientes com equipamentos de gás estão ventilados também conforme indica a comgás' },
+  { numero_item: '1.28', descricao: 'Para apartamentos checar se foi locado o aquecedor e também a chaminé e se ela está compatibilizada com estrutura, se foi locado no forro e há necessidade de ventilação' },
+  { numero_item: '1.29', descricao: 'Para apartamentos checar se estamos utilizando as sancas disponibilizadas por arquitetura' },
+  { numero_item: '1.30', descricao: 'Checar se todos os equipamentos solicitados pelo cliente estão sendo alimentados, como máquina de lavar roupa, máquinas de lavar louça, triturador, coifa, filtro, água na geladeira entre outros' },
+  { numero_item: '1.31', descricao: 'Checar se volumes dos reservatórios condizem com os da arquitetura, e se estiverem divergentes verificar se está alinhado com cliente' },
+  { numero_item: '1.32', descricao: 'Checar se no gerador foram locadas as entradas e saídas de ar e também a chaminé; E verificar se foi feita a ampliação' },
+  { numero_item: '1.33', descricao: 'Equipamentos central de aquecimento' },
+  { numero_item: '1.34', descricao: 'Cota de saída de água pluvial para conseguir sair na sarjeta' },
+  { numero_item: '1.35', descricao: 'Cota de saída de esgoto compatibilizar com concessionária' },
+  { numero_item: '1.36', descricao: 'Detalhamento cotas de bombas com cortes' },
+  { numero_item: '1.37', descricao: 'Verificar se teremos projeto de vedação' },
+  { numero_item: '1.38', descricao: 'Não utilizar tubulações no contrapiso, a menos que seja combinado com o cliente' },
+  { numero_item: '1.39', descricao: 'Em redes enterradas com cotas a mais de 2m, validar com cliente' },
+];
+
 export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreendimentos }) {
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -52,14 +95,16 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
     return periodos;
   };
 
+  const isCompatibilizacao = formData.tipo === 'Planejamento - COMPATIBILIZAÇÃO';
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
 
     try {
       const periodos = generatePeriodos(formData.periodos_inicio, formData.periodos_fim);
-      
-      if (periodos.length === 0) {
+
+      if (!isCompatibilizacao && periodos.length === 0) {
         alert('Por favor, defina os períodos (formato MM/AAAA)');
         setIsSaving(false);
         return;
@@ -78,16 +123,29 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
 
       const novoChecklist = await base44.entities.ChecklistPlanejamento.create(checklistData);
 
-      // Criar seções padrão
-      for (let i = 0; i < SECOES_PADRAO.length; i++) {
-        await base44.entities.ChecklistItem.create({
-          checklist_id: novoChecklist.id,
-          secao: SECOES_PADRAO[i],
-          numero_item: `${i + 1}.0`,
-          descricao: 'Seção criada automaticamente - adicione itens abaixo',
-          ordem: 0,
-          status_por_periodo: {}
-        });
+      if (isCompatibilizacao) {
+        for (let i = 0; i < ITEMS_COMPATIBILIZACAO.length; i++) {
+          const item = ITEMS_COMPATIBILIZACAO[i];
+          await base44.entities.ChecklistItem.create({
+            checklist_id: novoChecklist.id,
+            secao: 'COMPATIBILIZAÇÃO',
+            numero_item: item.numero_item,
+            descricao: item.descricao,
+            ordem: i + 1,
+            status_por_periodo: {}
+          });
+        }
+      } else {
+        for (let i = 0; i < SECOES_PADRAO.length; i++) {
+          await base44.entities.ChecklistItem.create({
+            checklist_id: novoChecklist.id,
+            secao: SECOES_PADRAO[i],
+            numero_item: `${i + 1}.0`,
+            descricao: 'Seção criada automaticamente - adicione itens abaixo',
+            ordem: 0,
+            status_por_periodo: {}
+          });
+        }
       }
 
       onSuccess();
@@ -124,6 +182,7 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
                   <SelectItem value="HVAC">HVAC</SelectItem>
                   <SelectItem value="Incêndio">Incêndio</SelectItem>
                   <SelectItem value="Sistemas Eletrônicos">Sistemas Eletrônicos</SelectItem>
+                  <SelectItem value="Planejamento - COMPATIBILIZAÇÃO">Planejamento - COMPATIBILIZAÇÃO</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -182,34 +241,40 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
             </div>
 
             <div>
-              <Label>Período Início (MM/AAAA) *</Label>
+              <Label>Período Início (MM/AAAA){isCompatibilizacao ? '' : ' *'}</Label>
               <Input
                 placeholder="Ex: 01/2026"
                 value={formData.periodos_inicio}
                 onChange={(e) => setFormData({ ...formData, periodos_inicio: e.target.value })}
-                required
+                required={!isCompatibilizacao}
               />
             </div>
 
             <div>
-              <Label>Período Fim (MM/AAAA) *</Label>
+              <Label>Período Fim (MM/AAAA){isCompatibilizacao ? '' : ' *'}</Label>
               <Input
                 placeholder="Ex: 12/2026"
                 value={formData.periodos_fim}
                 onChange={(e) => setFormData({ ...formData, periodos_fim: e.target.value })}
-                required
+                required={!isCompatibilizacao}
               />
             </div>
           </div>
 
-          <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
-            <strong>Seções que serão criadas automaticamente:</strong>
-            <ul className="mt-2 ml-4 list-disc space-y-1">
-              {SECOES_PADRAO.map((secao) => (
-                <li key={secao}>{secao}</li>
-              ))}
-            </ul>
-          </div>
+          {isCompatibilizacao ? (
+            <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
+              <strong>39 itens serão criados automaticamente</strong> na seção COMPATIBILIZAÇÃO, conforme o template padrão. Os períodos são opcionais para este tipo.
+            </div>
+          ) : (
+            <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
+              <strong>Seções que serão criadas automaticamente:</strong>
+              <ul className="mt-2 ml-4 list-disc space-y-1">
+                {SECOES_PADRAO.map((secao) => (
+                  <li key={secao}>{secao}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
