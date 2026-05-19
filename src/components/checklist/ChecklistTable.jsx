@@ -8,12 +8,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Plus, Trash2, Edit2, Save, X, FolderX, Pencil, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const STATUS_OPTIONS = ['-', 'E', 'C', 'NA'];
+const STATUS_OPTIONS = ['-', 'Atendido', 'Pendente', 'Não se Aplica'];
 const DOCS_PER_PAGE = 10;
 const STATUS_COLORS = {
-  'E': 'bg-yellow-100',
-  'C': 'bg-green-100',
-  'NA': 'bg-gray-100',
+  'Atendido': 'bg-green-100',
+  'Pendente': 'bg-yellow-100',
+  'Não se Aplica': 'bg-gray-100',
   '-': 'bg-white'
 };
 
