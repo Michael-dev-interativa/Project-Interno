@@ -277,7 +277,7 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
                 <TableHead className="min-w-[250px] border">Descrição</TableHead>
                 <TableHead className="w-20 border text-center">Contribuição</TableHead>
                 <TableHead className="w-16 border text-center">Tempo</TableHead>
-                <TableHead colSpan={(documentosVisiveis.length || 1) + 1} className="border text-center font-bold">
+                <TableHead colSpan={documentosVisiveis.length || 1} className="border text-center font-bold">
                   <div className="flex items-center justify-center gap-2">
                     <button onClick={() => setDocPage(p => Math.max(0, p - 1))} disabled={docPage === 0} className="p-0.5 rounded hover:bg-gray-200 disabled:opacity-30">
                       <ChevronLeft className="w-3 h-3" />
@@ -300,7 +300,6 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
                     </div>
                   </TableHead>
                 ))}
-                <TableHead className="border"></TableHead>
                 <TableHead className="border"></TableHead>
                 <TableHead className="border"></TableHead>
               </TableRow>

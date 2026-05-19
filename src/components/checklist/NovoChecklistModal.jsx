@@ -7,6 +7,20 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
 
+const ITEMS_BASES_E_FOLHAS = [
+  { numero_item: '1.1', descricao: 'Checar se o A- está nas cores corretas (Alvenaria na cor branca, pilares na cor azul, eixos no layer A-EIXOS e cor vermelha e demais layers na cor 8 cinza):' },
+  { numero_item: '1.2', descricao: 'Checar se todos os ambientes estão com texto de arquitetura:' },
+  { numero_item: '1.3', descricao: 'Checar se o T- está no layer A-TEXTOS:' },
+  { numero_item: '1.4', descricao: 'Checar se os textos estão na fonte Arial e tamanho 18:' },
+  { numero_item: '1.5', descricao: 'Checar se todos os pavimentos estão com E- de estrutura e se está saindo com linha traçejada:' },
+  { numero_item: '1.6', descricao: 'Checar se o E- está no layer E-VIGAS, para as vigas e pilares e E-TEXTOS para os textos de tamanhos de vigas, pilares, lajes e também as indicações de corte de vigas:' },
+  { numero_item: '1.7', descricao: 'Checar se o último pavimento está com o F- de fundação:' },
+  { numero_item: '1.8', descricao: 'Checar se possui título na planta com fonte Arial e tamanhos de texto 70, 50 e 25:' },
+  { numero_item: '1.9', descricao: 'Checar se o carimbo está preenchido corretamente:' },
+  { numero_item: '1.10', descricao: 'Checar se na folha possui notas e legenda:' },
+  { numero_item: '1.11', descricao: 'Checar se no padrão do cliente além de carimbo há solicitação de inclusão de planta chave, norte, arquivos de referência ou outros:' },
+];
+
 const SECOES_PADRAO = [
   'Sistemas Eletrônicos',
   'Incêndio',
@@ -96,6 +110,8 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
   };
 
   const isCompatibilizacao = formData.tipo === 'Planejamento - COMPATIBILIZAÇÃO';
+  const isBasesEFolhas = formData.tipo === 'Planejamento - BASES E FOLHAS';
+  const isTemplatePlanejamento = isCompatibilizacao || isBasesEFolhas;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -104,7 +120,7 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
     try {
       const periodos = generatePeriodos(formData.periodos_inicio, formData.periodos_fim);
 
-      if (!isCompatibilizacao && periodos.length === 0) {
+      if (!isTemplatePlanejamento && periodos.length === 0) {
         alert('Por favor, defina os períodos (formato MM/AAAA)');
         setIsSaving(false);
         return;
@@ -129,6 +145,18 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
           await base44.entities.ChecklistItem.create({
             checklist_id: novoChecklist.id,
             secao: 'COMPATIBILIZAÇÃO',
+            numero_item: item.numero_item,
+            descricao: item.descricao,
+            ordem: i + 1,
+            status_por_periodo: {}
+          });
+        }
+      } else if (isBasesEFolhas) {
+        for (let i = 0; i < ITEMS_BASES_E_FOLHAS.length; i++) {
+          const item = ITEMS_BASES_E_FOLHAS[i];
+          await base44.entities.ChecklistItem.create({
+            checklist_id: novoChecklist.id,
+            secao: 'BASES E FOLHAS',
             numero_item: item.numero_item,
             descricao: item.descricao,
             ordem: i + 1,
@@ -183,6 +211,7 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
                   <SelectItem value="Incêndio">Incêndio</SelectItem>
                   <SelectItem value="Sistemas Eletrônicos">Sistemas Eletrônicos</SelectItem>
                   <SelectItem value="Planejamento - COMPATIBILIZAÇÃO">Planejamento - COMPATIBILIZAÇÃO</SelectItem>
+                  <SelectItem value="Planejamento - BASES E FOLHAS">Planejamento - BASES E FOLHAS</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -241,22 +270,22 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
             </div>
 
             <div>
-              <Label>Período Início (MM/AAAA){isCompatibilizacao ? '' : ' *'}</Label>
+              <Label>Período Início (MM/AAAA){isTemplatePlanejamento ? '' : ' *'}</Label>
               <Input
                 placeholder="Ex: 01/2026"
                 value={formData.periodos_inicio}
                 onChange={(e) => setFormData({ ...formData, periodos_inicio: e.target.value })}
-                required={!isCompatibilizacao}
+                required={!isTemplatePlanejamento}
               />
             </div>
 
             <div>
-              <Label>Período Fim (MM/AAAA){isCompatibilizacao ? '' : ' *'}</Label>
+              <Label>Período Fim (MM/AAAA){isTemplatePlanejamento ? '' : ' *'}</Label>
               <Input
                 placeholder="Ex: 12/2026"
                 value={formData.periodos_fim}
                 onChange={(e) => setFormData({ ...formData, periodos_fim: e.target.value })}
-                required={!isCompatibilizacao}
+                required={!isTemplatePlanejamento}
               />
             </div>
           </div>
@@ -264,6 +293,10 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
           {isCompatibilizacao ? (
             <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
               <strong>39 itens serão criados automaticamente</strong> na seção COMPATIBILIZAÇÃO, conforme o template padrão. Os períodos são opcionais para este tipo.
+            </div>
+          ) : isBasesEFolhas ? (
+            <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
+              <strong>11 itens serão criados automaticamente</strong> na seção BASES E FOLHAS, conforme o template padrão. Os períodos são opcionais para este tipo.
             </div>
           ) : (
             <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
