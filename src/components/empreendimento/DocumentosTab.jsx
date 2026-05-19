@@ -1022,18 +1022,17 @@ export default function DocumentosTab({
           </div>
           {!readOnly && (
             <div className="flex gap-2">
-              <Button variant="outline" onClick={handleExportData} className="border-blue-500 text-blue-600 hover:bg-blue-50">
-                <Download className="w-4 h-4 mr-2" />Exportar
+              <Button variant="outline" size="icon" onClick={handleExportData} title="Exportar" className="border-blue-500 text-blue-600 hover:bg-blue-50">
+                <Download className="w-4 h-4" />
               </Button>
-              <Button variant="outline" onClick={() => setShowImportModal(true)} className="border-green-500 text-green-600 hover:bg-green-50">
-                <Upload className="w-4 h-4 mr-2" />Importar
+              <Button variant="outline" size="icon" onClick={() => setShowImportModal(true)} title="Importar" className="border-green-500 text-green-600 hover:bg-green-50">
+                <Upload className="w-4 h-4" />
               </Button>
-              <Button variant="outline" onClick={handleRecalcularTodasHoras} disabled={isRecalculandoTodas} className="border-orange-500 text-orange-600 hover:bg-orange-50">
-                {isRecalculandoTodas ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                Recalcular Horas
+              <Button variant="outline" size="icon" onClick={handleRecalcularTodasHoras} disabled={isRecalculandoTodas} title="Recalcular Horas" className="border-orange-500 text-orange-600 hover:bg-orange-50">
+                {isRecalculandoTodas ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               </Button>
-              <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-700">
-                <Plus className="w-4 h-4 mr-2" />Novo Documento
+              <Button size="icon" onClick={() => setShowForm(true)} title="Novo Documento" className="bg-blue-600 hover:bg-blue-700">
+                <Plus className="w-4 h-4" />
               </Button>
             </div>
           )}
