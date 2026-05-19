@@ -1096,13 +1096,9 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                             </TableHead>
                             <TableHead className="w-[50px]"></TableHead>
                             <TableHead>Atividade</TableHead>
-                            <TableHead>Folhas</TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead>Etapa</TableHead>
                             <TableHead>Executor</TableHead>
-                            <TableHead>Datas Planejadas</TableHead>
-                            <TableHead>Tempo Padrão</TableHead>
-                            <TableHead>Tempo Total</TableHead>
+                            <TableHead className="w-[90px]">Horas</TableHead>
                             <TableHead className="text-center w-[120px]">Ações</TableHead>
                             <TableHead className="w-[50px]"></TableHead>
                           </TableRow>
@@ -1147,16 +1143,16 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                   </TableCell>
                                   <TableCell className="font-medium text-sm">
                                     <div>{String(ativ.atividade || '')}</div>
-                                    {ativ.subdisciplina && <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">{ativ.subdisciplina}</span>}
+                                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                      {ativ.subdisciplina && <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{ativ.subdisciplina}</span>}
+                                      <button onClick={() => handleOpenEtapaModal(ativ)} className="text-xs text-blue-500 hover:text-blue-700 hover:underline cursor-pointer" title="Clique para editar a etapa">{ativ.etapa}</button>
+                                      <Badge variant="outline" className="text-[10px] h-4 px-1">{grupo.folhas.length} {grupo.folhas.length === 1 ? 'folha' : 'folhas'}</Badge>
+                                    </div>
                                   </TableCell>
-                                  <TableCell><Badge variant="outline">{grupo.folhas.length} {grupo.folhas.length === 1 ? 'folha' : 'folhas'}</Badge></TableCell>
                                   <TableCell>
                                     {grupo.folhas.length === 0 ? (
                                       ativ.source === 'Projeto' ? <Badge>Projeto</Badge> : ativ.status === 'Concluída' ? <Badge className="bg-blue-600 text-white flex items-center gap-1 w-fit"><CheckCircle2 className="w-4 h-4"/>Concluída</Badge> : ativ.status === 'Planejada' ? <Badge className="bg-green-600 text-white flex items-center gap-1 w-fit"><CheckCircle2 className="w-4 h-4"/>Planejada</Badge> : <Badge variant="secondary">Disponível</Badge>
                                     ) : (<div className="flex gap-1">{grupo.folhas.some(f=>f.status==='Concluída')&&<Badge className="bg-blue-600 text-white font-semibold shadow-md flex items-center gap-1 w-fit"><CheckCircle2 className="w-4 h-4"/>Concluída</Badge>}{grupo.folhas.some(f=>f.status==='Planejada')&&<Badge className="bg-green-600 text-white font-semibold shadow-md flex items-center gap-1 w-fit"><CheckCircle2 className="w-4 h-4"/>Planejada</Badge>}{grupo.folhas.some(f=>f.status==='Disponível')&&<Badge variant="outline" className="text-gray-600">Disponível</Badge>}</div>)}
-                                    </TableCell>
-                                  <TableCell className="text-sm">
-                                    <button onClick={() => handleOpenEtapaModal(ativ)} className="text-blue-600 hover:text-blue-800 hover:underline font-medium cursor-pointer" title="Clique para editar a etapa">{ativ.etapa}</button>
                                   </TableCell>
                                   <TableCell>
                                     <div className="w-[210px]">
@@ -1262,52 +1258,37 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                         Planejando...
                                       </div>
                                     )}
+                                    {datasInicio[genericAtividadeIdToExclude] ? (
+                                      <div className="flex items-center gap-1 text-blue-600 text-xs mt-1">
+                                        <Calendar className="w-3 h-3" />
+                                        <span>Início: {format(datasInicio[genericAtividadeIdToExclude], 'dd/MM/yyyy')}</span>
+                                      </div>
+                                    ) : grupo.folhas.some(f => f.status === 'Planejada') ? (
+                                      (() => {
+                                        const folhasPlanejadas = grupo.folhas.filter(f => f.status === 'Planejada');
+                                        const planejamentosComDatas = folhasPlanejadas
+                                          .map(f => planejamentos?.find(p =>
+                                            p.documento_id === f.source_documento_id &&
+                                            p.atividade_id === f.base_atividade_id
+                                          ))
+                                          .filter(p => p?.inicio_planejado && p?.termino_planejado);
+                                        if (planejamentosComDatas.length > 0) {
+                                          const datas = planejamentosComDatas.map(p => ({ inicio: parseISO(p.inicio_planejado), termino: parseISO(p.termino_planejado) }));
+                                          const dataInicio = datas.reduce((min, d) => d.inicio < min ? d.inicio : min, datas[0].inicio);
+                                          const dataTermino = datas.reduce((max, d) => d.termino > max ? d.termino : max, datas[0].termino);
+                                          return (<div className="flex items-center gap-1 text-gray-600 text-xs mt-1"><Calendar className="w-3 h-3" /><span>{format(dataInicio, 'dd/MM')} - {format(dataTermino, 'dd/MM')}</span></div>);
+                                        }
+                                        return null;
+                                      })()
+                                    ) : null}
                                     </div>
                                     </TableCell>
-                                      <TableCell>
-                                        {datasInicio[genericAtividadeIdToExclude] ? (
-                                          <div className="flex items-center gap-1 text-blue-600 text-xs">
-                                            <Calendar className="w-3 h-3" />
-                                            <span>Início: {format(datasInicio[genericAtividadeIdToExclude], 'dd/MM/yyyy')}</span>
-                                          </div>
-                                        ) : grupo.folhas.some(f => f.status === 'Planejada') ? (
-                                          (() => {
-                                            const folhasPlanejadas = grupo.folhas.filter(f => f.status === 'Planejada');
-                                            const planejamentosComDatas = folhasPlanejadas
-                                              .map(f => planejamentos?.find(p => 
-                                                p.documento_id === f.source_documento_id && 
-                                                p.atividade_id === f.base_atividade_id
-                                              ))
-                                              .filter(p => p?.inicio_planejado && p?.termino_planejado);
-
-                                            if (planejamentosComDatas.length > 0) {
-                                              const datas = planejamentosComDatas.map(p => ({
-                                                inicio: parseISO(p.inicio_planejado),
-                                                termino: parseISO(p.termino_planejado)
-                                              }));
-
-                                              const dataInicio = datas.reduce((min, d) => d.inicio < min ? d.inicio : min, datas[0].inicio);
-                                              const dataTermino = datas.reduce((max, d) => d.termino > max ? d.termino : max, datas[0].termino);
-
-                                              return (
-                                                <div className="flex items-center gap-1 text-gray-600 text-xs">
-                                                  <Calendar className="w-3 h-3" />
-                                                  <span>{format(dataInicio, 'dd/MM')} - {format(dataTermino, 'dd/MM')}</span>
-                                                </div>
-                                              );
-                                            }
-                                            return <span className="text-xs text-gray-400">-</span>;
-                                          })()
-                                        ) : (
-                                          <span className="text-xs text-gray-400">-</span>
-                                        )}
+                                      <TableCell className="text-sm">
+                                        <div className="flex flex-col gap-0.5">
+                                          <span className="text-gray-600">{ativ.tempo ? `${Number(ativ.tempo).toFixed(1)}h` : '-'}</span>
+                                          <span className="font-semibold text-blue-600">{grupo.folhas.length > 0 ? `${grupo.folhas.reduce((sum, f) => sum + (Number(f.tempo) || 0), 0).toFixed(1)}h` : '-'}</span>
+                                        </div>
                                       </TableCell>
-                                      <TableCell className="text-sm">{ativ.tempo ? `${Number(ativ.tempo).toFixed(1)}h` : '-'}</TableCell>
-                                      <TableCell className="text-sm font-semibold text-blue-600">
-                                    {grupo.folhas.length > 0 
-                                      ? `${grupo.folhas.reduce((sum, f) => sum + (Number(f.tempo) || 0), 0).toFixed(1)}h`
-                                      : '-'}
-                                  </TableCell>
                                   <TableCell className="text-center">
                                     {!ativ.isEditable && (
                                       <div className="flex items-center gap-2 justify-center">
@@ -1398,58 +1379,44 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                       <ChevronRight className="w-3 h-3 text-gray-400 inline mr-1" />
                                     </TableCell>
                                     <TableCell className="text-sm text-gray-600">
-                                      {folha.source_documento_numero} - {folha.source_documento_arquivo}
+                                      <div>{folha.source_documento_numero} - {folha.source_documento_arquivo}</div>
+                                      {folha.etapa && <span className="text-xs text-gray-400">{folha.etapa}</span>}
                                     </TableCell>
-                                    <TableCell></TableCell>
                                     <TableCell>
                                       {folha.status === 'Concluída' ? <Badge className="bg-blue-600 text-white font-semibold flex items-center gap-1 w-fit text-xs"><CheckCircle2 className="w-3 h-3"/>Concluída</Badge> : folha.status === 'Planejada' ? <Badge className="bg-green-600 text-white font-semibold shadow-md flex items-center gap-1 w-fit text-xs"><CheckCircle2 className="w-3 h-3"/>Planejada</Badge> : <Badge variant="outline" className="text-xs text-gray-600">{folha.status}</Badge>}
                                     </TableCell>
-                                    <TableCell className="text-sm text-gray-500">{folha.etapa}</TableCell>
-                                    <TableCell></TableCell>
                                     <TableCell>
                                       {folha.status === 'Planejada' ? (
                                         (() => {
-                                          const planejamento = planejamentos?.find(p => 
-                                            p.documento_id === folha.source_documento_id && 
+                                          const planejamento = planejamentos?.find(p =>
+                                            p.documento_id === folha.source_documento_id &&
                                             p.atividade_id === folha.base_atividade_id
                                           );
-
                                           if (planejamento?.inicio_planejado && planejamento?.termino_planejado) {
-                                            return (
-                                              <div className="flex items-center gap-1 text-gray-600 text-xs">
-                                                <Calendar className="w-3 h-3" />
-                                                <span>{format(parseISO(planejamento.inicio_planejado), 'dd/MM')} - {format(parseISO(planejamento.termino_planejado), 'dd/MM')}</span>
-                                              </div>
-                                            );
+                                            return (<div className="flex items-center gap-1 text-gray-600 text-xs"><Calendar className="w-3 h-3" /><span>{format(parseISO(planejamento.inicio_planejado), 'dd/MM')} - {format(parseISO(planejamento.termino_planejado), 'dd/MM')}</span></div>);
                                           }
-                                          return <span className="text-xs text-gray-400">-</span>;
+                                          return null;
                                         })()
-                                      ) : (
-                                        <span className="text-xs text-gray-400">-</span>
-                                      )}
+                                      ) : null}
                                     </TableCell>
                                     <TableCell className="text-sm">{folha.tempo ? `${Number(folha.tempo).toFixed(1)}h` : '-'}</TableCell>
-                                      <TableCell className="text-sm">{folha.tempo ? `${Number(folha.tempo).toFixed(1)}h` : '-'}</TableCell>
-                                      <TableCell>
-                                        <Checkbox
-                                          checked={atividadesSelecionadasParaExcluir.has(folha.base_atividade_id || folha.id)}
-                                          onCheckedChange={(checked) => {
-                                            setAtividadesSelecionadasParaExcluir(prev => {
-                                              const newSet = new Set(prev);
-                                              const id = folha.base_atividade_id || folha.id;
-                                              if (checked) {
-                                                newSet.add(id);
-                                              } else {
-                                                newSet.delete(id);
-                                              }
-                                              return newSet;
-                                            });
-                                          }}
-                                        />
-                                      </TableCell>
-                                      <TableCell></TableCell>
-                                    </TableRow>
-                                    ))}
+                                    <TableCell>
+                                      <Checkbox
+                                        checked={atividadesSelecionadasParaExcluir.has(folha.base_atividade_id || folha.id)}
+                                        onCheckedChange={(checked) => {
+                                          setAtividadesSelecionadasParaExcluir(prev => {
+                                            const newSet = new Set(prev);
+                                            const id = folha.base_atividade_id || folha.id;
+                                            if (checked) newSet.add(id);
+                                            else newSet.delete(id);
+                                            return newSet;
+                                          });
+                                        }}
+                                      />
+                                    </TableCell>
+                                    <TableCell></TableCell>
+                                  </TableRow>
+                                  ))}
                                     </>
                                     );
                                     })}
@@ -1482,13 +1449,9 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                            </TableHead>
                            <TableHead className="w-[50px]"></TableHead>
                            <TableHead>Atividade</TableHead>
-                     <TableHead>Folhas</TableHead>
                      <TableHead>Status</TableHead>
-                     <TableHead>Etapa</TableHead>
                      <TableHead>Executor</TableHead>
-                     <TableHead>Datas Planejadas</TableHead>
-                     <TableHead>Tempo Padrão</TableHead>
-                     <TableHead>Tempo Total</TableHead>
+                     <TableHead className="w-[90px]">Horas</TableHead>
                      <TableHead className="text-center w-[120px]">Ações</TableHead>
                      <TableHead className="w-[50px]"></TableHead>
                    </TableRow>
@@ -1508,18 +1471,18 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                           {hasCheckboxColumn && (<TableCell>{ativ.isEditable && (<Checkbox checked={selectedIds.has(ativ.uniqueId)} onCheckedChange={() => handleSelectItem(ativ.uniqueId)} disabled={isDeletingMultiple} />)}</TableCell>)}
                           <TableCell>{!ativ.isEditable && <Checkbox checked={atividadesSelecionadasParaExcluir.has(ativ.base_atividade_id || ativ.id)} onCheckedChange={(checked) => { setAtividadesSelecionadasParaExcluir(prev => { const ns = new Set(prev); const id = ativ.base_atividade_id || ativ.id; if (checked) ns.add(id); else ns.delete(id); return ns; }); }} />}</TableCell>
                           <TableCell>{grupo.folhas.length > 0 && (<Button variant="ghost" size="icon" onClick={() => toggleAtividadeExpansion(key)} className="h-8 w-8">{isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</Button>)}</TableCell>
-                          <TableCell className="font-medium">
+                          <TableCell className="font-medium text-sm">
                             <div>{String(ativ.atividade || '')}</div>
-                            {ativ.subdisciplina && <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">{ativ.subdisciplina}</span>}
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              {ativ.subdisciplina && <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{ativ.subdisciplina}</span>}
+                              <button onClick={() => handleOpenEtapaModal(ativ)} className="text-xs text-blue-500 hover:text-blue-700 hover:underline cursor-pointer" title="Clique para editar a etapa">{ativ.etapa}</button>
+                              <Badge variant="outline" className="text-[10px] h-4 px-1">{grupo.folhas.length} {grupo.folhas.length === 1 ? 'folha' : 'folhas'}</Badge>
+                            </div>
                           </TableCell>
-                          <TableCell><Badge variant="outline">{grupo.folhas.length} {grupo.folhas.length === 1 ? 'folha' : 'folhas'}</Badge></TableCell>
                           <TableCell>
                             {grupo.folhas.length === 0 ? (
                               ativ.source === 'Projeto' ? <Badge>Projeto</Badge> : ativ.status === 'Concluída' ? <Badge className="bg-blue-600 text-white flex items-center gap-1 w-fit"><CheckCircle2 className="w-4 h-4"/>Concluída</Badge> : ativ.status === 'Planejada' ? <Badge className="bg-green-600 text-white flex items-center gap-1 w-fit"><CheckCircle2 className="w-4 h-4"/>Planejada</Badge> : <Badge variant="secondary">Disponível</Badge>
                             ) : (<div className="flex gap-1">{grupo.folhas.some(f=>f.status==='Concluída')&&<Badge className="bg-blue-600 text-white font-semibold shadow-md flex items-center gap-1 w-fit"><CheckCircle2 className="w-4 h-4"/>Concluída</Badge>}{grupo.folhas.some(f=>f.status==='Planejada')&&<Badge className="bg-green-600 text-white font-semibold shadow-md flex items-center gap-1 w-fit"><CheckCircle2 className="w-4 h-4"/>Planejada</Badge>}{grupo.folhas.some(f=>f.status==='Disponível')&&<Badge variant="outline" className="text-gray-600">Disponível</Badge>}</div>)}
-                            </TableCell>
-                          <TableCell>
-                            <button onClick={() => handleOpenEtapaModal(ativ)} className="text-blue-600 hover:text-blue-800 hover:underline font-medium cursor-pointer" title="Clique para editar a etapa">{ativ.etapa}</button>
                           </TableCell>
                           <TableCell>
                             <div className="w-[210px]">
@@ -1624,11 +1587,8 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                   Planejando...
                                 </div>
                               )}
-                            </div>
-                            </TableCell>
-                            <TableCell>
                               {datasInicio[genericAtividadeIdToExclude] ? (
-                                <div className="flex items-center gap-1 text-blue-600 text-xs">
+                                <div className="flex items-center gap-1 text-blue-600 text-xs mt-1">
                                   <Calendar className="w-3 h-3" />
                                   <span>Início: {format(datasInicio[genericAtividadeIdToExclude], 'dd/MM/yyyy')}</span>
                                 </div>
@@ -1636,35 +1596,23 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                 (() => {
                                   const folhasPlanejadas = grupo.folhas.filter(f => f.status === 'Planejada');
                                   const planejamentosComDatas = folhasPlanejadas
-                                    .map(f => planejamentos?.find(p => 
-                                      p.documento_id === f.source_documento_id && 
+                                    .map(f => planejamentos?.find(p =>
+                                      p.documento_id === f.source_documento_id &&
                                       p.atividade_id === f.base_atividade_id
                                     ))
                                     .filter(p => p?.inicio_planejado && p?.termino_planejado);
-
                                   if (planejamentosComDatas.length > 0) {
-                                    const datas = planejamentosComDatas.map(p => ({
-                                      inicio: parseISO(p.inicio_planejado),
-                                      termino: parseISO(p.termino_planejado)
-                                    }));
-
+                                    const datas = planejamentosComDatas.map(p => ({ inicio: parseISO(p.inicio_planejado), termino: parseISO(p.termino_planejado) }));
                                     const dataInicio = datas.reduce((min, d) => d.inicio < min ? d.inicio : min, datas[0].inicio);
                                     const dataTermino = datas.reduce((max, d) => d.termino > max ? d.termino : max, datas[0].termino);
-
-                                    return (
-                                      <div className="flex items-center gap-1 text-gray-600 text-xs">
-                                        <Calendar className="w-3 h-3" />
-                                        <span>{format(dataInicio, 'dd/MM')} - {format(dataTermino, 'dd/MM')}</span>
-                                      </div>
-                                    );
+                                    return (<div className="flex items-center gap-1 text-gray-600 text-xs mt-1"><Calendar className="w-3 h-3" /><span>{format(dataInicio, 'dd/MM')} - {format(dataTermino, 'dd/MM')}</span></div>);
                                   }
-                                  return <span className="text-xs text-gray-400">-</span>;
+                                  return null;
                                 })()
-                              ) : (
-                                <span className="text-xs text-gray-400">-</span>
-                              )}
+                              ) : null}
+                            </div>
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="text-sm">
                               {editandoTempo[genericAtividadeIdToExclude] ? (
                                 <div className="flex items-center gap-1">
                                   <Input
@@ -1701,23 +1649,18 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                   </Button>
                                 </div>
                               ) : (
-                                <button
-                                  onClick={() => {
-                                    setEditandoTempo(prev => ({ ...prev, [genericAtividadeIdToExclude]: true }));
-                                    setNovosTempoPadrao(prev => ({ ...prev, [genericAtividadeIdToExclude]: ativ.tempo ?? 0 }));
-                                  }}
-                                  className="text-blue-600 hover:text-blue-800 hover:underline font-medium cursor-pointer"
-                                  title="Clique para editar o tempo padrão"
-                                >
-                                  {ativ.tempo ? `${Number(ativ.tempo).toFixed(1)}h` : '-'}
-                                </button>
+                                <div className="flex flex-col gap-0.5">
+                                  <button
+                                    onClick={() => { setEditandoTempo(prev => ({ ...prev, [genericAtividadeIdToExclude]: true })); setNovosTempoPadrao(prev => ({ ...prev, [genericAtividadeIdToExclude]: ativ.tempo ?? 0 })); }}
+                                    className="text-gray-600 hover:text-blue-800 hover:underline cursor-pointer text-left"
+                                    title="Clique para editar o tempo padrão"
+                                  >
+                                    {ativ.tempo ? `${Number(ativ.tempo).toFixed(1)}h` : '-'}
+                                  </button>
+                                  <span className="font-semibold text-blue-600">{grupo.folhas.length > 0 ? `${grupo.folhas.reduce((sum, f) => sum + (Number(f.tempo) || 0), 0).toFixed(1)}h` : '-'}</span>
+                                </div>
                               )}
                             </TableCell>
-                            <TableCell className="font-semibold text-blue-600">
-                            {grupo.folhas.length > 0 
-                              ? `${grupo.folhas.reduce((sum, f) => sum + (Number(f.tempo) || 0), 0).toFixed(1)}h`
-                              : '-'}
-                          </TableCell>
                           <TableCell className="text-center">
                             {!ativ.isEditable && (
                               <div className="flex items-center gap-2 justify-center">
@@ -1809,37 +1752,26 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                               <ChevronRight className="w-3 h-3 text-gray-400 inline mr-1" />
                             </TableCell>
                             <TableCell className="text-sm text-gray-600">
-                              {folha.source_documento_numero} - {folha.source_documento_arquivo}
+                              <div>{folha.source_documento_numero} - {folha.source_documento_arquivo}</div>
+                              {folha.etapa && <span className="text-xs text-gray-400">{folha.etapa}</span>}
                             </TableCell>
-                            <TableCell></TableCell>
                             <TableCell>
                               {folha.status === 'Concluída' ? <Badge className="bg-blue-600 text-white font-semibold flex items-center gap-1 w-fit text-xs"><CheckCircle2 className="w-3 h-3"/>Concluída</Badge> : folha.status === 'Planejada' ? <Badge className="bg-green-600 text-white font-semibold shadow-md flex items-center gap-1 w-fit text-xs"><CheckCircle2 className="w-3 h-3"/>Planejada</Badge> : <Badge variant="outline" className="text-xs text-gray-600">{folha.status}</Badge>}
                             </TableCell>
-                            <TableCell className="text-sm text-gray-500">{folha.etapa}</TableCell>
-                            <TableCell></TableCell>
                             <TableCell>
                               {folha.status === 'Planejada' ? (
                                 (() => {
-                                  const planejamento = planejamentos?.find(p => 
-                                    p.documento_id === folha.source_documento_id && 
+                                  const planejamento = planejamentos?.find(p =>
+                                    p.documento_id === folha.source_documento_id &&
                                     p.atividade_id === folha.base_atividade_id
                                   );
-
                                   if (planejamento?.inicio_planejado && planejamento?.termino_planejado) {
-                                    return (
-                                      <div className="flex items-center gap-1 text-gray-600 text-xs">
-                                        <Calendar className="w-3 h-3" />
-                                        <span>{format(parseISO(planejamento.inicio_planejado), 'dd/MM')} - {format(parseISO(planejamento.termino_planejado), 'dd/MM')}</span>
-                                      </div>
-                                    );
+                                    return (<div className="flex items-center gap-1 text-gray-600 text-xs"><Calendar className="w-3 h-3" /><span>{format(parseISO(planejamento.inicio_planejado), 'dd/MM')} - {format(parseISO(planejamento.termino_planejado), 'dd/MM')}</span></div>);
                                   }
-                                  return <span className="text-xs text-gray-400">-</span>;
+                                  return null;
                                 })()
-                              ) : (
-                                <span className="text-xs text-gray-400">-</span>
-                              )}
+                              ) : null}
                             </TableCell>
-                            <TableCell className="text-sm">{folha.tempo ? `${Number(folha.tempo).toFixed(1)}h` : '-'}</TableCell>
                             <TableCell className="text-sm">{folha.tempo ? `${Number(folha.tempo).toFixed(1)}h` : '-'}</TableCell>
                             <TableCell></TableCell>
                             <TableCell></TableCell>
