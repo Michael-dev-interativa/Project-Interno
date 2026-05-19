@@ -16,7 +16,7 @@ const STATUS_COLORS = {
   '-': 'bg-white'
 };
 
-export default function ChecklistTable({ secao, items, checklist, onUpdate }) {
+export default function ChecklistTable({ secao, items, checklist, documentos = [], onUpdate }) {
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -30,7 +30,6 @@ export default function ChecklistTable({ secao, items, checklist, onUpdate }) {
     observacoes: ''
   });
 
-  const periodos = checklist.periodos || [];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -273,15 +272,15 @@ export default function ChecklistTable({ secao, items, checklist, onUpdate }) {
                 <TableHead className="min-w-[250px] border">Descrição</TableHead>
                 <TableHead className="w-20 border text-center">Contribuição</TableHead>
                 <TableHead className="w-16 border text-center">Tempo</TableHead>
-                <TableHead colSpan={periodos.length} className="border text-center font-bold">STATUS</TableHead>
+                <TableHead colSpan={documentos.length || 1} className="border text-center font-bold">STATUS</TableHead>
                 <TableHead className="min-w-[150px] border">Observações</TableHead>
                 <TableHead className="w-20 border">Ações</TableHead>
               </TableRow>
               <TableRow className="bg-gray-50">
                 <TableHead colSpan="4" className="border"></TableHead>
-                {periodos.map((periodo, idx) => (
-                  <TableHead key={idx} className="w-12 border text-center text-xs font-normal">
-                    {periodo}
+                {documentos.map((doc) => (
+                  <TableHead key={doc.id} className="w-14 border text-center text-xs font-normal" title={doc.arquivo || doc.numero}>
+                    {doc.numero}
                   </TableHead>
                 ))}
                 <TableHead className="border"></TableHead>
@@ -291,7 +290,7 @@ export default function ChecklistTable({ secao, items, checklist, onUpdate }) {
             <TableBody>
               {items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={periodos.length + 4} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={documentos.length + 5} className="text-center py-8 text-gray-500">
                     Nenhum item adicionado. Clique em "Adicionar Item" para começar.
                   </TableCell>
                 </TableRow>
@@ -310,16 +309,16 @@ export default function ChecklistTable({ secao, items, checklist, onUpdate }) {
                     <TableCell className="border text-center text-sm">
                       {item.tempo || '-'}
                     </TableCell>
-                    {periodos.map((periodo, idx) => {
-                      const status = item.status_por_periodo?.[periodo] || '-';
+                    {documentos.map((doc) => {
+                      const status = item.status_por_periodo?.[doc.id] || '-';
                       return (
-                        <TableCell 
-                          key={idx} 
+                        <TableCell
+                          key={doc.id}
                           className={`border ${STATUS_COLORS[status]} p-0`}
                         >
                           <Select
                             value={status}
-                            onValueChange={(value) => handleStatusChange(item, periodo, value === '-' ? '' : value)}
+                            onValueChange={(value) => handleStatusChange(item, doc.id, value === '-' ? '' : value)}
                           >
                             <SelectTrigger className="h-7 text-xs border-0 bg-transparent rounded-none">
                               <SelectValue />
