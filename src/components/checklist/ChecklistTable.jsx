@@ -294,11 +294,8 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
               <TableRow className="bg-gray-50">
                 <TableHead colSpan="4" className="border"></TableHead>
                 {documentosVisiveis.map((doc) => (
-                  <TableHead key={doc.id} className="border text-center text-xs font-normal p-1" style={{ width: 40, minWidth: 40 }}>
-                    <div
-                      style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', maxHeight: 120, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
-                      title={`${doc.numero}${doc.arquivo ? ' - ' + doc.arquivo : ''}`}
-                    >
+                  <TableHead key={doc.id} className="border text-center text-xs font-normal p-1 align-bottom" style={{ width: 44, minWidth: 44 }}>
+                    <div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3 }}>
                       {doc.numero}{doc.arquivo ? ` - ${doc.arquivo}` : ''}
                     </div>
                   </TableHead>
