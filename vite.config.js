@@ -29,6 +29,10 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
+        // Only precache index.html and static assets (not hashed JS/CSS chunks).
+        // Hashed chunks are served via NetworkFirst runtime caching below,
+        // which avoids 404s when old SW manifests reference assets removed by a new deploy.
+        globPatterns: ['**/*.{html,ico,png,svg,webmanifest}'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
           {
