@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Calendar, Clock, User, Filter, Trash2, CalendarDays, Play, RefreshCw, LineChart, Users, Loader2, Edit2, GripVertical, ListOrdered, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, Clock, User, Filter, Trash2, CalendarDays, Play, RefreshCw, LineChart, Users, Loader2, Edit2, ListOrdered } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
   format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
@@ -271,7 +271,7 @@ const CalendarFilters = ({
 
 
 // --- Sub-componente de Itens de Atividade Individual ---
-const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlanejamentos, provided, isDragging, isReprogramando, isSelected, onToggleSelect, hasSelections }) => {
+const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlanejamentos, provided, isDragging, isReprogramando, isSelected, onToggleSelect, hasSelections, orderIndex }) => {
   const { activeExecution, startExecution, user, playlist, addToPlaylist, removeFromPlaylist, triggerUpdate, hasPermission } = useContext(ActivityTimerContext);
 
   const [isStarting, setIsStarting] = useState(false);
@@ -628,6 +628,12 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
         className={`p-2 rounded border mb-1 text-xs group hover:shadow-md transition-shadow duration-200 relative overflow-visible ${isSelected ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-gray-200'
           }`}
       >
+        {orderIndex !== undefined && (
+          <span className="absolute -left-1.5 -top-1.5 z-20 w-5 h-5 flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold shadow-sm pointer-events-none">
+            {orderIndex + 1}
+          </span>
+        )}
+
         {isReprogramando && (
           <div className="absolute inset-0 bg-white/70 flex items-center justify-center rounded z-10">
             <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
@@ -1283,27 +1289,20 @@ const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKe
             }
           >
             {(provided, snapshot) => (
-              <div className="relative">
-                {modoOrdenacao && (
-                  <span className="absolute -left-1 -top-1 z-10 w-5 h-5 flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold shadow">
-                    {index + 1}
-                  </span>
-                )}
-                <ActivityItem
-                  plano={atividade}
-                  dayKey={dayKey}
-                  onDelete={onActivityDelete}
-                  executorMap={executorMap}
-                  allPlanejamentos={allPlanejamentos}
-                  provided={provided}
-                  isDragging={snapshot.isDragging}
-                  isReprogramando={normalizeActivityId(isReprogramando) === normalizeActivityId(atividade.id)}
-                  isSelected={selectedActivities.has(normalizeActivityId(atividade.id))}
-                  onToggleSelect={onToggleSelect}
-                  hasSelections={hasSelections}
-                  modoOrdenacao={modoOrdenacao}
-                />
-              </div>
+              <ActivityItem
+                plano={atividade}
+                dayKey={dayKey}
+                onDelete={onActivityDelete}
+                executorMap={executorMap}
+                allPlanejamentos={allPlanejamentos}
+                provided={provided}
+                isDragging={snapshot.isDragging}
+                isReprogramando={normalizeActivityId(isReprogramando) === normalizeActivityId(atividade.id)}
+                isSelected={selectedActivities.has(normalizeActivityId(atividade.id))}
+                onToggleSelect={onToggleSelect}
+                hasSelections={hasSelections}
+                orderIndex={modoOrdenacao ? index : undefined}
+              />
             )}
           </Draggable>
         ))}
@@ -1573,7 +1572,7 @@ const MonthView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onSho
 
 
 // --- Sub-componente para a Visualização Semanal ---
-const WeekView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShowPrevisao, executorMap, allPlanejamentos, isReprogramando, canReprogram, selectedActivities, onToggleSelect, hasSelections, viewType, modoOrdenacao, onClearDayOrder }) => {
+const WeekView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShowPrevisao, executorMap, allPlanejamentos, isReprogramando, canReprogram, selectedActivities, onToggleSelect, hasSelections, viewType, modoOrdenacao, onClearDayOrder, onToggleModoOrdenacao }) => {
   // NOVO: Estado para controlar o dia expandido
   const [expandedDay, setExpandedDay] = useState(null);
 
@@ -1618,7 +1617,16 @@ const WeekView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShow
                 >
                   <div className="flex items-center justify-between">
                     <h3 className="font-semibold text-gray-700 capitalize">{format(day, 'EEE, d', { locale: ptBR })}</h3>
-                    <ChevronsUpDown className="w-4 h-4 text-gray-400" />
+                    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => onToggleModoOrdenacao && onToggleModoOrdenacao()}
+                        className={`p-0.5 rounded transition-colors ${modoOrdenacao ? 'text-amber-500' : 'text-gray-400 hover:text-gray-600'}`}
+                        title={modoOrdenacao ? "Sair da ordenação" : "Organizar ordem de execução"}
+                      >
+                        <ListOrdered className="w-3.5 h-3.5" />
+                      </button>
+                      <ChevronsUpDown className="w-4 h-4 text-gray-400" />
+                    </div>
                   </div>
                   {dayActivities.length > 0 && (
                     <div className="mt-1 text-xs text-gray-600 font-medium">
@@ -1699,7 +1707,7 @@ const WeekView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShow
 
 
 // --- Sub-componente para a Visualização Diária ---
-const DayView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShowPrevisao, executorMap, allPlanejamentos, isReprogramando, canReprogram, selectedActivities, onToggleSelect, hasSelections, viewType, modoOrdenacao, onClearDayOrder }) => {
+const DayView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShowPrevisao, executorMap, allPlanejamentos, isReprogramando, canReprogram, selectedActivities, onToggleSelect, hasSelections, viewType, modoOrdenacao, onClearDayOrder, onToggleModoOrdenacao }) => {
   const dayKey = format(date, 'yyyy-MM-dd');
   const activities = activitiesByDay[dayKey] || [];
 
@@ -1711,7 +1719,16 @@ const DayView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShowP
           {...provided.droppableProps}
           className={`border-t border-gray-100 p-6 ${snapshot.isDraggingOver ? 'bg-purple-100' : ''}`}
         >
-          <h2 className="text-2xl font-bold text-center mb-6">{format(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}</h2>
+          <div className="flex items-center justify-center gap-3 mb-6">
+            <h2 className="text-2xl font-bold capitalize">{format(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}</h2>
+            <button
+              onClick={() => onToggleModoOrdenacao && onToggleModoOrdenacao()}
+              className={`p-1 rounded transition-colors ${modoOrdenacao ? 'text-amber-500' : 'text-gray-400 hover:text-gray-600'}`}
+              title={modoOrdenacao ? "Sair da ordenação" : "Organizar ordem de execução"}
+            >
+              <ListOrdered className="w-5 h-5" />
+            </button>
+          </div>
           <div className="max-w-4xl mx-auto">
             {activities.length > 0 ? (
               <ActivityContainer
@@ -2737,8 +2754,8 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
 
     // **MODIFICADO**: Passa 'enrichedData' (que são todos) para as views em vez de 'planejamentos'
     if (viewMode === 'month') return <MonthView date={currentDate} activitiesByDay={activitiesByDay} disciplinas={disciplinas} onActivityDelete={handleActivityDelete} onShowPrevisao={handleShowPrevisao} executorMap={executorMap} allPlanejamentos={enrichedData} isReprogramando={isReprogramando} canReprogram={canReprogram} selectedActivities={selectedActivities} onToggleSelect={toggleActivitySelection} hasSelections={hasSelections} viewType={viewType} />;
-    if (viewMode === 'week') return <WeekView date={currentDate} activitiesByDay={activitiesByDay} disciplinas={disciplinas} onActivityDelete={handleActivityDelete} onShowPrevisao={handleShowPrevisao} executorMap={executorMap} allPlanejamentos={enrichedData} isReprogramando={isReprogramando} canReprogram={canReprogram} selectedActivities={selectedActivities} onToggleSelect={toggleActivitySelection} hasSelections={hasSelections} viewType={viewType} modoOrdenacao={modoOrdenacao} onClearDayOrder={clearDayOrder} />;
-    if (viewMode === 'day') return <DayView date={currentDate} activitiesByDay={activitiesByDay} disciplinas={disciplinas} onActivityDelete={handleActivityDelete} onShowPrevisao={handleShowPrevisao} executorMap={executorMap} allPlanejamentos={enrichedData} isReprogramando={isReprogramando} canReprogram={canReprogram} selectedActivities={selectedActivities} onToggleSelect={toggleActivitySelection} hasSelections={hasSelections} viewType={viewType} modoOrdenacao={modoOrdenacao} onClearDayOrder={clearDayOrder} />;
+    if (viewMode === 'week') return <WeekView date={currentDate} activitiesByDay={activitiesByDay} disciplinas={disciplinas} onActivityDelete={handleActivityDelete} onShowPrevisao={handleShowPrevisao} executorMap={executorMap} allPlanejamentos={enrichedData} isReprogramando={isReprogramando} canReprogram={canReprogram} selectedActivities={selectedActivities} onToggleSelect={toggleActivitySelection} hasSelections={hasSelections} viewType={viewType} modoOrdenacao={modoOrdenacao} onClearDayOrder={clearDayOrder} onToggleModoOrdenacao={toggleModoOrdenacao} />;
+    if (viewMode === 'day') return <DayView date={currentDate} activitiesByDay={activitiesByDay} disciplinas={disciplinas} onActivityDelete={handleActivityDelete} onShowPrevisao={handleShowPrevisao} executorMap={executorMap} allPlanejamentos={enrichedData} isReprogramando={isReprogramando} canReprogram={canReprogram} selectedActivities={selectedActivities} onToggleSelect={toggleActivitySelection} hasSelections={hasSelections} viewType={viewType} modoOrdenacao={modoOrdenacao} onClearDayOrder={clearDayOrder} onToggleModoOrdenacao={toggleModoOrdenacao} />;
     return null;
   };
 
@@ -2789,25 +2806,6 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
                   </Button>
                 </div>
               ) : hasSelectedUser && canReprogram && null}
-              {hasSelectedUser && viewMode !== 'month' && (
-                <Button
-                  variant={modoOrdenacao ? "default" : "outline"}
-                  onClick={toggleModoOrdenacao}
-                  className={modoOrdenacao ? "bg-amber-500 hover:bg-amber-600 text-white border-amber-500" : ""}
-                >
-                  {modoOrdenacao ? (
-                    <>
-                      <X className="w-4 h-4 mr-2" />
-                      Sair da Ordenação
-                    </>
-                  ) : (
-                    <>
-                      <ListOrdered className="w-4 h-4 mr-2" />
-                      Organizar Atividades
-                    </>
-                  )}
-                </Button>
-              )}
               {hasSelectedUser && (
                 <>
                   {(!isColaborador && !isApoio) && (
