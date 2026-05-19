@@ -1113,7 +1113,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
 
                             return (
                               <>
-                                <TableRow key={key} className="hover:bg-gray-50">
+                                <TableRow key={key} className="hover:bg-gray-50 group">
                                    {hasCheckboxColumn && (
                                      <TableCell>
                                        {ativ.isEditable && (
@@ -1291,7 +1291,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                       </TableCell>
                                   <TableCell className="text-center">
                                     {!ativ.isEditable && (
-                                      <div className="flex items-center gap-2 justify-center">
+                                      <div className="flex items-center gap-2 justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                         <Button 
                                           size="icon" 
                                           onClick={() => handleOpenEditarEtapaEmFolhasModal(ativ)}
@@ -1339,6 +1339,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                     )}
                                   </TableCell>
                                   <TableCell>
+                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                                     <DropdownMenu>
                                       <DropdownMenuTrigger asChild>
                                         <Button variant="ghost" size="icon" disabled={isDeleting || isDeletingMultiple}>
@@ -1370,6 +1371,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                         )}
                                       </DropdownMenuContent>
                                     </DropdownMenu>
+                                    </div>
                                   </TableCell>
                                 </TableRow>
                                 {isExpanded && grupo.folhas.map(folha => (
@@ -1467,7 +1469,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
 
                     return (
                       <>
-                        <TableRow key={key} className="hover:bg-gray-50">
+                        <TableRow key={key} className="hover:bg-gray-50 group">
                           {hasCheckboxColumn && (<TableCell>{ativ.isEditable && (<Checkbox checked={selectedIds.has(ativ.uniqueId)} onCheckedChange={() => handleSelectItem(ativ.uniqueId)} disabled={isDeletingMultiple} />)}</TableCell>)}
                           <TableCell>{!ativ.isEditable && <Checkbox checked={atividadesSelecionadasParaExcluir.has(ativ.base_atividade_id || ativ.id)} onCheckedChange={(checked) => { setAtividadesSelecionadasParaExcluir(prev => { const ns = new Set(prev); const id = ativ.base_atividade_id || ativ.id; if (checked) ns.add(id); else ns.delete(id); return ns; }); }} />}</TableCell>
                           <TableCell>{grupo.folhas.length > 0 && (<Button variant="ghost" size="icon" onClick={() => toggleAtividadeExpansion(key)} className="h-8 w-8">{isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</Button>)}</TableCell>
@@ -1663,7 +1665,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                             </TableCell>
                           <TableCell className="text-center">
                             {!ativ.isEditable && (
-                              <div className="flex items-center gap-2 justify-center">
+                              <div className="flex items-center gap-2 justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Button 
                                   size="icon" 
                                   onClick={() => handleOpenEditarEtapaEmFolhasModal(ativ)}
@@ -1711,6 +1713,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                             )}
                           </TableCell>
                           <TableCell>
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon" disabled={isDeleting || isDeletingMultiple}>
@@ -1742,6 +1745,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                   )}
                               </DropdownMenuContent>
                             </DropdownMenu>
+                            </div>
                           </TableCell>
                         </TableRow>
 
