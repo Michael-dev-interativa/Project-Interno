@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Calendar, Clock, User, Filter, Trash2, CalendarDays, Play, RefreshCw, LineChart, Users, Loader2, Edit2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, Clock, User, Filter, Trash2, CalendarDays, Play, RefreshCw, LineChart, Users, Loader2, Edit2, GripVertical, ListOrdered, X } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
   format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
@@ -1181,7 +1181,7 @@ const DailyActivityGroup = ({ empreendimento, executor, atividades, isExpanded, 
 };
 
 // --- Sub-componente para Container de Atividades (reutilizável) ---
-const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKey, onActivityDelete, onShowPrevisao, executorMap, allPlanejamentos, isReprogramando, canReprogram, selectedActivities, onToggleSelect, hasSelections, viewType }) => {
+const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKey, onActivityDelete, onShowPrevisao, executorMap, allPlanejamentos, isReprogramando, canReprogram, selectedActivities, onToggleSelect, hasSelections, viewType, modoOrdenacao, onClearDayOrder }) => {
   const [expandedGroups, setExpandedGroups] = useState(new Set());
 
   const activityGroups = useMemo(() => {
@@ -1232,49 +1232,78 @@ const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKe
 
   // **NOVO**: No modo analítico, mostrar atividades diretamente sem grupos
   if (viewType === 'analitico') {
-    // Filtrar atividades com 0.0h neste dia específico
-    const activitiesComHoras = activities.filter(atividade => {
+    // Em modo de ordenação, mostrar todas as atividades; caso contrário, filtrar por horas
+    const activitiesParaRenderizar = modoOrdenacao ? activities : activities.filter(atividade => {
       const horasAlocadas = Number(atividade.horas_por_dia?.[dayKey]) || 0;
       const horasExecutadas = Number(atividade.horas_executadas_por_dia?.[dayKey]) || 0;
       const tempoExecutado = Number(atividade.tempo_executado) || 0;
 
-      // Para legado, considerar o tempo executado total
       if (atividade.isLegacyExecution) return tempoExecutado >= 0.05;
 
-      // Para atividades rápidas, verificar execução OU alocação OU se está concluída (mesmo com 0h)
       if (atividade.isQuickActivity || atividade.is_quick_activity) {
         return horasExecutadas >= 0.05 || horasAlocadas >= 0.05 || atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso' || atividade.status === 'em_andamento';
       }
 
-      // Para atividades normais, verificar se tem horas significativas
-      // Fallback: atividades concluídas com 0h (ex: planos fantasmas de atividades rápidas sem is_quick_activity)
       return horasAlocadas >= 0.05 || horasExecutadas >= 0.05 ||
         ((atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso') && !atividade.atividade_id);
     });
 
+    const temOrdemCustomizada = activities.length > 0 && (() => {
+      try { const stored = JSON.parse(localStorage.getItem('calendar-activity-order') || '{}'); return !!stored[dayKey]; }
+      catch { return false; }
+    })();
+
     return (
       <div className={`space-y-1 ${containerClass}`}>
-        {activitiesComHoras.map((atividade, index) => (
+        {modoOrdenacao && (
+          <div className="flex items-center justify-between px-2 py-1.5 mb-1 bg-amber-50 border border-amber-200 rounded-lg">
+            <span className="text-xs font-medium text-amber-700 flex items-center gap-1">
+              <GripVertical className="w-3 h-3" />
+              Arraste para reordenar as atividades
+            </span>
+            {temOrdemCustomizada && (
+              <button
+                onClick={() => onClearDayOrder && onClearDayOrder(dayKey)}
+                className="text-xs text-amber-600 hover:text-amber-800 underline"
+              >
+                Restaurar ordem padrão
+              </button>
+            )}
+          </div>
+        )}
+        {activitiesParaRenderizar.map((atividade, index) => (
           <Draggable
             key={atividade.id}
             draggableId={`${atividade.id}`}
             index={index}
-            isDragDisabled={!canReprogram || atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso' || atividade.isLegacyExecution || normalizeActivityId(isReprogramando) === normalizeActivityId(atividade.id)}
+            isDragDisabled={
+              modoOrdenacao
+                ? (atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso')
+                : (!canReprogram || atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso' || atividade.isLegacyExecution || normalizeActivityId(isReprogramando) === normalizeActivityId(atividade.id))
+            }
           >
             {(provided, snapshot) => (
-              <ActivityItem
-                plano={atividade}
-                dayKey={dayKey}
-                onDelete={onActivityDelete}
-                executorMap={executorMap}
-                allPlanejamentos={allPlanejamentos}
-                provided={provided}
-                isDragging={snapshot.isDragging}
-                isReprogramando={normalizeActivityId(isReprogramando) === normalizeActivityId(atividade.id)}
-                isSelected={selectedActivities.has(normalizeActivityId(atividade.id))}
-                onToggleSelect={onToggleSelect}
-                hasSelections={hasSelections}
-              />
+              <div className="relative">
+                {modoOrdenacao && (
+                  <span className="absolute -left-1 -top-1 z-10 w-5 h-5 flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold shadow">
+                    {index + 1}
+                  </span>
+                )}
+                <ActivityItem
+                  plano={atividade}
+                  dayKey={dayKey}
+                  onDelete={onActivityDelete}
+                  executorMap={executorMap}
+                  allPlanejamentos={allPlanejamentos}
+                  provided={provided}
+                  isDragging={snapshot.isDragging}
+                  isReprogramando={normalizeActivityId(isReprogramando) === normalizeActivityId(atividade.id)}
+                  isSelected={selectedActivities.has(normalizeActivityId(atividade.id))}
+                  onToggleSelect={onToggleSelect}
+                  hasSelections={hasSelections}
+                  modoOrdenacao={modoOrdenacao}
+                />
+              </div>
             )}
           </Draggable>
         ))}
@@ -1544,7 +1573,7 @@ const MonthView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onSho
 
 
 // --- Sub-componente para a Visualização Semanal ---
-const WeekView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShowPrevisao, executorMap, allPlanejamentos, isReprogramando, canReprogram, selectedActivities, onToggleSelect, hasSelections, viewType }) => {
+const WeekView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShowPrevisao, executorMap, allPlanejamentos, isReprogramando, canReprogram, selectedActivities, onToggleSelect, hasSelections, viewType, modoOrdenacao, onClearDayOrder }) => {
   // NOVO: Estado para controlar o dia expandido
   const [expandedDay, setExpandedDay] = useState(null);
 
@@ -1654,6 +1683,8 @@ const WeekView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShow
                     onToggleSelect={onToggleSelect}
                     hasSelections={hasSelections}
                     viewType={viewType}
+                    modoOrdenacao={modoOrdenacao}
+                    onClearDayOrder={onClearDayOrder}
                   />
                   {provided.placeholder}
                 </div>
@@ -1668,7 +1699,7 @@ const WeekView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShow
 
 
 // --- Sub-componente para a Visualização Diária ---
-const DayView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShowPrevisao, executorMap, allPlanejamentos, isReprogramando, canReprogram, selectedActivities, onToggleSelect, hasSelections, viewType }) => {
+const DayView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShowPrevisao, executorMap, allPlanejamentos, isReprogramando, canReprogram, selectedActivities, onToggleSelect, hasSelections, viewType, modoOrdenacao, onClearDayOrder }) => {
   const dayKey = format(date, 'yyyy-MM-dd');
   const activities = activitiesByDay[dayKey] || [];
 
@@ -1698,6 +1729,8 @@ const DayView = ({ date, activitiesByDay, disciplinas, onActivityDelete, onShowP
                 onToggleSelect={onToggleSelect}
                 hasSelections={hasSelections}
                 viewType={viewType}
+                modoOrdenacao={modoOrdenacao}
+                onClearDayOrder={onClearDayOrder}
               />
             ) : (
               <div className="text-center py-12 text-gray-500">
@@ -1766,6 +1799,29 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
 
   // **NOVO**: Estado para seleção múltipla
   const [selectedActivities, setSelectedActivities] = useState(new Set());
+
+  // **NOVO**: Modo de ordenação manual de atividades por dia
+  const [modoOrdenacao, setModoOrdenacao] = useState(false);
+  const [activityOrder, setActivityOrder] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('calendar-activity-order') || '{}'); }
+    catch { return {}; }
+  });
+
+  const clearDayOrder = useCallback((dayKey) => {
+    setActivityOrder(prev => {
+      const updated = { ...prev };
+      delete updated[dayKey];
+      localStorage.setItem('calendar-activity-order', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  const toggleModoOrdenacao = useCallback(() => {
+    setModoOrdenacao(prev => {
+      if (!prev && viewType !== 'analitico') setViewType('analitico');
+      return !prev;
+    });
+  }, [viewType]);
 
   // Carrega e enriquece dados do calendário em uma única passagem com requisições paralelas
   const loadCalendarData = useCallback(async (userFilter) => {
@@ -2038,13 +2094,28 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
 
     if (!destination) return;
 
-    // **CORRIGIDO**: Usar hasPermission do context para Admin
-    if (!hasPermission('admin')) {
-      alert("Você não tem permissão para replanejar atividades.");
+    // Reordenação dentro do mesmo dia (sem necessidade de permissão admin)
+    if (destination.droppableId === source.droppableId) {
+      if (!modoOrdenacao) return;
+      const dayKey = source.droppableId;
+      const dayActivities = [...(activitiesByDay[dayKey] || [])];
+      const [moved] = dayActivities.splice(source.index, 1);
+      dayActivities.splice(destination.index, 0, moved);
+      const newOrder = dayActivities.map(a => String(a.id));
+      setActivityOrder(prev => {
+        const updated = { ...prev, [dayKey]: newOrder };
+        localStorage.setItem('calendar-activity-order', JSON.stringify(updated));
+        return updated;
+      });
       return;
     }
 
-    if (destination.droppableId === source.droppableId) {
+    // Reprogramação cross-day requer permissão admin
+    if (modoOrdenacao) return;
+
+    // **CORRIGIDO**: Usar hasPermission do context para Admin
+    if (!hasPermission('admin')) {
+      alert("Você não tem permissão para replanejar atividades.");
       return;
     }
 
@@ -2497,8 +2568,21 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       });
     }
 
+    // Aplicar ordem customizada por dia, se existir
+    for (const dayKey in grouped) {
+      const customOrder = activityOrder[dayKey];
+      if (customOrder && customOrder.length > 0) {
+        const orderMap = new Map(customOrder.map((id, i) => [String(id), i]));
+        grouped[dayKey].sort((a, b) => {
+          const idxA = orderMap.has(String(a.id)) ? orderMap.get(String(a.id)) : 9999;
+          const idxB = orderMap.has(String(b.id)) ? orderMap.get(String(b.id)) : 9999;
+          return idxA - idxB;
+        });
+      }
+    }
+
     return grouped;
-  }, [filteredPlanejamentos, hasSelectedUser]);
+  }, [filteredPlanejamentos, hasSelectedUser, activityOrder]);
 
   const cargaDiariaPorUsuario = useMemo(() => {
     if (!hasSelectedUser) return {};
@@ -2653,8 +2737,8 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
 
     // **MODIFICADO**: Passa 'enrichedData' (que são todos) para as views em vez de 'planejamentos'
     if (viewMode === 'month') return <MonthView date={currentDate} activitiesByDay={activitiesByDay} disciplinas={disciplinas} onActivityDelete={handleActivityDelete} onShowPrevisao={handleShowPrevisao} executorMap={executorMap} allPlanejamentos={enrichedData} isReprogramando={isReprogramando} canReprogram={canReprogram} selectedActivities={selectedActivities} onToggleSelect={toggleActivitySelection} hasSelections={hasSelections} viewType={viewType} />;
-    if (viewMode === 'week') return <WeekView date={currentDate} activitiesByDay={activitiesByDay} disciplinas={disciplinas} onActivityDelete={handleActivityDelete} onShowPrevisao={handleShowPrevisao} executorMap={executorMap} allPlanejamentos={enrichedData} isReprogramando={isReprogramando} canReprogram={canReprogram} selectedActivities={selectedActivities} onToggleSelect={toggleActivitySelection} hasSelections={hasSelections} viewType={viewType} />;
-    if (viewMode === 'day') return <DayView date={currentDate} activitiesByDay={activitiesByDay} disciplinas={disciplinas} onActivityDelete={handleActivityDelete} onShowPrevisao={handleShowPrevisao} executorMap={executorMap} allPlanejamentos={enrichedData} isReprogramando={isReprogramando} canReprogram={canReprogram} selectedActivities={selectedActivities} onToggleSelect={toggleActivitySelection} hasSelections={hasSelections} viewType={viewType} />;
+    if (viewMode === 'week') return <WeekView date={currentDate} activitiesByDay={activitiesByDay} disciplinas={disciplinas} onActivityDelete={handleActivityDelete} onShowPrevisao={handleShowPrevisao} executorMap={executorMap} allPlanejamentos={enrichedData} isReprogramando={isReprogramando} canReprogram={canReprogram} selectedActivities={selectedActivities} onToggleSelect={toggleActivitySelection} hasSelections={hasSelections} viewType={viewType} modoOrdenacao={modoOrdenacao} onClearDayOrder={clearDayOrder} />;
+    if (viewMode === 'day') return <DayView date={currentDate} activitiesByDay={activitiesByDay} disciplinas={disciplinas} onActivityDelete={handleActivityDelete} onShowPrevisao={handleShowPrevisao} executorMap={executorMap} allPlanejamentos={enrichedData} isReprogramando={isReprogramando} canReprogram={canReprogram} selectedActivities={selectedActivities} onToggleSelect={toggleActivitySelection} hasSelections={hasSelections} viewType={viewType} modoOrdenacao={modoOrdenacao} onClearDayOrder={clearDayOrder} />;
     return null;
   };
 
@@ -2705,6 +2789,25 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
                   </Button>
                 </div>
               ) : hasSelectedUser && canReprogram && null}
+              {hasSelectedUser && viewMode !== 'month' && (
+                <Button
+                  variant={modoOrdenacao ? "default" : "outline"}
+                  onClick={toggleModoOrdenacao}
+                  className={modoOrdenacao ? "bg-amber-500 hover:bg-amber-600 text-white border-amber-500" : ""}
+                >
+                  {modoOrdenacao ? (
+                    <>
+                      <X className="w-4 h-4 mr-2" />
+                      Sair da Ordenação
+                    </>
+                  ) : (
+                    <>
+                      <ListOrdered className="w-4 h-4 mr-2" />
+                      Organizar Atividades
+                    </>
+                  )}
+                </Button>
+              )}
               {hasSelectedUser && (
                 <>
                   {(!isColaborador && !isApoio) && (

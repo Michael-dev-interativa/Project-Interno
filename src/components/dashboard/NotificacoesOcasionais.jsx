@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Bell } from 'lucide-react';
 import { ActivityTimerContext } from '../contexts/ActivityTimerContext';
-import { NotificacaoAtividade, PlanejamentoAtividade } from '@/entities/all';
+import { NotificacaoAtividade, PlanejamentoAtividade, AtaReuniao } from '@/entities/all';
 import { retryWithBackoff } from '../utils/apiUtils';
 import { format, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
