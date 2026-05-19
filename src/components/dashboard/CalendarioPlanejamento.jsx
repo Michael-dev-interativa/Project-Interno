@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Calendar, Clock, User, Filter, Trash2, CalendarDays, Play, RefreshCw, LineChart, Users, Loader2, Edit2, ListOrdered } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, Clock, User, Filter, Trash2, CalendarDays, Play, RefreshCw, LineChart, Users, Loader2, Edit2, ListOrdered, GripVertical } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
   format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
