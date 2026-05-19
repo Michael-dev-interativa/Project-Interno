@@ -9,7 +9,7 @@ import { Plus, Trash2, Edit2, Save, X, FolderX, Pencil, Check, ChevronLeft, Chev
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const STATUS_OPTIONS = ['-', 'Atendido', 'Pendente', 'Não se Aplica'];
-const DOCS_PER_PAGE = 10;
+const DOCS_PER_PAGE = 5;
 const STATUS_COLORS = {
   'Atendido': 'bg-green-100',
   'Pendente': 'bg-yellow-100',
@@ -269,8 +269,8 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
           </form>
         )}
 
-        <div className="overflow-x-auto">
-          <Table>
+        <div>
+          <Table className="w-full table-fixed">
             <TableHeader>
               <TableRow className="bg-gray-100">
                 <TableHead className="w-12 border text-center">Item</TableHead>
@@ -294,8 +294,8 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
               <TableRow className="bg-gray-50">
                 <TableHead colSpan="4" className="border"></TableHead>
                 {documentosVisiveis.map((doc) => (
-                  <TableHead key={doc.id} className="border text-xs font-normal p-1 text-center" style={{ minWidth: 120 }}>
-                    <div className="break-words whitespace-normal">
+                  <TableHead key={doc.id} className="border text-xs font-normal p-1 text-center">
+                    <div className="break-words whitespace-normal leading-tight">
                       {doc.numero}{doc.arquivo ? ` - ${doc.arquivo}` : ''}
                     </div>
                   </TableHead>
