@@ -163,9 +163,9 @@ export default function ChecklistHeader({ checklist, onUpdate, empreendimentos }
           <div className="mt-4 pt-4 border-t border-gray-300">
             <Label className="text-xs font-bold text-gray-700 block mb-2">LEGENDA</Label>
             <div className="flex gap-6 text-sm">
-              <span><strong>E</strong> - Executado</span>
-              <span><strong>C</strong> - Concluído</span>
-              <span><strong>NA</strong> - Não aplicável</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-green-100 border border-green-300"></span> Atendido</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-yellow-100 border border-yellow-300"></span> Pendente</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-gray-100 border border-gray-300"></span> Não se Aplica</span>
             </div>
           </div>
         </div>
