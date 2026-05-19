@@ -2841,12 +2841,6 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
               ) : hasSelectedUser && canReprogram && null}
               {hasSelectedUser && (
                 <>
-                  {(!isColaborador && !isApoio) && (
-                    <Button variant="outline" onClick={() => setShowPrevisaoModal(true)}>
-                      <LineChart className="w-4 h-4 mr-2" />
-                      Previsão de Entrega
-                    </Button>
-                  )}
                   <Button variant="outline" onClick={refreshAll} disabled={totalLoading}>
                     <RefreshCw className={`w-4 h-4 mr-2 ${totalLoading ? 'animate-spin' : ''}`} />
                     {totalLoading ? "Atualizando..." : "Atualizar"}
