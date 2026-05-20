@@ -609,7 +609,9 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
         if (dataInicioMudou) {
           const tempoPlan = updates.tempo_planejado ?? Number(plano.tempo_planejado) ?? 0;
           if (tempoPlan > 0) {
-            const { distribuicao } = distribuirHorasPorDias(editForm.inicio_planejado, tempoPlan);
+            const [y, m, d] = editForm.inicio_planejado.split('-').map(Number);
+            const dataLocal = new Date(y, m - 1, d);
+            const { distribuicao } = distribuirHorasPorDias(dataLocal, tempoPlan);
             updates.horas_por_dia = distribuicao;
           }
         }

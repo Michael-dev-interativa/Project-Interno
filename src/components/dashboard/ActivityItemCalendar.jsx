@@ -315,7 +315,9 @@ export default function ActivityItemCalendar({
       if (dataInicioMudou && novoInicio) {
         const tempoPlan = updates.tempo_planejado ?? Number(plano.tempo_planejado) ?? 0;
         if (tempoPlan > 0) {
-          const { distribuicao } = distribuirHorasPorDias(novoInicio, tempoPlan);
+          const [y, m, d] = novoInicio.split('-').map(Number);
+          const dataLocal = new Date(y, m - 1, d);
+          const { distribuicao } = distribuirHorasPorDias(dataLocal, tempoPlan);
           updates.horas_por_dia = distribuicao;
         }
       }
