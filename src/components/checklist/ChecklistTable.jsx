@@ -83,8 +83,12 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
       await base44.entities.ChecklistItem.delete(itemId);
       onUpdate();
     } catch (error) {
-      console.error('Erro ao excluir item:', error);
-      alert('Erro ao excluir item');
+      if (error.message?.includes('Not found')) {
+        onUpdate();
+      } else {
+        console.error('Erro ao excluir item:', error);
+        alert('Erro ao excluir item');
+      }
     }
   };
 
@@ -110,7 +114,11 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
     setIsDeleting(true);
     try {
       for (const item of items) {
-        await base44.entities.ChecklistItem.delete(item.id);
+        try {
+          await base44.entities.ChecklistItem.delete(item.id);
+        } catch (err) {
+          if (!err.message?.includes('Not found')) throw err;
+        }
       }
       onUpdate();
     } catch (error) {
