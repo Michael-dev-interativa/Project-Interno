@@ -280,7 +280,7 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
   const [adjustedTime, setAdjustedTime] = useState('');
   const [showObservacoes, setShowObservacoes] = useState(false);
   const [showEditDescricaoModal, setShowEditDescricaoModal] = useState(false);
-  const [editDescricao, setEditDescricao] = useState('');
+  const [editForm, setEditForm] = useState({});
   const [isEditLoading, setIsEditLoading] = useState(false);
 
   const realStatus = calculateActivityStatus(plano, allPlanejamentos);
@@ -558,40 +558,43 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
   };
 
   const handleOpenEditDescricao = () => {
-    setEditDescricao(plano.descritivo || '');
+    setEditForm({
+      descritivo: plano.descritivo || plano.titulo || '',
+      tempo_planejado: plano.tempo_planejado != null ? String(plano.tempo_planejado) : '',
+      inicio_planejado: plano.inicio_planejado ? plano.inicio_planejado.slice(0, 10) : '',
+      termino_planejado: plano.termino_planejado ? plano.termino_planejado.slice(0, 10) : '',
+      executor_principal: plano.executor_principal ? String(plano.executor_principal) : '',
+    });
     setShowEditDescricaoModal(true);
   };
 
   const handleSaveDescricao = async () => {
-    if (!editDescricao.trim()) {
-      alert('Descrição não pode estar vazia');
-      return;
-    }
-
     setIsEditLoading(true);
     try {
-      // Se for execução legada, extrair o ID real e atualizar Execucao
       if (plano.isLegacyExecution) {
-        const execId = plano.id.split('-')[1]; // Extrair ID original do ID virtual "exec-{id}"
-        await Execucao.update(execId, {
-          descritivo: editDescricao.trim()
-        });
+        const execId = plano.id.split('-')[1];
+        await Execucao.update(execId, { descritivo: editForm.descritivo.trim() });
       } else {
-        // Para atividades normais, usar a entidade correta
         const entityToUpdate = plano.tipo_planejamento === 'documento' ? PlanejamentoDocumento : PlanejamentoAtividade;
-        await entityToUpdate.update(plano.id, {
-          descritivo: editDescricao.trim()
-        });
+        const updates = {};
+        if (editForm.descritivo !== undefined) {
+          updates.descritivo = editForm.descritivo.trim();
+          updates.titulo = editForm.descritivo.trim();
+        }
+        if (editForm.tempo_planejado !== '') {
+          const t = parseFloat(editForm.tempo_planejado);
+          if (!isNaN(t)) updates.tempo_planejado = t;
+        }
+        if (editForm.inicio_planejado) updates.inicio_planejado = editForm.inicio_planejado;
+        if (editForm.termino_planejado) updates.termino_planejado = editForm.termino_planejado;
+        updates.executor_principal = editForm.executor_principal || null;
+        await retryWithBackoff(() => entityToUpdate.update(plano.id, updates), 3, 1000, 'editActivity');
       }
 
-      alert('✅ Descrição atualizada com sucesso!');
       setShowEditDescricaoModal(false);
-      if (onDelete) {
-        onDelete();
-      }
+      if (onDelete) onDelete();
     } catch (error) {
-      // Log removido para otimização de desempenho
-      alert('Erro ao atualizar descrição: ' + (error.message || 'Tente novamente.'));
+      alert('Erro ao salvar alterações: ' + (error.message || 'Tente novamente.'));
     } finally {
       setIsEditLoading(false);
     }
@@ -869,25 +872,75 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
         </DialogContent>
       </Dialog>
 
-      {/* Modal para editar descrição */}
+      {/* Modal para editar atividade */}
       <Dialog open={showEditDescricaoModal} onOpenChange={setShowEditDescricaoModal}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Editar Descrição da Atividade</DialogTitle>
+            <DialogTitle>Editar Atividade</DialogTitle>
           </DialogHeader>
           <div className="py-4 space-y-4">
-            <div>
-              <p className="text-sm text-gray-600 mb-2"><strong>Atividade:</strong> {displayName}</p>
-            </div>
+            <p className="text-sm text-gray-500"><strong>Atividade:</strong> {displayName}</p>
+
             <div className="space-y-2">
-              <Label htmlFor="editDescricao">Descrição</Label>
+              <Label>Descrição / Título</Label>
               <Textarea
-                id="editDescricao"
-                value={editDescricao}
-                onChange={(e) => setEditDescricao(e.target.value)}
-                placeholder="Digite a descrição da atividade"
-                className="min-h-24"
+                value={editForm.descritivo || ''}
+                onChange={(e) => setEditForm(f => ({ ...f, descritivo: e.target.value }))}
+                rows={3}
+                placeholder="Descrição da atividade..."
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Tempo Planejado (h)</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={editForm.tempo_planejado || ''}
+                  onChange={(e) => setEditForm(f => ({ ...f, tempo_planejado: e.target.value }))}
+                  placeholder="Ex: 2.5"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Executor Principal</Label>
+                <Select
+                  value={editForm.executor_principal || ''}
+                  onValueChange={(v) => setEditForm(f => ({ ...f, executor_principal: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">— Nenhum —</SelectItem>
+                    {Object.values(executorMap || {}).map((u) => (
+                      <SelectItem key={u.id} value={String(u.id)}>
+                        {u.nome || u.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Início Planejado</Label>
+                <Input
+                  type="date"
+                  value={editForm.inicio_planejado || ''}
+                  onChange={(e) => setEditForm(f => ({ ...f, inicio_planejado: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Término Planejado</Label>
+                <Input
+                  type="date"
+                  value={editForm.termino_planejado || ''}
+                  onChange={(e) => setEditForm(f => ({ ...f, termino_planejado: e.target.value }))}
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>
