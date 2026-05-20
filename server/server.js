@@ -667,7 +667,12 @@ app.delete('/api/documentos/:id', async (req, res) => {
 // Checklists
 app.get('/api/checklists', async (req, res) => {
   try {
-    const data = await checklistsModel.listChecklists();
+    const filters = {};
+    if (req.query.empreendimento_id) {
+      const parsed = Number(req.query.empreendimento_id);
+      if (!Number.isNaN(parsed)) filters.empreendimento_id = parsed;
+    }
+    const data = await checklistsModel.listChecklists(filters);
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });

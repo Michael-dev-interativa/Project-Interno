@@ -69,8 +69,19 @@ function encodeJsonValue(column, value) {
   }
 }
 
-async function listChecklists() {
-  const res = await pool.query('SELECT * FROM checklists ORDER BY created_at DESC');
+async function listChecklists(filters = {}) {
+  const conditions = [];
+  const values = [];
+  let idx = 1;
+  if (filters.empreendimento_id !== undefined && filters.empreendimento_id !== null) {
+    conditions.push(`empreendimento_id = $${idx++}`);
+    values.push(Number(filters.empreendimento_id));
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const res = await pool.query(
+    `SELECT * FROM checklists ${where} ORDER BY created_at DESC`,
+    values
+  );
   return res.rows;
 }
 
