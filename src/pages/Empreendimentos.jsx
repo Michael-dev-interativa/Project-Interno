@@ -205,6 +205,7 @@ export default function EmpreendimentosPage() {
           try {
             await criarChecklistParaDisciplina({
               tipo,
+              tipo_empreendimento: saved.tipo_empreendimento || '',
               empreendimento_id: saved.id,
               cliente: saved.cliente || '',
             });

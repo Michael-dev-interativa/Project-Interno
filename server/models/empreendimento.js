@@ -63,7 +63,8 @@ async function ensureEmpreendimentoColumns() {
     ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'ativo',
     ADD COLUMN IF NOT EXISTS foto_url TEXT,
     ADD COLUMN IF NOT EXISTS etapas JSONB,
-    ADD COLUMN IF NOT EXISTS disciplinas_checklist JSONB
+    ADD COLUMN IF NOT EXISTS disciplinas_checklist JSONB,
+    ADD COLUMN IF NOT EXISTS tipo_empreendimento VARCHAR(100)
   `);
   empreendimentoColumnsCache = null;
 }
@@ -91,6 +92,7 @@ async function createEmpreendimento(fields = {}) {
     foto_url,
     etapas,
     disciplinas_checklist,
+    tipo_empreendimento,
   } = fields;
 
   const dbColumns = await getEmpreendimentoColumns();
@@ -104,6 +106,7 @@ async function createEmpreendimento(fields = {}) {
     foto_url: foto_url || null,
     etapas: jsonStringOrNull(normalizeEtapasInput(etapas)),
     disciplinas_checklist: jsonStringOrNull(Array.isArray(disciplinas_checklist) ? disciplinas_checklist : []),
+    tipo_empreendimento: tipo_empreendimento || null,
   };
 
   const entries = Object.entries(payload).filter(([key]) => dbColumns.has(key));
@@ -147,7 +150,7 @@ function jsonStringOrNull(v) {
 
 async function updateEmpreendimento(id, fields = {}) {
   const allowedColumns = new Set([
-    'nome', 'descricao', 'cliente', 'endereco', 'num_proposta', 'status', 'foto_url', 'etapas', 'disciplinas_checklist'
+    'nome', 'descricao', 'cliente', 'endereco', 'num_proposta', 'status', 'foto_url', 'etapas', 'disciplinas_checklist', 'tipo_empreendimento'
   ]);
   const jsonColumns = new Set(['etapas', 'disciplinas_checklist']);
 

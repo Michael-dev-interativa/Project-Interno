@@ -65,7 +65,8 @@ export default function EmpreendimentoForm({ empreendimento, onSubmit, onClose, 
       "Projeto Executivo",
       "Liberado para Obra"
     ],
-    disciplinas_checklist: empreendimento?.disciplinas_checklist || []
+    disciplinas_checklist: empreendimento?.disciplinas_checklist || [],
+    tipo_empreendimento: empreendimento?.tipo_empreendimento || '',
   });
   
   const [etapasEditaveis, setEtapasEditaveis] = useState(() => {
@@ -225,6 +226,24 @@ export default function EmpreendimentoForm({ empreendimento, onSubmit, onClose, 
                     <SelectItem value="concluido">Concluído</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="tipo_empreendimento">Tipo de Empreendimento</Label>
+                <Select value={formData.tipo_empreendimento} onValueChange={(value) => handleInputChange("tipo_empreendimento", value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Comercial">Comercial</SelectItem>
+                    <SelectItem value="Residencial">Residencial</SelectItem>
+                    <SelectItem value="Galpão Logístico">Galpão Logístico</SelectItem>
+                    <SelectItem value="Técnico">Técnico</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500">
+                  Define qual template de checklist será usado para cada disciplina.
+                </p>
               </div>
 
               <div className="space-y-3">
