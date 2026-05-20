@@ -64,6 +64,12 @@ async function deletePlanejamento(id) {
 }
 
 async function updatePlanejamento(id, fields = {}) {
+  // Frontend sends 'descritivo'; DB column is 'titulo'
+  if (fields.descritivo !== undefined) {
+    const { descritivo, ...rest } = fields;
+    fields = { titulo: fields.titulo ?? descritivo, ...rest };
+  }
+
   const keys = Object.keys(fields);
   if (!keys.length) return getPlanejamentoById(id);
 
