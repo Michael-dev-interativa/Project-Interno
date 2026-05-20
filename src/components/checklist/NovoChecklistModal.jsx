@@ -83,11 +83,29 @@ const ITEMS_COMPATIBILIZACAO = [
   { numero_item: '1.39', descricao: 'Em redes enterradas com cotas a mais de 2m, validar com cliente' },
 ];
 
-export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreendimentos }) {
+const TODAS_DISCIPLINAS = [
+  'Elétrica',
+  'Hidráulica',
+  'HVAC',
+  'Incêndio',
+  'Sistemas Eletrônicos',
+  'Planejamento - COMPATIBILIZAÇÃO',
+  'Planejamento - BASES E FOLHAS',
+  'Planejamento - INÍCIO DE PROJETO',
+];
+
+export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreendimentos, defaultEmpreendimentoId }) {
   const [isSaving, setIsSaving] = useState(false);
+
+  const empreendimentoInicial = empreendimentos?.find(e => e.id === defaultEmpreendimentoId) || empreendimentos?.[0];
+  const disciplinasIniciais = empreendimentoInicial?.disciplinas_checklist?.length
+    ? empreendimentoInicial.disciplinas_checklist
+    : TODAS_DISCIPLINAS;
+  const tipoInicial = disciplinasIniciais.includes('Elétrica') ? 'Elétrica' : disciplinasIniciais[0] || 'Elétrica';
+
   const [formData, setFormData] = useState({
-    tipo: 'Elétrica',
-    empreendimento_id: '',
+    tipo: tipoInicial,
+    empreendimento_id: defaultEmpreendimentoId || '',
     tecnico_responsavel: '',
     numero_os: '',
     cliente: '',
@@ -95,6 +113,19 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
     periodos_inicio: '',
     periodos_fim: ''
   });
+
+  const empreendimentoSelecionado = empreendimentos?.find(e => e.id === formData.empreendimento_id);
+  const disciplinasDisponiveis = empreendimentoSelecionado?.disciplinas_checklist?.length
+    ? empreendimentoSelecionado.disciplinas_checklist
+    : TODAS_DISCIPLINAS;
+
+  const handleEmpreendimentoChange = (value) => {
+    const emp = empreendimentos?.find(e => e.id === value);
+    const disciplinas = emp?.disciplinas_checklist?.length ? emp.disciplinas_checklist : TODAS_DISCIPLINAS;
+    const tipoAtual = formData.tipo;
+    const novoTipo = disciplinas.includes(tipoAtual) ? tipoAtual : disciplinas[0] || '';
+    setFormData(prev => ({ ...prev, empreendimento_id: value, tipo: novoTipo }));
+  };
 
   const generatePeriodos = (inicio, fim) => {
     if (!inicio || !fim) return [];
@@ -219,33 +250,10 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Tipo *</Label>
-              <Select
-                value={formData.tipo}
-                onValueChange={(value) => setFormData({ ...formData, tipo: value })}
-                required
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Elétrica">Elétrica</SelectItem>
-                  <SelectItem value="Hidráulica">Hidráulica</SelectItem>
-                  <SelectItem value="HVAC">HVAC</SelectItem>
-                  <SelectItem value="Incêndio">Incêndio</SelectItem>
-                  <SelectItem value="Sistemas Eletrônicos">Sistemas Eletrônicos</SelectItem>
-                  <SelectItem value="Planejamento - COMPATIBILIZAÇÃO">Planejamento - COMPATIBILIZAÇÃO</SelectItem>
-                  <SelectItem value="Planejamento - BASES E FOLHAS">Planejamento - BASES E FOLHAS</SelectItem>
-                  <SelectItem value="Planejamento - INÍCIO DE PROJETO">Planejamento - INÍCIO DE PROJETO</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
               <Label>Empreendimento</Label>
               <Select
                 value={formData.empreendimento_id}
-                onValueChange={(value) => setFormData({ ...formData, empreendimento_id: value })}
+                onValueChange={handleEmpreendimentoChange}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione (opcional)" />
@@ -258,6 +266,29 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div>
+              <Label>Tipo *</Label>
+              <Select
+                value={formData.tipo}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, tipo: value }))}
+                required
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {disciplinasDisponiveis.map((d) => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {empreendimentoSelecionado?.disciplinas_checklist?.length > 0 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Exibindo disciplinas configuradas para este empreendimento.
+                </p>
+              )}
             </div>
 
             <div>
