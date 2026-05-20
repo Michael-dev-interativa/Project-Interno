@@ -62,12 +62,17 @@ export default function ChecklistTab({ empreendimento }) {
   const handleDeleteChecklist = async () => {
     if (!selectedChecklist) return;
     if (!window.confirm(`Tem certeza que deseja excluir o checklist "${selectedChecklist.tipo}" e todos os seus itens?`)) return;
-    for (const item of items) {
-      await base44.entities.ChecklistItem.delete(item.id);
+    try {
+      for (const item of items) {
+        await base44.entities.ChecklistItem.delete(item.id);
+      }
+      await base44.entities.ChecklistPlanejamento.delete(selectedChecklist.id);
+      setSelectedChecklist(null);
+      await queryClient.invalidateQueries({ queryKey: ['checklists', empreendimento?.id] });
+    } catch (error) {
+      console.error('Erro ao excluir checklist:', error);
+      alert('Erro ao excluir checklist: ' + error.message);
     }
-    await base44.entities.ChecklistPlanejamento.delete(selectedChecklist.id);
-    setSelectedChecklist(null);
-    await queryClient.invalidateQueries({ queryKey: ['checklists', empreendimento?.id] });
   };
 
   const itemsPorSecao = items.reduce((acc, item) => {
