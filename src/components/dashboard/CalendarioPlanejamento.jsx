@@ -604,6 +604,16 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
         if (editForm.inicio_planejado) updates.inicio_planejado = editForm.inicio_planejado;
         if (editForm.termino_planejado) updates.termino_planejado = editForm.termino_planejado;
         updates.executor_principal = editForm.executor_principal || null;
+
+        const dataInicioMudou = editForm.inicio_planejado && editForm.inicio_planejado !== plano.inicio_planejado?.slice(0, 10);
+        if (dataInicioMudou) {
+          const tempoPlan = updates.tempo_planejado ?? Number(plano.tempo_planejado) ?? 0;
+          if (tempoPlan > 0) {
+            const { distribuicao } = distribuirHorasPorDias(editForm.inicio_planejado, tempoPlan);
+            updates.horas_por_dia = distribuicao;
+          }
+        }
+
         await retryWithBackoff(() => entityToUpdate.update(plano.id, updates), 3, 1000, 'editActivity');
       }
 
