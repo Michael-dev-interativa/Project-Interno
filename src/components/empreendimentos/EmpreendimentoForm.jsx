@@ -19,6 +19,20 @@ const ETAPAS_PADRAO = [
   "Etapa 7"
 ];
 
+const DISCIPLINAS_TECNICAS = [
+  "Elétrica",
+  "Hidráulica",
+  "HVAC",
+  "Incêndio",
+  "Sistemas Eletrônicos",
+];
+
+const DISCIPLINAS_PLANEJAMENTO = [
+  "Planejamento - INÍCIO DE PROJETO",
+  "Planejamento - BASES E FOLHAS",
+  "Planejamento - COMPATIBILIZAÇÃO",
+];
+
 const normalizeEtapas = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) {
@@ -50,7 +64,8 @@ export default function EmpreendimentoForm({ empreendimento, onSubmit, onClose, 
       "Projeto Básico",
       "Projeto Executivo",
       "Liberado para Obra"
-    ]
+    ],
+    disciplinas_checklist: empreendimento?.disciplinas_checklist || []
   });
   
   const [etapasEditaveis, setEtapasEditaveis] = useState(() => {
@@ -63,6 +78,16 @@ export default function EmpreendimentoForm({ empreendimento, onSubmit, onClose, 
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleDisciplinaToggle = (disciplina) => {
+    setFormData(prev => {
+      const atual = prev.disciplinas_checklist || [];
+      const novas = atual.includes(disciplina)
+        ? atual.filter(d => d !== disciplina)
+        : [...atual, disciplina];
+      return { ...prev, disciplinas_checklist: novas };
+    });
   };
 
   const handleEtapaChange = (index, valor) => {
@@ -200,6 +225,55 @@ export default function EmpreendimentoForm({ empreendimento, onSubmit, onClose, 
                     <SelectItem value="concluido">Concluído</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-3">
+                <Label>Disciplinas do Checklist</Label>
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Disciplinas Técnicas</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {DISCIPLINAS_TECNICAS.map((disciplina) => (
+                        <div key={disciplina} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`disciplina-${disciplina}`}
+                            checked={(formData.disciplinas_checklist || []).includes(disciplina)}
+                            onCheckedChange={() => handleDisciplinaToggle(disciplina)}
+                          />
+                          <label
+                            htmlFor={`disciplina-${disciplina}`}
+                            className="text-sm text-gray-700 cursor-pointer select-none"
+                          >
+                            {disciplina}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Planejamento</p>
+                    <div className="grid grid-cols-1 gap-2">
+                      {DISCIPLINAS_PLANEJAMENTO.map((disciplina) => (
+                        <div key={disciplina} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`disciplina-${disciplina}`}
+                            checked={(formData.disciplinas_checklist || []).includes(disciplina)}
+                            onCheckedChange={() => handleDisciplinaToggle(disciplina)}
+                          />
+                          <label
+                            htmlFor={`disciplina-${disciplina}`}
+                            className="text-sm text-gray-700 cursor-pointer select-none"
+                          >
+                            {disciplina}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Selecione as disciplinas que serão utilizadas nos checklists deste empreendimento.
+                </p>
               </div>
 
               <div className="space-y-3">
