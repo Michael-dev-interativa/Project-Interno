@@ -64,7 +64,11 @@ export default function ChecklistTab({ empreendimento }) {
     if (!window.confirm(`Tem certeza que deseja excluir o checklist "${selectedChecklist.tipo}" e todos os seus itens?`)) return;
     try {
       for (const item of items) {
-        await base44.entities.ChecklistItem.delete(item.id);
+        try {
+          await base44.entities.ChecklistItem.delete(item.id);
+        } catch (err) {
+          if (!err.message?.includes('Not found')) throw err;
+        }
       }
       await base44.entities.ChecklistPlanejamento.delete(selectedChecklist.id);
       setSelectedChecklist(null);
