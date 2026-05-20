@@ -907,14 +907,14 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
               <div className="space-y-2">
                 <Label>Executor Principal</Label>
                 <Select
-                  value={editForm.executor_principal || ''}
-                  onValueChange={(v) => setEditForm(f => ({ ...f, executor_principal: v }))}
+                  value={editForm.executor_principal || 'none'}
+                  onValueChange={(v) => setEditForm(f => ({ ...f, executor_principal: v === 'none' ? '' : v }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">— Nenhum —</SelectItem>
+                    <SelectItem value="none">— Nenhum —</SelectItem>
                     {Object.values(executorMap || {}).map((u) => (
                       <SelectItem key={u.id} value={String(u.id)}>
                         {u.nome || u.email}
