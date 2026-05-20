@@ -1,6 +1,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useContext } from "react";
 import { Empreendimento, Usuario } from "@/entities/all";
+import { criarChecklistParaDisciplina } from "@/lib/checklistTemplates";
 import { Button } from "@/components/ui/button";
 import { Plus, Building2, AlertTriangle, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -186,6 +187,23 @@ export default function EmpreendimentosPage() {
 
       if (!saved || !saved.id) {
         throw new Error('Resposta invalida ao salvar empreendimento');
+      }
+
+      // Criar checklists automaticamente para disciplinas recém-adicionadas
+      const novasDisciplinas = empreendimentoData.disciplinas_checklist || [];
+      const antigasDisciplinas = editingEmpreendimento?.disciplinas_checklist || [];
+      const disciplinasNovas = novasDisciplinas.filter(d => !antigasDisciplinas.includes(d));
+
+      for (const tipo of disciplinasNovas) {
+        try {
+          await criarChecklistParaDisciplina({
+            tipo,
+            empreendimento_id: saved.id,
+            cliente: saved.cliente || '',
+          });
+        } catch (err) {
+          console.error(`Erro ao criar checklist automático para "${tipo}":`, err);
+        }
       }
 
       setShowForm(false);
