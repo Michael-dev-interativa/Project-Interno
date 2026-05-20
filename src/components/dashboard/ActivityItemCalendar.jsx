@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { User, Trash2, RefreshCw, Play, ListMusic, PlusCircle, Loader2, Edit2 } from "lucide-react";
 import { ActivityTimerContext } from '../contexts/ActivityTimerContext';
 import FinalizarAtividadeButton from './FinalizarAtividadeButton';
@@ -53,7 +54,7 @@ export default function ActivityItemCalendar({
   const [showTimeAdjustModal, setShowTimeAdjustModal] = useState(false);
   const [adjustedTime, setAdjustedTime] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editedDescritivo, setEditedDescritivo] = useState('');
+  const [editForm, setEditForm] = useState({});
 
   const realStatus = useMemo(() => {
     if (plano.status === 'concluido_com_atraso') {
@@ -261,34 +262,46 @@ export default function ActivityItemCalendar({
   };
 
   const shouldShowEditButton = () => {
-    return isConcluded && (plano.isQuickActivity || plano.is_quick_activity);
+    return !plano.isLegacyExecution;
   };
 
-  const handleEditDescritivo = () => {
-    setEditedDescritivo(plano.descritivo || '');
+  const handleOpenEditModal = () => {
+    setEditForm({
+      descritivo: plano.descritivo || plano.titulo || '',
+      tempo_planejado: plano.tempo_planejado != null ? String(plano.tempo_planejado) : '',
+      inicio_planejado: plano.inicio_planejado ? plano.inicio_planejado.slice(0, 10) : '',
+      termino_planejado: plano.termino_planejado ? plano.termino_planejado.slice(0, 10) : '',
+      executor_principal: plano.executor_principal ? String(plano.executor_principal) : '',
+    });
     setShowEditModal(true);
   };
 
-  const handleSaveDescritivo = async () => {
-    if (!editedDescritivo.trim()) {
-      alert("Por favor, insira uma descrição.");
-      return;
-    }
-
+  const handleSaveEdit = async () => {
     try {
       const entityToUpdate = plano.tipo_planejamento === 'documento' ? PlanejamentoDocumento : PlanejamentoAtividade;
+      const updates = {};
+
+      if (editForm.descritivo !== undefined) {
+        updates.descritivo = editForm.descritivo.trim();
+        updates.titulo = editForm.descritivo.trim();
+      }
+      if (editForm.tempo_planejado !== '') {
+        const t = parseFloat(editForm.tempo_planejado);
+        if (!isNaN(t)) updates.tempo_planejado = t;
+      }
+      if (editForm.inicio_planejado) updates.inicio_planejado = editForm.inicio_planejado;
+      if (editForm.termino_planejado) updates.termino_planejado = editForm.termino_planejado;
+      updates.executor_principal = editForm.executor_principal || null;
 
       await retryWithBackoff(
-        () => entityToUpdate.update(plano.id, {
-          descritivo: editedDescritivo.trim()
-        }),
-        3, 1000, 'editDescritivo'
+        () => entityToUpdate.update(plano.id, updates),
+        3, 1000, 'editActivity'
       );
-      
+
       setShowEditModal(false);
       if (onDelete) onDelete();
     } catch {
-      alert("Erro ao editar descrição.");
+      alert("Erro ao salvar alterações.");
     }
   };
 
@@ -368,11 +381,11 @@ export default function ActivityItemCalendar({
           <div className="flex items-center shrink-0 gap-2">
             {shouldShowEditButton() && (
               <Button
-                onClick={handleEditDescritivo}
+                onClick={handleOpenEditModal}
                 size="sm"
                 variant="ghost"
                 className="w-5 h-5 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-100"
-                title="Editar descrição"
+                title="Editar atividade"
               >
                 <Edit2 className="w-3 h-3" />
               </Button>
@@ -536,25 +549,78 @@ export default function ActivityItemCalendar({
       </Dialog>
 
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Editar Descrição da Atividade</DialogTitle>
+            <DialogTitle>Editar Atividade</DialogTitle>
           </DialogHeader>
           <div className="py-4 space-y-4">
+            <p className="text-sm text-gray-500"><strong>Atividade:</strong> {displayName}</p>
+
             <div className="space-y-2">
-              <Label htmlFor="editDescritivo">Descrição da Atividade</Label>
+              <Label>Descrição / Título</Label>
               <Textarea
-                id="editDescritivo"
-                value={editedDescritivo}
-                onChange={(e) => setEditedDescritivo(e.target.value)}
-                rows={4}
-                placeholder="Digite a descrição da atividade..."
+                value={editForm.descritivo || ''}
+                onChange={(e) => setEditForm(f => ({ ...f, descritivo: e.target.value }))}
+                rows={3}
+                placeholder="Descrição da atividade..."
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Tempo Planejado (h)</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={editForm.tempo_planejado || ''}
+                  onChange={(e) => setEditForm(f => ({ ...f, tempo_planejado: e.target.value }))}
+                  placeholder="Ex: 2.5"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Executor Principal</Label>
+                <Select
+                  value={editForm.executor_principal || ''}
+                  onValueChange={(v) => setEditForm(f => ({ ...f, executor_principal: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">— Nenhum —</SelectItem>
+                    {Object.values(executorMap).map((u) => (
+                      <SelectItem key={u.id} value={String(u.id)}>
+                        {u.nome || u.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Início Planejado</Label>
+                <Input
+                  type="date"
+                  value={editForm.inicio_planejado || ''}
+                  onChange={(e) => setEditForm(f => ({ ...f, inicio_planejado: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Término Planejado</Label>
+                <Input
+                  type="date"
+                  value={editForm.termino_planejado || ''}
+                  onChange={(e) => setEditForm(f => ({ ...f, termino_planejado: e.target.value }))}
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditModal(false)}>Cancelar</Button>
-            <Button onClick={handleSaveDescritivo} className="bg-blue-600 hover:bg-blue-700">Salvar</Button>
+            <Button onClick={handleSaveEdit} className="bg-blue-600 hover:bg-blue-700">Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
