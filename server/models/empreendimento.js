@@ -43,9 +43,14 @@ function normalizeEtapasInput(value) {
 
 function normalizeEmpreendimentoRow(row) {
   if (!row) return row;
+  let disciplinas = row.disciplinas_checklist;
+  if (typeof disciplinas === 'string') {
+    try { disciplinas = JSON.parse(disciplinas); } catch (e) { disciplinas = []; }
+  }
   return {
     ...row,
-    etapas: normalizeEtapasInput(row.etapas) || []
+    etapas: normalizeEtapasInput(row.etapas) || [],
+    disciplinas_checklist: Array.isArray(disciplinas) ? disciplinas : []
   };
 }
 
@@ -57,8 +62,10 @@ async function ensureEmpreendimentoColumns() {
     ADD COLUMN IF NOT EXISTS num_proposta VARCHAR(255),
     ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'ativo',
     ADD COLUMN IF NOT EXISTS foto_url TEXT,
-    ADD COLUMN IF NOT EXISTS etapas JSONB
+    ADD COLUMN IF NOT EXISTS etapas JSONB,
+    ADD COLUMN IF NOT EXISTS disciplinas_checklist JSONB
   `);
+  empreendimentoColumnsCache = null;
 }
 
 async function getEmpreendimentoColumns() {
@@ -83,6 +90,7 @@ async function createEmpreendimento(fields = {}) {
     status,
     foto_url,
     etapas,
+    disciplinas_checklist,
   } = fields;
 
   const dbColumns = await getEmpreendimentoColumns();
@@ -95,6 +103,7 @@ async function createEmpreendimento(fields = {}) {
     status: status || null,
     foto_url: foto_url || null,
     etapas: jsonStringOrNull(normalizeEtapasInput(etapas)),
+    disciplinas_checklist: jsonStringOrNull(Array.isArray(disciplinas_checklist) ? disciplinas_checklist : []),
   };
 
   const entries = Object.entries(payload).filter(([key]) => dbColumns.has(key));
@@ -106,9 +115,10 @@ async function createEmpreendimento(fields = {}) {
   const placeholders = [];
   const values = [];
 
+  const jsonCols = new Set(['etapas', 'disciplinas_checklist']);
   entries.forEach(([key, value], idx) => {
     cols.push(key);
-    placeholders.push(key === 'etapas' ? `$${idx + 1}::jsonb` : `$${idx + 1}`);
+    placeholders.push(jsonCols.has(key) ? `$${idx + 1}::jsonb` : `$${idx + 1}`);
     values.push(value);
   });
 
@@ -137,9 +147,9 @@ function jsonStringOrNull(v) {
 
 async function updateEmpreendimento(id, fields = {}) {
   const allowedColumns = new Set([
-    'nome', 'descricao', 'cliente', 'endereco', 'num_proposta', 'status', 'foto_url', 'etapas'
+    'nome', 'descricao', 'cliente', 'endereco', 'num_proposta', 'status', 'foto_url', 'etapas', 'disciplinas_checklist'
   ]);
-  const jsonColumns = new Set(['etapas']);
+  const jsonColumns = new Set(['etapas', 'disciplinas_checklist']);
 
   const dbColumns = await getEmpreendimentoColumns();
   const entries = Object.entries(fields || {}).filter(([key]) => allowedColumns.has(key) && dbColumns.has(key));
@@ -152,9 +162,13 @@ async function updateEmpreendimento(id, fields = {}) {
   for (const [key, rawValue] of entries) {
     let value = rawValue;
     if (jsonColumns.has(key)) {
-      value = key === 'etapas'
-        ? jsonStringOrNull(normalizeEtapasInput(rawValue))
-        : jsonStringOrNull(rawValue);
+      if (key === 'etapas') {
+        value = jsonStringOrNull(normalizeEtapasInput(rawValue));
+      } else if (key === 'disciplinas_checklist') {
+        value = jsonStringOrNull(Array.isArray(rawValue) ? rawValue : []);
+      } else {
+        value = jsonStringOrNull(rawValue);
+      }
       sets.push(`${key} = $${idx}::jsonb`);
     } else {
       sets.push(`${key} = $${idx}`);
