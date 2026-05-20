@@ -287,7 +287,23 @@ export default function ActivityItemCalendar({
       }
       if (editForm.tempo_planejado !== '') {
         const t = parseFloat(editForm.tempo_planejado);
-        if (!isNaN(t)) updates.tempo_planejado = t;
+        if (!isNaN(t)) {
+          updates.tempo_planejado = t;
+          const oldHoras = plano.horas_por_dia || {};
+          const dias = Object.keys(oldHoras);
+          if (dias.length === 1) {
+            updates.horas_por_dia = { [dias[0]]: t };
+          } else if (dias.length > 1) {
+            const total = dias.reduce((sum, d) => sum + (Number(oldHoras[d]) || 0), 0);
+            const newHoras = {};
+            dias.forEach(d => {
+              newHoras[d] = total > 0
+                ? parseFloat(((Number(oldHoras[d]) / total) * t).toFixed(2))
+                : parseFloat((t / dias.length).toFixed(2));
+            });
+            updates.horas_por_dia = newHoras;
+          }
+        }
       }
       if (editForm.inicio_planejado) updates.inicio_planejado = editForm.inicio_planejado;
       if (editForm.termino_planejado) updates.termino_planejado = editForm.termino_planejado;
