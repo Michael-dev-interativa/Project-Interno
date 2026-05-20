@@ -13,11 +13,18 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 
 registerSW({
   immediate: true,
+  onNeedRefresh() {
+    window.location.reload();
+  },
   onRegisteredSW(_swUrl) {},
-  onRegisterError(_error) {
-    // Log removido para produção
-  }
+  onRegisterError(_error) {}
 })
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    window.location.reload();
+  });
+}
 
 // Start background sync listener — fires processSyncQueue() when back online
 startOnlineSyncListener()
