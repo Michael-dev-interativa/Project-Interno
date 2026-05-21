@@ -783,6 +783,30 @@ export default function DocumentosTab({
     return allAtividades.filter(a => !a.empreendimento_id || a.empreendimento_id === empreendimento.id);
   }, [allAtividades, empreendimento.id]);
 
+  const hasActivitiesMap = useMemo(() => {
+    const map = {};
+    filteredDocumentos.forEach(doc => {
+      const directLink = atividadesFiltradas.some(a => {
+        if (a.tempo === -999) return false;
+        const singular = String(a.documento_id) === String(doc.id);
+        const inArray = Array.isArray(a.documento_ids) && a.documento_ids.some(id => String(id) === String(doc.id));
+        return singular || inArray;
+      });
+      if (directLink) { map[doc.id] = true; return; }
+      const disciplinasDoc = Array.isArray(doc.disciplinas) && doc.disciplinas.length > 0 ? doc.disciplinas : [doc.disciplina].filter(Boolean);
+      const subdisciplinasDoc = Array.isArray(doc.subdisciplinas) ? doc.subdisciplinas : [];
+      if (disciplinasDoc.length > 0 && subdisciplinasDoc.length > 0) {
+        map[doc.id] = atividadesFiltradas.some(a =>
+          !a.empreendimento_id && a.tempo !== -999 &&
+          disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina)
+        );
+      } else {
+        map[doc.id] = false;
+      }
+    });
+    return map;
+  }, [filteredDocumentos, atividadesFiltradas]);
+
   const sharedProps = {
     localDocumentos,
     localPlanejamentos,
@@ -923,6 +947,8 @@ export default function DocumentosTab({
                               <MemoDocumentoItem
                                 key={doc.id}
                                 doc={doc}
+                                isExpanded={!!expandedRows[doc.id]}
+                                hasActivities={!!hasActivitiesMap[doc.id]}
                                 planejamentos={localPlanejamentos}
                                 allAtividades={atividadesFiltradas}
                                 handleEdit={handleEdit}
