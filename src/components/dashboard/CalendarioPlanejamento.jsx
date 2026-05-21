@@ -2732,9 +2732,18 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       }
     }
 
-    // Push: quando uma atividade se estende para hoje, arrasta a última da fila de prioridade para o próximo dia útil
+    // Push: quando uma atividade se estende para hoje E o dia está com 8h cheias,
+    // arrasta a última da fila de prioridade para o próximo dia útil.
+    // Se o dia tiver capacidade livre, a atividade apenas se estende sem expulsar ninguém.
     if (grouped[hojeKey] && grouped[hojeKey].some(a => a._isExtended)) {
-      const elegiveisPush = grouped[hojeKey].filter(a => {
+      const cargaHojeOriginal = grouped[hojeKey].reduce((sum, a) => {
+        if (a._isExtended) return sum; // não contar as próprias extensões na carga
+        return sum + (Number(a.horas_por_dia?.[hojeKey]) || 0);
+      }, 0);
+
+      const diaEstaLotado = cargaHojeOriginal >= 7.95; // margem de 0.05h (~3min)
+
+      const elegiveisPush = diaEstaLotado ? grouped[hojeKey].filter(a => {
         const st = activityStatusMap.get(normalizeActivityId(a.id)) || a.status || 'nao_iniciado';
         return (
           !a._isExtended &&
@@ -2743,7 +2752,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
           st !== 'concluido' &&
           st !== 'concluido_com_atraso'
         );
-      });
+      }) : [];
 
       if (elegiveisPush.length > 0) {
         const ultimaAtividade = elegiveisPush[elegiveisPush.length - 1];
