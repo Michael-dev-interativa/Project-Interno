@@ -773,12 +773,20 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
           )
         );
       } else {
+        const baseAtiv = combinedActivities.find(a => a.id === folha.base_atividade_id);
+        const descritivo = baseAtiv?.atividade || folha.source_documento_arquivo || '';
+        const hoje = format(new Date(), 'yyyy-MM-dd');
         await retryWithBackoff(
           () => PlanejamentoAtividade.create({
             empreendimento_id: empreendimentoId,
             documento_id: folha.source_documento_id,
             atividade_id: folha.base_atividade_id,
-            status: 'concluido'
+            etapa: folha.etapa || '',
+            descritivo,
+            tempo_planejado: folha.tempo || 0,
+            status: 'concluido',
+            termino_real: hoje,
+            horas_por_dia: {}
           }),
           3, 500, `criarPlanoConcluidoFolha-${chave}`
         );
