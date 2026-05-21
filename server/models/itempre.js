@@ -1,19 +1,18 @@
 const { pool } = require('../db/pool');
 
+function serializeJsonb(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'string') {
+    try { return JSON.stringify(JSON.parse(v)); } catch (e) { return JSON.stringify([]); }
+  }
+  try { return JSON.stringify(v); } catch (e) { return null; }
+}
+
 async function createItem(data) {
   const q = `INSERT INTO itempre (
     empreendimento_id, item, data, de, descritiva, localizacao, assunto, comentario, disciplina, status, resposta, imagens,
-    tempo_atendimento, planejamento_executor, planejamento_executor_nome
-  ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`;
-
-  let imagensVal = null;
-  if (data.imagens !== undefined && data.imagens !== null) {
-    if (typeof data.imagens === 'string') {
-      try { imagensVal = JSON.stringify(JSON.parse(data.imagens)); } catch (e) { imagensVal = JSON.stringify([String(data.imagens)]); }
-    } else {
-      try { imagensVal = JSON.stringify(data.imagens); } catch (e) { imagensVal = null; }
-    }
-  }
+    tempo_atendimento, planejamento_executor, planejamento_executor_nome, documentos_vinculados
+  ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`;
 
   const vals = [
     data.empreendimento_id || null,
@@ -27,10 +26,11 @@ async function createItem(data) {
     data.disciplina || null,
     data.status || 'Em andamento',
     data.resposta || null,
-    imagensVal,
+    serializeJsonb(data.imagens),
     data.tempo_atendimento ?? null,
     data.planejamento_executor || null,
     data.planejamento_executor_nome || null,
+    serializeJsonb(data.documentos_vinculados ?? []),
   ];
 
   const res = await pool.query(q, vals);
@@ -73,14 +73,8 @@ async function updateItem(id, fields) {
     sets.push(`${k} = $${i + 1}`);
     let v = fields[k];
 
-    if (k === 'imagens') {
-      if (v === null || v === undefined) {
-        v = null;
-      } else if (typeof v === 'string') {
-        try { const parsed = JSON.parse(v); v = JSON.stringify(parsed); } catch (e) { v = JSON.stringify([String(v)]); }
-      } else {
-        try { v = JSON.stringify(v); } catch (e) { v = null; }
-      }
+    if (k === 'imagens' || k === 'documentos_vinculados') {
+      v = serializeJsonb(v);
     }
 
     values.push(v);

@@ -474,6 +474,7 @@ CREATE TABLE IF NOT EXISTS itempre (
 ALTER TABLE itempre ADD COLUMN IF NOT EXISTS tempo_atendimento NUMERIC(8,2);
 ALTER TABLE itempre ADD COLUMN IF NOT EXISTS planejamento_executor VARCHAR(255);
 ALTER TABLE itempre ADD COLUMN IF NOT EXISTS planejamento_executor_nome VARCHAR(255);
+ALTER TABLE itempre ADD COLUMN IF NOT EXISTS documentos_vinculados JSONB DEFAULT '[]';
 
 CREATE INDEX IF NOT EXISTS itempre_empreendimento_idx ON itempre(empreendimento_id);
 
