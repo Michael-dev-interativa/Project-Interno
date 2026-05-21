@@ -1332,7 +1332,8 @@ const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKe
       }
 
       return horasAlocadas >= 0.05 || horasExecutadas >= 0.05 ||
-        ((atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso') && !atividade.atividade_id);
+        ((atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso') && !atividade.atividade_id) ||
+        atividade._isExtended || atividade._isPushed;
     });
 
     const temOrdemCustomizada = activities.length > 0 && (() => {
@@ -1397,7 +1398,7 @@ const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKe
       if (atividade.isQuickActivity || atividade.is_quick_activity) {
         return horasExecutadas >= 0.05 || horasAlocadas >= 0.05 || atividade.status === 'concluido' || atividade.status === 'concluido_com_atraso' || atividade.status === 'em_andamento';
       }
-      return horasAlocadas >= 0.05 || horasExecutadas >= 0.05;
+      return horasAlocadas >= 0.05 || horasExecutadas >= 0.05 || atividade._isExtended || atividade._isPushed;
     });
   });
 
@@ -1414,7 +1415,7 @@ const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKe
           if (atividade.isQuickActivity || atividade.is_quick_activity) {
             return horasExecutadas >= 0.05 || horasAlocadas >= 0.05 || atividade.status === 'concluido' || atividade.status === 'em_andamento';
           }
-          return horasAlocadas >= 0.05 || horasExecutadas >= 0.05;
+          return horasAlocadas >= 0.05 || horasExecutadas >= 0.05 || atividade._isExtended || atividade._isPushed;
         });
 
         // Não renderizar grupos vazios
