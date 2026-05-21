@@ -795,11 +795,19 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
       } else {
         await Promise.all(
           planos.map(p => {
-            const novoStatus = (p.inicio_planejado && p.termino_planejado) ? 'nao_iniciado' : 'nao_iniciado';
-            return retryWithBackoff(
-              () => PlanejamentoAtividade.update(p.id, { status: novoStatus, termino_real: null }),
-              3, 500, `reverterFolha-${p.id}`
-            );
+            if (p.inicio_planejado && p.termino_planejado) {
+              // Plano com datas reais: volta para nao_iniciado (ficará como "Planejada")
+              return retryWithBackoff(
+                () => PlanejamentoAtividade.update(p.id, { status: 'nao_iniciado', termino_real: null }),
+                3, 500, `reverterFolha-${p.id}`
+              );
+            } else {
+              // Plano criado só para marcar como concluído: deletar → volta para "Disponível"
+              return retryWithBackoff(
+                () => PlanejamentoAtividade.delete(p.id),
+                3, 500, `deletarPlanoConcluidoFolha-${p.id}`
+              );
+            }
           })
         );
       }
