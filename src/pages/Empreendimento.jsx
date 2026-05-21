@@ -458,7 +458,19 @@ export default function EmpreendimentoPage() {
             </TabsContent>
           )}
           <TabsContent value="pre">
-            {mountedTabs.has('pre') && <PRETab empreendimento={empreendimento} readOnly={!canEdit} />}
+            {mountedTabs.has('pre') && (
+              <PRETab
+                empreendimento={empreendimento}
+                readOnly={!canEdit}
+                onAfterSave={() => {
+                  setTabData(prev => ({
+                    ...prev,
+                    documentos: { ...prev.documentos, loaded: false }
+                  }));
+                  loadTabData('documentos');
+                }}
+              />
+            )}
           </TabsContent>
 
           <TabsContent value="controle_os">

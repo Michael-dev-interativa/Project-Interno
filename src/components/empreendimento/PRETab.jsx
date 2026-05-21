@@ -1,27 +1,20 @@
 // @ts-nocheck
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Printer, Save, FileText, Loader2, Upload, X, File, ZoomIn, CalendarPlus, FileUp, Download } from "lucide-react";
+import { Plus, Printer, Save, FileText, Loader2, X, ZoomIn, CalendarPlus, FileUp, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ItemPRE, Disciplina, Usuario, PlanejamentoAtividade, Documento } from "@/entities/all";
 import { format } from "date-fns";
 import { retryWithBackoff } from "@/components/utils/apiUtils";
 import { base44 } from "@/api/base44Client";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import PREItemRow from "./PREItemRow";
 
 const LOGO_URL = "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/577f93874_logo_Interativa_versao_final_sem_fundo_0002.png";
 
-const STATUS_COLORS = {
-  "Em andamento": "bg-yellow-200",
-  "Pendente": "bg-red-300",
-  "Concluído": "bg-green-200",
-  "Cancelado": "bg-red-200"
-};
 
 const printStyles = `
 @media print {
@@ -87,7 +80,7 @@ const printStyles = `
 }
 `;
 
-export default function PRETab({ empreendimento, readOnly = false }) {
+export default function PRETab({ empreendimento, readOnly = false, onAfterSave }) {
   const [isSaving, setIsSaving] = useState(false);
   const [lightboxImg, setLightboxImg] = useState(null);
   const [showPlanejamentoModal, setShowPlanejamentoModal] = useState(false);
@@ -100,18 +93,17 @@ export default function PRETab({ empreendimento, readOnly = false }) {
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = React.useRef(/** @type {{ x: number; y: number } | null} */ (null));
   const [items, setItems] = useState(/** @type {any[]} */ ([]));
-  // Tempo total da folha (soma dos tempos dos comentários)
-  const totalTempoFolha = useMemo(() => {
-    return items.reduce((acc, item) => acc + (parseFloat(item.comentario_tempo) || 0), 0);
-  }, [items]);
+  const itemsRef = React.useRef(/** @type {any[]} */ ([]));
   const [lastSaved, setLastSaved] = useState(/** @type {Date | null} */ (null));
+  const dirtyItemIds = React.useRef(/** @type {Set<string>} */ (new Set()));
   const [isImporting, setIsImporting] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importSelectedFile, setImportSelectedFile] = useState(null);
   const importFileRef = useRef(/** @type {HTMLInputElement | null} */ (null));
   const [disciplinas, setDisciplinas] = useState(/** @type {any[]} */ ([]));
-  const [documentosDisponiveis, setDocumentosDisponiveis] = useState(/** @type {any[]} */ ([]));
+  const [documentos, setDocumentos] = useState(/** @type {any[]} */ ([]));
   const [filtroDispline, setFiltroDispline] = useState('todas');
+  const [filtroStatus, setFiltroStatus] = useState('todos');
   const [headerData, setHeaderData] = useState({
     cliente: empreendimento?.cliente || '',
     obra: empreendimento?.nome || '',
@@ -121,6 +113,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
     arquivo: ''
   });
   const saveTimeoutRef = React.useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
+  const isSavingRef = React.useRef(false);
 
   useEffect(() => {
     if (empreendimento) {
@@ -133,20 +126,10 @@ export default function PRETab({ empreendimento, readOnly = false }) {
     }
   }, [empreendimento?.id]);
 
+  // AutoSave com debounce — só dispara quando há itens dirty E sem save em andamento
   useEffect(() => {
-    if (!empreendimento?.id) return;
-    retryWithBackoff(
-      () => Documento.filter({ empreendimento_id: empreendimento.id }),
-      3, 2000, 'PRETab-Documentos'
-    ).then(docs => setDocumentosDisponiveis(
-      (docs || []).sort((a, b) => (a.arquivo || '').localeCompare(b.arquivo || '', 'pt-BR'))
-    )).catch(() => {});
-  }, [empreendimento?.id]);
-
-  // AutoSave com debounce — só para itens já persistidos (sem temp-)
-  useEffect(() => {
-    const hasPersistedItems = /** @type {any[]} */ (items).some(i => !String(i.id).startsWith('temp-'));
-    if (!hasPersistedItems) return;
+    if (dirtyItemIds.current.size === 0) return;
+    if (isSavingRef.current) return;
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -154,7 +137,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
 
     saveTimeoutRef.current = setTimeout(() => {
       handleAutoSave();
-    }, 8000);
+    }, 30000);
 
     return () => {
       if (saveTimeoutRef.current) {
@@ -174,12 +157,14 @@ export default function PRETab({ empreendimento, readOnly = false }) {
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        const [discs, users] = await Promise.all([
+        const [discs, users, docs] = await Promise.all([
           retryWithBackoff(() => Disciplina.list(), 3, 2000, 'PRETab-Disciplinas'),
           retryWithBackoff(() => Usuario.list(), 3, 2000, 'PRETab-Usuarios'),
+          empreendimento?.id ? retryWithBackoff(() => Documento.filter({ empreendimento_id: empreendimento.id }), 3, 2000, 'PRETab-Documentos') : Promise.resolve([]),
         ]);
         setDisciplinas(discs || []);
         setUsuarios(users || []);
+        setDocumentos((docs || []).sort((a, b) => (a.numero || a.arquivo || '').localeCompare(b.numero || b.arquivo || '', 'pt-BR', { numeric: true })));
       } catch {
       }
     };
@@ -189,6 +174,9 @@ export default function PRETab({ empreendimento, readOnly = false }) {
 
 
 
+
+  // Mantém ref sincronizada com state para callbacks sem re-criação
+  React.useEffect(() => { itemsRef.current = items; }, [items]);
 
   const loadItems = async (empId) => {
     try {
@@ -266,7 +254,6 @@ export default function PRETab({ empreendimento, readOnly = false }) {
           resposta: itemParaPlanejar.resposta,
           imagens: itemParaPlanejar.imagens || [],
           tempo_atendimento: itemParaPlanejar.tempo_atendimento ?? null,
-          documentos_vinculados: itemParaPlanejar.documentos_vinculados || [],
           planejamento_executor: planejamentoForm.executor,
           planejamento_executor_nome: nomeExecutor,
         }), 3, 2000, 'PRE-Update-Executor');
@@ -298,26 +285,24 @@ export default function PRETab({ empreendimento, readOnly = false }) {
       localizacao: '',
       assunto: '',
       comentario: '',
-      comentario_documentos_vinculados: [], // NOVO
-      comentario_tempo: '', // NOVO
       disciplina: '',
       status: 'Em andamento',
       resposta: '',
       imagens: [],
       tempo_atendimento: null,
-      documentos_vinculados: [],
       isNew: true
     };
     setItems([...items, newItem]);
   };
 
-  const handleUpdateItem = (id, field, value) => {
+  const handleUpdateItem = useCallback((id, field, value) => {
+    dirtyItemIds.current.add(String(id));
     setItems(prev => prev.map(item => 
       item.id === id ? { ...item, [field]: value } : item
     ));
-  };
+  }, []);
 
-  const handleDeleteItem = async (id) => {
+  const handleDeleteItem = useCallback(async (id) => {
     if (!confirm('Deseja excluir este item?')) return;
     
     try {
@@ -328,21 +313,20 @@ export default function PRETab({ empreendimento, readOnly = false }) {
     } catch {
       alert('Erro ao excluir item.');
     }
-  };
+  }, []);
 
-  const handleUploadImage = async (itemId, file) => {
+  const handleUploadImage = useCallback(async (itemId, file) => {
     try {
       setIsSaving(true);
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      if (!file_url) throw new Error('URL inválida retornada pelo upload.');
-
-      // Encontra o item e atualiza com a nova imagem
-      const itemToUpdate = items.find(item => item.id === itemId);
+      
+      // Encontra o item via ref (sem re-criar o callback a cada mudança)
+      const itemToUpdate = itemsRef.current.find(item => item.id === itemId);
       if (!itemToUpdate) return;
-
+      
       const updatedItem = {
         ...itemToUpdate,
-        imagens: [...(itemToUpdate.imagens || []).filter(Boolean), file_url]
+        imagens: [...(itemToUpdate.imagens || []), file_url]
       };
       
       // Prepara dados para salvar
@@ -360,7 +344,6 @@ export default function PRETab({ empreendimento, readOnly = false }) {
         resposta: updatedItem.resposta,
         imagens: updatedItem.imagens,
         tempo_atendimento: updatedItem.tempo_atendimento ?? null,
-        documentos_vinculados: updatedItem.documentos_vinculados || [],
       };
 
       // Salva no banco
@@ -378,56 +361,71 @@ export default function PRETab({ empreendimento, readOnly = false }) {
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [empreendimento]);
 
-  const handleRemoveImage = (itemId, imageUrl) => {
+  const handleRemoveImage = useCallback((itemId, imageUrl) => {
     setItems(prev => prev.map(item => 
       item.id === itemId 
         ? { ...item, imagens: (item.imagens || []).filter(url => url !== imageUrl) } 
         : item
     ));
-  };
+  }, []);
+
+  const buildItemData = (item) => ({
+    empreendimento_id: empreendimento.id,
+    item: item.item,
+    data: item.data,
+    de: item.de,
+    descritiva: item.descritiva,
+    localizacao: item.localizacao,
+    assunto: item.assunto,
+    comentario: item.comentario,
+    disciplina: item.disciplina,
+    status: item.status || '',
+    resposta: item.resposta,
+    imagens: item.imagens || [],
+    tempo_atendimento: item.tempo_atendimento ?? null,
+    documentos_vinculados: item.documentos_vinculados || [],
+    etapa_adicional: item.etapa_adicional || null,
+    planejamento_executor: item.planejamento_executor ?? null,
+    planejamento_executor_nome: item.planejamento_executor_nome ?? null,
+  });
 
   const handleAutoSave = async () => {
-    if (isSaving) return;
+    if (isSavingRef.current) return;
 
-    // Captura snapshot dos itens no momento do save para não sobrescrever edições posteriores
-    const itemsSnapshot = items;
-
+    isSavingRef.current = true;
     setIsSaving(true);
+
+    // Captura snapshot dos itens no momento do save (via ref para não re-criar handleAutoSave)
+    const itemsSnapshot = itemsRef.current;
+    const dirtySnapshot = new Set(dirtyItemIds.current);
+    dirtyItemIds.current.clear();
+
     try {
-      const saveResults = await Promise.all(
-        itemsSnapshot.map(async (item) => {
-          const itemData = {
-            empreendimento_id: empreendimento.id,
-            item: item.item,
-            data: item.data,
-            de: item.de,
-            descritiva: item.descritiva,
-            localizacao: item.localizacao,
-            assunto: item.assunto,
-            comentario: item.comentario,
-            disciplina: item.disciplina,
-            status: item.status || '',
-            resposta: item.resposta,
-            imagens: item.imagens || [],
-            tempo_atendimento: item.tempo_atendimento ?? null,
-            planejamento_executor: item.planejamento_executor ?? null,
-            planejamento_executor_nome: item.planejamento_executor_nome ?? null,
-            documentos_vinculados: item.documentos_vinculados || [],
-          };
-
-          if (item.isNew || item.id.toString().startsWith('temp-')) {
-            const created = await retryWithBackoff(() => ItemPRE.create(itemData), 3, 2000, 'PRE-Create');
-            return { tempId: item.id, realId: created?.id ?? null };
-          } else {
-            await retryWithBackoff(() => ItemPRE.update(item.id, itemData), 3, 2000, `PRE-Update-${item.id}`);
-            return { tempId: null, realId: null };
-          }
-        })
+      // Salva apenas os itens que foram modificados ou são novos
+      const itemsToSave = itemsSnapshot.filter(item =>
+        String(item.id).startsWith('temp-') || item.isNew || dirtySnapshot.has(String(item.id))
       );
+      if (itemsToSave.length === 0) {
+        return;
+      }
 
-      // Substitui IDs temporários pelos reais sem sobrescrever edições em andamento
+      // Processar sequencialmente para evitar race conditions com IDs temporários
+      const saveResults = [];
+      for (const item of itemsToSave) {
+        if (!String(item.id).startsWith('temp-') && !item.isNew) {
+          // Item existente: atualiza
+          await retryWithBackoff(() => ItemPRE.update(item.id, buildItemData(item)), 3, 2000, `PRE-Update-${item.id}`);
+          saveResults.push({ tempId: null, realId: null });
+        } else {
+          // Item novo (temp): cria
+          const created = await retryWithBackoff(() => ItemPRE.create(buildItemData(item)), 3, 2000, 'PRE-Create');
+          saveResults.push({ tempId: item.id, realId: created?.id ?? null });
+        }
+      }
+
+      // Substitui IDs temporários pelos reais
       setItems(prev => prev.map(item => {
         const result = saveResults.find(r => r.tempId === item.id);
         if (result?.realId) {
@@ -437,14 +435,77 @@ export default function PRETab({ empreendimento, readOnly = false }) {
       }));
 
       setLastSaved(new Date());
-    } catch {
+    } catch (err) {
+      console.error('Erro no autoSave PRE:', err);
+      // Recoloca os itens como dirty para tentar novamente
+      dirtySnapshot.forEach(id => dirtyItemIds.current.add(id));
     } finally {
+      isSavingRef.current = false;
       setIsSaving(false);
     }
   };
 
+  // Recalcula o tempo_pre de cada documento do zero, somando todos os itens PRE vinculados
+  const atualizarTempoDocumentos = async () => {
+    const allItems = itemsRef.current;
+
+    // Coleta todos os docIds referenciados pelos itens atuais
+    const docIdsComVinculo = new Set();
+    allItems.forEach(item => {
+      (item.documentos_vinculados || []).forEach(docId => docIdsComVinculo.add(docId));
+    });
+
+    // Também inclui documentos que já têm tempo_pre > 0 (para poder zerado se foram desvinculados)
+    const docIdsParaZerar = documentos.filter(d => Number(d.tempo_pre) > 0 && !docIdsComVinculo.has(d.id)).map(d => d.id);
+
+    const todosDocIds = new Set([...docIdsComVinculo, ...docIdsParaZerar]);
+    if (todosDocIds.size === 0) return;
+
+    // Para cada documento, recalcula do zero e atualiza diretamente
+    for (const docId of todosDocIds) {
+      try {
+        // Soma todos os itens PRE que ainda vinculam este documento (0 se foi desvinculado)
+        const tempoTotal = allItems.reduce((sum, item) => {
+          if ((item.documentos_vinculados || []).includes(docId)) {
+            return sum + (Number(item.tempo_atendimento) || 0);
+          }
+          return sum;
+        }, 0);
+
+        await retryWithBackoff(
+          () => Documento.update(docId, { tempo_pre: tempoTotal }),
+          3, 1500, `PRE-UpdateDoc-${docId}`
+        );
+        setDocumentos(prev => prev.map(d => d.id === docId ? { ...d, tempo_pre: tempoTotal } : d));
+      } catch {
+        // Ignora erros individuais - não bloqueia o save
+      }
+    }
+  };
+
   const handleSave = async () => {
+    // Força save de todos os itens (inclusive os que não foram modificados via dirty)
+    // Usa itemsRef para garantir dados atualizados mesmo com filtro ativo
+    const currentItems = itemsRef.current;
+    currentItems.forEach(item => dirtyItemIds.current.add(String(item.id)));
+
+    // Se já está salvando, aguarda terminar antes de iniciar novo save
+    if (isSavingRef.current) {
+      let waited = 0;
+      while (isSavingRef.current && waited < 10000) {
+        await new Promise(r => setTimeout(r, 200));
+        waited += 200;
+      }
+    }
+
     await handleAutoSave();
+
+    // Atualizar tempo nos documentos vinculados (recalcula do zero)
+    await atualizarTempoDocumentos();
+
+    // Notifica o pai para recarregar os documentos com os novos tempo_pre
+    if (onAfterSave) onAfterSave();
+
     alert('Dados salvos com sucesso!');
   };
 
@@ -557,10 +618,47 @@ export default function PRETab({ empreendimento, readOnly = false }) {
     }
   };
 
+  const handlePlanejar = useCallback((item) => {
+    setItemParaPlanejar(item);
+    setShowPlanejamentoModal(true);
+  }, []);
+
+  const handleOpenLightbox = useCallback((imgUrl) => {
+    setLightboxImg(imgUrl);
+  }, []);
+
+  const handleRemoveExecutor = useCallback(async (item) => {
+    if (!confirm('Remover executor vinculado? Isso permitirá planejar novamente.')) return;
+    const updatedItem = { ...item, planejamento_executor: null, planejamento_executor_nome: null };
+    if (!item.id.toString().startsWith('temp-')) {
+      await retryWithBackoff(() => ItemPRE.update(item.id, {
+        empreendimento_id: item.empreendimento_id,
+        item: item.item,
+        data: item.data,
+        de: item.de,
+        descritiva: item.descritiva,
+        localizacao: item.localizacao,
+        assunto: item.assunto,
+        comentario: item.comentario,
+        disciplina: item.disciplina,
+        status: item.status || '',
+        resposta: item.resposta,
+        imagens: item.imagens || [],
+        tempo_atendimento: item.tempo_atendimento ?? null,
+        planejamento_executor: null,
+        planejamento_executor_nome: null,
+      }), 3, 2000, 'PRE-Remove-Executor');
+    }
+    setItems(prev => prev.map(it => it.id === item.id ? updatedItem : it));
+  }, []);
+
   const filteredItems = useMemo(() => {
-    if (filtroDispline === 'todas') return items;
-    return items.filter(item => item.descritiva === filtroDispline);
-  }, [items, filtroDispline]);
+    return items.filter(item => {
+      const matchDisciplina = filtroDispline === 'todas' || item.descritiva === filtroDispline;
+      const matchStatus = filtroStatus === 'todos' || item.status === filtroStatus;
+      return matchDisciplina && matchStatus;
+    });
+  }, [items, filtroDispline, filtroStatus]);
 
   return (
     <>
@@ -871,7 +969,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
                 />
               </div>
             </div>
-            <div className="no-print flex items-center gap-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div className="no-print flex flex-wrap items-center gap-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
               <label className="text-sm font-semibold text-gray-700 whitespace-nowrap">Filtrar por Disciplina:</label>
               <Select value={filtroDispline} onValueChange={setFiltroDispline}>
                 <SelectTrigger className="w-[250px]">
@@ -886,19 +984,28 @@ export default function PRETab({ empreendimento, readOnly = false }) {
                   ))}
                 </SelectContent>
               </Select>
-              {filtroDispline !== 'todas' && (
+              <label className="text-sm font-semibold text-gray-700 whitespace-nowrap">Filtrar por Status:</label>
+              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Todos os status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os status</SelectItem>
+                  <SelectItem value="Em andamento">Em andamento</SelectItem>
+                  <SelectItem value="Pendente">Pendente</SelectItem>
+                  <SelectItem value="Concluído">Concluído</SelectItem>
+                  <SelectItem value="Cancelado">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+              {(filtroDispline !== 'todas' || filtroStatus !== 'todos') && (
                 <span className="text-sm text-blue-700 font-medium">
-                  ({filteredItems.length})
+                  ({filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''})
                 </span>
               )}
             </div>
           </div>
 
           <div className="space-y-4 p-4">
-            {/* Tempo total da folha */}
-            <div className="mb-2 text-right text-xs font-semibold text-blue-700">
-              Tempo total da folha (comentários): {totalTempoFolha}h
-            </div>
             {filteredItems.length === 0 ? (
               <Card>
                 <CardContent className="p-8 text-center">
@@ -908,444 +1015,22 @@ export default function PRETab({ empreendimento, readOnly = false }) {
               </Card>
             ) : (
               filteredItems.map((item, index) => (
-                <div key={item.id} className={`flex gap-4 rounded-lg overflow-hidden ${index % 2 === 0 ? 'bg-white border border-gray-300' : 'bg-gray-100 border border-gray-300'}`}>
-                  {/* Container Principal (80%) */}
-                  <div className="w-4/5 p-4 space-y-4 border-r border-gray-300">
-                    {/* De, Descritiva e Assunto - lado a lado */}
-                    <div className="grid grid-cols-3 gap-3">
-                      {/* De */}
-                      <div>
-                        <label className="text-xs font-semibold text-gray-600 block mb-1">De</label>
-                        <Textarea
-                          value={item.de}
-                          onChange={(e) => handleUpdateItem(item.id, 'de', e.target.value)}
-                          className="w-full text-sm print:border-none print:bg-transparent resize-none"
-                          rows={3}
-                          disabled={readOnly}
-                          placeholder="De quem..."
-                        />
-                      </div>
-
-                      {/* Disciplina */}
-                      <div>
-                        <label className="text-xs font-semibold text-gray-600 block mb-1">Disciplina</label>
-                        <Textarea
-                          value={item.descritiva}
-                          onChange={(e) => handleUpdateItem(item.id, 'descritiva', e.target.value)}
-                          className="w-full text-sm print:border-none print:bg-transparent resize-none"
-                          rows={3}
-                          disabled={readOnly}
-                          placeholder="Disciplina..."
-                        />
-                      </div>
-
-                      {/* Assunto */}
-                      <div>
-                        <label className="text-xs font-semibold text-gray-600 block mb-1">Assunto</label>
-                        <Textarea
-                          value={item.assunto}
-                          onChange={(e) => handleUpdateItem(item.id, 'assunto', e.target.value)}
-                          className="w-full text-sm print:border-none print:bg-transparent resize-none"
-                          rows={3}
-                          disabled={readOnly}
-                          placeholder="Assunto..."
-                        />
-                      </div>
-                    </div>
-
-                    {/* Comentário + Documentos Vinculados + Tempo */}
-                    <div>
-                      <label className="text-xs font-semibold text-gray-600 block mb-1">Comentário</label>
-                      <Textarea
-                        value={item.comentario}
-                        onChange={(e) => handleUpdateItem(item.id, 'comentario', e.target.value)}
-                        className="w-full text-sm print:border-none print:bg-transparent resize-y"
-                        rows={4}
-                        disabled={readOnly}
-                        placeholder="Comentários adicionais..."
-                      />
-                      <div className="flex gap-2 mt-2">
-                        <div className="flex-1">
-                          <label className="text-xs font-semibold text-gray-600 block mb-1">Docs. do Comentário</label>
-                          <Select
-                            multiple
-                            value={item.comentario_documentos_vinculados || []}
-                            onValueChange={vals => handleUpdateItem(item.id, 'comentario_documentos_vinculados', vals)}
-                            disabled={readOnly}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Vincular documentos ao comentário..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {documentosDisponiveis.map(doc => (
-                                <SelectItem key={doc.id} value={doc.id}>
-                                  {doc.numero ? `${doc.numero} - ` : ''}{doc.arquivo}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="w-32">
-                          <label className="text-xs font-semibold text-gray-600 block mb-1">Tempo (h)</label>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.5"
-                            value={item.comentario_tempo || ''}
-                            onChange={e => handleUpdateItem(item.id, 'comentario_tempo', e.target.value)}
-                            disabled={readOnly}
-                            placeholder="0.0"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Resposta */}
-                    <div>
-                      <label className="text-xs font-semibold text-gray-600 block mb-1">Resposta</label>
-                      <Textarea
-                        value={item.resposta}
-                        onChange={(e) => handleUpdateItem(item.id, 'resposta', e.target.value)}
-                        className="w-full text-sm print:border-none print:bg-transparent resize-y"
-                        rows={3}
-                        placeholder="Resposta/Resolução..."
-                      />
-                    </div>
-
-                    {/* Imagens */}
-                    <div>
-                      <label className="text-xs font-semibold text-gray-600 block mb-2">Imagens</label>
-                      <div className="space-y-2">
-                        <div className="no-print">
-                          <input
-                            type="file"
-                            id={`file-input-${item.id}`}
-                            accept="image/*,.pdf"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleUploadImage(item.id, file);
-                              e.target.value = '';
-                            }}
-                            className="hidden"
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="w-full"
-                            onClick={() => document.getElementById(`file-input-${item.id}`).click()}
-                          >
-                            <Upload className="w-3 h-3 mr-2" />
-                            Anexar Imagem ou PDF
-                          </Button>
-                          <div
-                            contentEditable
-                            suppressContentEditableWarning
-                            className="mt-1 border-2 border-dashed border-gray-300 rounded p-2 text-center text-xs text-gray-400 cursor-pointer hover:border-blue-400 hover:text-blue-400 transition-colors focus:outline-none focus:border-blue-400 focus:text-blue-400"
-                            onKeyDown={(e) => { if (!e.ctrlKey && !e.metaKey) e.preventDefault(); }}
-                            onPaste={(e) => {
-                              e.preventDefault();
-                              const clipItems = e.clipboardData?.items;
-                              if (!clipItems) return;
-                              for (const clipItem of clipItems) {
-                                if (clipItem.type.startsWith('image/')) {
-                                  const rawFile = clipItem.getAsFile();
-                                  if (!rawFile) break;
-                                  const objectUrl = URL.createObjectURL(rawFile);
-                                  const img = new Image();
-                                  img.onload = () => {
-                                    const canvas = document.createElement('canvas');
-                                    canvas.width = img.naturalWidth;
-                                    canvas.height = img.naturalHeight;
-                                    canvas.getContext('2d').drawImage(img, 0, 0);
-                                    canvas.toBlob((blob) => {
-                                      if (!blob) return;
-                                      const pngFile = new window.File([blob], `print_${Date.now()}.png`, { type: 'image/png' });
-                                      handleUploadImage(item.id, pngFile);
-                                      URL.revokeObjectURL(objectUrl);
-                                    }, 'image/png');
-                                  };
-                                  img.src = objectUrl;
-                                  break;
-                                }
-                              }
-                            }}
-                          >
-                            Clique aqui e cole (Ctrl+V) para adicionar print
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {(item.imagens || []).filter(Boolean).map((imgUrl, idx) => (
-                            <div key={idx} className="relative group flex-shrink-0">
-                              {imgUrl.toLowerCase().endsWith('.pdf') || imgUrl.startsWith('data:application/pdf') ? (
-                                <a
-                                  href={imgUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="w-32 h-32 rounded border cursor-pointer hover:opacity-80 transition-all flex flex-col items-center justify-center bg-gray-50 text-xs font-medium text-blue-600 hover:bg-blue-50"
-                                >
-                                  <File className="w-6 h-6 mb-1" />
-                                  PDF
-                                </a>
-                              ) : (
-                                <img
-                                  src={imgUrl}
-                                  alt={`Imagem ${idx + 1}`}
-                                  className="w-32 h-32 object-cover rounded border cursor-pointer hover:opacity-80 transition-all"
-                                  onClick={() => setLightboxImg(imgUrl)}
-                                  title="Clique para ampliar"
-                                />
-                              )}
-                              {/* Botão ampliar - canto inferior esquerdo */}
-                              {!imgUrl.toLowerCase().endsWith('.pdf') && (
-                                <button
-                                  type="button"
-                                  onClick={() => setLightboxImg(imgUrl)}
-                                  className="absolute bottom-1 left-1 bg-black bg-opacity-60 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity no-print"
-                                  title="Ampliar imagem"
-                                >
-                                  <ZoomIn className="w-3 h-3" />
-                                </button>
-                              )}
-                              {/* Botão remover - canto superior direito */}
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveImage(item.id, imgUrl)}
-                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity no-print"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Container Secundário (20%) */}
-                  <div className="w-1/5 p-4 space-y-4 flex flex-col min-h-0">
-                    {/* Item */}
-                    <div>
-                      <label className="text-xs font-semibold text-gray-600 block mb-1">Item</label>
-                      {readOnly ? (
-                        <div className="text-sm font-medium p-2 bg-gray-50 rounded">{item.item}</div>
-                      ) : (
-                        <Input
-                          value={item.item}
-                          onChange={(e) => handleUpdateItem(item.id, 'item', e.target.value)}
-                          className="h-9 text-sm text-center font-medium print:border-none print:bg-transparent"
-                        />
-                      )}
-                    </div>
-
-                    {/* Data */}
-                    <div>
-                      <label className="text-xs font-semibold text-gray-600 block mb-1">Data</label>
-                      {readOnly ? (
-                        <div className="text-sm p-2 bg-gray-50 rounded">{item.data ? format(new Date(item.data), 'dd/MM/yyyy') : ''}</div>
-                      ) : (
-                        <Input
-                          type="date"
-                          value={item.data ? item.data.toString().substring(0, 10) : ''}
-                          onChange={(e) => handleUpdateItem(item.id, 'data', e.target.value)}
-                          className="h-9 text-sm print:border-none print:bg-transparent"
-                        />
-                      )}
-                    </div>
-
-                    {/* Localização */}
-                    <div>
-                      <label className="text-xs font-semibold text-gray-600 block mb-1">Localização</label>
-                      <Textarea
-                        value={item.localizacao}
-                        onChange={(e) => handleUpdateItem(item.id, 'localizacao', e.target.value)}
-                        className="w-full text-sm print:border-none print:bg-transparent resize-none"
-                        rows={3}
-                        disabled={readOnly}
-                        placeholder="Localização..."
-                      />
-                    </div>
-
-                    {/* Tempo de Atendimento */}
-                    <div>
-                      <label className="text-xs font-semibold text-gray-600 block mb-1">Tempo (horas)</label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={item.tempo_atendimento !== null && item.tempo_atendimento !== undefined ? String(Number(item.tempo_atendimento)) : ''}
-                        onChange={(e) => handleUpdateItem(item.id, 'tempo_atendimento', e.target.value !== '' ? parseFloat(e.target.value) : null)}
-                        onBlur={() => handleAutoSave()}
-                        className="h-9 text-sm print:border-none print:bg-transparent"
-                        disabled={readOnly}
-                        placeholder="0.0"
-                      />
-                    </div>
-
-                     {/* Status */}
-                    <div>
-                      <label className="text-xs font-semibold text-gray-600 block mb-1">Status</label>
-                      {readOnly ? (
-                        <div className={`text-sm p-2 rounded text-center font-medium ${STATUS_COLORS[item.status] || 'bg-gray-100'}`}>
-                          {item.status || 'Sem status'}
-                        </div>
-                      ) : (
-                        <Select
-                          value={item.status}
-                          onValueChange={(value) => handleUpdateItem(item.id, 'status', value)}
-                        >
-                          <SelectTrigger className={`h-9 text-sm print:border-none print:bg-transparent ${STATUS_COLORS[item.status] || ''}`}>
-                            <SelectValue placeholder="Sem status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={null}>Sem status</SelectItem>
-                            <SelectItem value="Em andamento">Em andamento</SelectItem>
-                            <SelectItem value="Pendente">Pendente</SelectItem>
-                            <SelectItem value="Concluído">Concluído</SelectItem>
-                            <SelectItem value="Cancelado">Cancelado</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
-
-                    {/* Documentos Vinculados */}
-                    <div className="no-print">
-                      <label className="text-xs font-semibold text-gray-600 block mb-1">Docs. Vinculados</label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" size="sm" className="w-full text-xs justify-start h-8">
-                            <FileText className="w-3 h-3 mr-1 flex-shrink-0" />
-                            <span className="truncate">
-                              {(item.documentos_vinculados || []).length > 0
-                                ? `${(item.documentos_vinculados || []).length} doc(s)`
-                                : 'Vincular...'}
-                            </span>
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-72 p-2" align="end">
-                          <p className="text-xs font-semibold text-gray-500 mb-2">Selecionar documentos</p>
-                          <div className="space-y-1 max-h-48 overflow-y-auto">
-                            {documentosDisponiveis.length === 0 ? (
-                              <p className="text-xs text-gray-400 text-center py-2">Nenhum documento cadastrado</p>
-                            ) : (
-                              documentosDisponiveis.map(doc => {
-                                const isChecked = (item.documentos_vinculados || []).includes(doc.id);
-                                return (
-                                  <label key={doc.id} className="flex items-start gap-2 text-xs cursor-pointer hover:bg-gray-50 p-1.5 rounded">
-                                    <input
-                                      type="checkbox"
-                                      className="mt-0.5 flex-shrink-0"
-                                      checked={isChecked}
-                                      onChange={(e) => {
-                                        const current = item.documentos_vinculados || [];
-                                        const newDocs = e.target.checked
-                                          ? [...current, doc.id]
-                                          : current.filter(id => id !== doc.id);
-                                        handleUpdateItem(item.id, 'documentos_vinculados', newDocs);
-                                      }}
-                                    />
-                                    <span className="leading-tight">{doc.numero ? `${doc.numero} - ` : ''}{doc.arquivo}</span>
-                                  </label>
-                                );
-                              })
-                            )}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                      {(item.documentos_vinculados || []).length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {(item.documentos_vinculados || []).slice(0, 2).map(docId => {
-                            const doc = documentosDisponiveis.find(d => d.id === docId);
-                            return doc ? (
-                              <Badge key={docId} variant="outline" className="text-xs px-1 py-0 max-w-full">
-                                <span className="truncate max-w-[90px] block">{doc.numero || (doc.arquivo || '').substring(0, 12)}</span>
-                              </Badge>
-                            ) : null;
-                          })}
-                          {(item.documentos_vinculados || []).length > 2 && (
-                            <Badge variant="outline" className="text-xs px-1 py-0">+{(item.documentos_vinculados || []).length - 2}</Badge>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Ações */}
-                    <div className="pt-4 no-print space-y-2">
-                      {item.planejamento_executor ? (
-                        <div className="space-y-1">
-                          <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 space-y-1">
-                            {empreendimento?.num_proposta && (
-                              <p className="text-xs font-semibold text-green-600 uppercase tracking-wide">OS {empreendimento.num_proposta}</p>
-                            )}
-                            <p className="text-xs text-green-800 leading-snug line-clamp-3">
-                              {[
-                                `Item ${item.item}`,
-                                item.de || null,
-                                item.assunto || item.descritiva || null,
-                              ].filter(Boolean).join(' - ')}
-                            </p>
-                            <div className="flex items-center gap-1 pt-1 border-t border-green-200">
-                              <CalendarPlus className="w-3 h-3 flex-shrink-0 text-green-600" />
-                              <span className="truncate font-medium text-xs text-green-700">{item.planejamento_executor_nome || item.planejamento_executor}</span>
-                            </div>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-full text-xs text-gray-400 hover:text-red-500 hover:bg-red-50"
-                            onClick={async () => {
-                              if (!confirm('Remover executor vinculado? Isso permitirá planejar novamente.')) return;
-                              const updatedItem = { ...item, planejamento_executor: null, planejamento_executor_nome: null };
-                              if (!item.id.toString().startsWith('temp-')) {
-                                await retryWithBackoff(() => ItemPRE.update(item.id, {
-                                  empreendimento_id: item.empreendimento_id,
-                                  item: item.item,
-                                  data: item.data,
-                                  de: item.de,
-                                  descritiva: item.descritiva,
-                                  localizacao: item.localizacao,
-                                  assunto: item.assunto,
-                                  comentario: item.comentario,
-                                  disciplina: item.disciplina,
-                                  status: item.status || '',
-                                  resposta: item.resposta,
-                                  imagens: item.imagens || [],
-                                  tempo_atendimento: item.tempo_atendimento ?? null,
-                                  documentos_vinculados: item.documentos_vinculados || [],
-                                  planejamento_executor: null,
-                                  planejamento_executor_nome: null,
-                                }), 3, 2000, 'PRE-Remove-Executor');
-                              }
-                              setItems(prev => prev.map(it => it.id === item.id ? updatedItem : it));
-                            }}
-                          >
-                            <X className="w-3 h-3 mr-1" />
-                            Remover executor
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          className="w-full text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200"
-                          onClick={() => { setItemParaPlanejar(item); setShowPlanejamentoModal(true); }}
-                        >
-                          <CalendarPlus className="w-4 h-4 mr-2" />
-                          Planejar
-                        </Button>
-                      )}
-                      {!readOnly && (
-                        <Button
-                          variant="ghost"
-                          className="w-full text-red-500 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => handleDeleteItem(item.id)}
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Excluir
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                <PREItemRow
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  readOnly={readOnly}
+                  empreendimento={empreendimento}
+                  documentos={documentos}
+                  onUpdate={handleUpdateItem}
+                  onDelete={handleDeleteItem}
+                  onUploadImage={handleUploadImage}
+                  onRemoveImage={handleRemoveImage}
+                  onOpenLightbox={handleOpenLightbox}
+                  onPlanejar={handlePlanejar}
+                  onRemoveExecutor={handleRemoveExecutor}
+                  onBlurSave={handleAutoSave}
+                />
               ))
             )}
           </div>

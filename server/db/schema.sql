@@ -476,6 +476,8 @@ ALTER TABLE itempre ADD COLUMN IF NOT EXISTS planejamento_executor VARCHAR(255);
 ALTER TABLE itempre ADD COLUMN IF NOT EXISTS planejamento_executor_nome VARCHAR(255);
 ALTER TABLE itempre ADD COLUMN IF NOT EXISTS documentos_vinculados JSONB DEFAULT '[]';
 
+ALTER TABLE documentos ADD COLUMN IF NOT EXISTS tempo_pre NUMERIC(8,2) DEFAULT 0;
+
 CREATE INDEX IF NOT EXISTS itempre_empreendimento_idx ON itempre(empreendimento_id);
 
 -- Controle OS: colunas explícitas conforme schema do frontend

@@ -11,29 +11,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Search, ChevronDown, ChevronRight, FileText, Loader2, Upload, Download, RefreshCw } from "lucide-react";
+import { Search, ChevronDown, ChevronRight, FileText, Loader2, Upload, Download } from "lucide-react";
 import { Plus } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import DocumentoForm from "./DocumentoForm";
 import AtividadeFormModal from "./AtividadeFormModal";
-import DocumentoItem from "./DocumentoItem";
+import DocumentoItemBase from "./DocumentoItem";
+const MemoDocumentoItem = React.memo(DocumentoItemBase);
 import PlanejamentoDocumentoEtapaModal from './PlanejamentoDocumentoEtapaModal';
 import PlanejamentoDocumentoDataModal from './PlanejamentoDocumentoDataModal';
 import { ETAPAS_ORDER } from '../utils/PredecessoraValidator';
-import { getNextWorkingDay, distribuirHorasPorDias, isWorkingDay, calculateEndDate } from '../utils/DateCalculator';
+import { getNextWorkingDay, distribuirHorasPorDias, isWorkingDay, calculateEndDate, ensureWorkingDay } from '../utils/DateCalculator';
 import { format, isValid, parseISO, addDays } from 'date-fns';
 import { retryWithBackoff, retryWithExtendedBackoff } from '../utils/apiUtils';
 
 const parseDate = (dateString) => {
   if (!dateString) return null;
   if (dateString instanceof Date) return dateString;
-  // Se já é ISO timestamp completo (contém 'T'), parsear diretamente e normalizar para meia-noite local
-  if (typeof dateString === 'string' && dateString.includes('T')) {
-    const d = new Date(dateString);
-    if (isNaN(d.getTime())) return null;
-    // Retornar meia-noite local para manter consistência com datas no formato YYYY-MM-DD
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  }
   return new Date(`${dateString}T00:00:00`);
 };
 
@@ -71,60 +65,27 @@ export default function DocumentosTab({
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
-  const [importModoAtualizacao, setImportModoAtualizacao] = useState(false);
 
   const [isDocEtapaModalOpen, setIsDocEtapaModal] = useState(false);
   const [documentForDocEtapaModal, setDocumentForDocEtapaModal] = useState(null);
   const [isDocDataModalOpen, setIsDocDataModalOpen] = useState(false);
   const [documentForDocDataModal, setDocumentForDocDataModal] = useState(null);
 
-  // Loading state via per-doc callbacks — avoids re-rendering all DocumentoItems when one loads
-  const loadingDocsSettersRef = useRef({});
-  const setDocLoading = useCallback((docId, val) => {
-    loadingDocsSettersRef.current[String(docId)]?.(val);
-  }, []);
-  const registerLoadingSetter = useCallback((docId, setter) => {
-    if (setter) loadingDocsSettersRef.current[String(docId)] = setter;
-    else delete loadingDocsSettersRef.current[String(docId)];
-  }, []);
+  const [loadingDocs, setLoadingDocs] = useState({});
   const [localDocumentos, setLocalDocumentos] = useState(documentos);
-  const localDocumentosRef = useRef(documentos);
-  const localPlanejamentosRef = useRef(planejamentos);
-  const autoPlanejarRef = useRef(null);
   const [atividadesEmpCache, setAtividadesEmpCache] = useState([]);
   const [localPlanejamentos, setLocalPlanejamentos] = useState(planejamentos);
   const [executorPreSelecionado, setExecutorPreSelecionado] = useState(null);
-  const cargaDiariaCacheRef = useRef({});
-  // Funções de compatibilidade para não alterar chamadas espalhadas
-  const setCargaDiariaCache = useCallback((updater) => {
-    if (typeof updater === 'function') {
-      cargaDiariaCacheRef.current = updater(cargaDiariaCacheRef.current);
-    } else {
-      cargaDiariaCacheRef.current = updater;
-    }
-  }, []);
-  const [disciplinasMinimizadas, setDisciplinasMinimizadas] = useState({});
-
-  const filteredDocumentos = useMemo(() => {
-    let filtered = localDocumentos.filter(doc =>
-      (doc.numero?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
-      (doc.arquivo?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
-      (doc.descritivo?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()))
-    );
-    if (filtroArea !== "todas") filtered = filtered.filter(doc => doc.pavimento_id === filtroArea);
-    return filtered.sort((a, b) => (a.arquivo || '').trim().toLowerCase().localeCompare((b.arquivo || '').trim().toLowerCase(), 'pt-BR', { numeric: true, sensitivity: 'base' }));
-  }, [localDocumentos, debouncedSearchTerm, filtroArea]);
-
-  const documentosPorDisciplina = useMemo(() => {
-    const grupos = {};
-    filteredDocumentos.forEach(doc => {
-      const disciplinasArr = Array.isArray(doc.disciplinas) ? doc.disciplinas : [];
-      const disciplina = disciplinasArr.length > 0 ? disciplinasArr[0] : (doc.disciplina || 'Sem Disciplina');
-      if (!grupos[disciplina]) grupos[disciplina] = [];
-      grupos[disciplina].push(doc);
+  const [cargaDiariaCache, setCargaDiariaCache] = useState({});
+  const [disciplinasMinimizadas, setDisciplinasMinimizadas] = useState(() => {
+    // Inicializar todas as disciplinas como colapsadas para não renderizar todos os itens de uma vez
+    const inicial = {};
+    documentos.forEach(doc => {
+      const d = doc.disciplina || 'Sem Disciplina';
+      inicial[d] = true;
     });
-    return Object.entries(grupos).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filteredDocumentos]);
+    return inicial;
+  });
 
   // Recarregar planejamentos quando triggerUpdate for chamado (ex: após execução/pause/finish)
   const reloadPlanejamentos = useCallback(async () => {
@@ -143,6 +104,7 @@ export default function DocumentosTab({
         ...(plansDoc || []).map(p => ({ ...p, tipo_plano: 'documento' }))
       ]);
     } catch (e) {
+      console.warn('Erro ao recarregar planejamentos:', e);
     }
   }, [empreendimento?.id]);
 
@@ -156,9 +118,7 @@ export default function DocumentosTab({
   }, [updateKey, reloadPlanejamentos]);
 
   useEffect(() => { setLocalDocumentos(documentos); }, [documentos]);
-  useEffect(() => { localDocumentosRef.current = localDocumentos; }, [localDocumentos]);
   useEffect(() => { setLocalPlanejamentos(planejamentos); }, [planejamentos]);
-  useEffect(() => { localPlanejamentosRef.current = localPlanejamentos; }, [localPlanejamentos]);
 
   // Carregar AtividadesEmpreendimento UMA VEZ para o empreendimento inteiro
   useEffect(() => {
@@ -182,7 +142,7 @@ export default function DocumentosTab({
   }, []);
 
   const getCargaDiariaExecutor = useCallback(async (executorEmail, forceRefresh = false) => {
-    if (!forceRefresh && cargaDiariaCacheRef.current[executorEmail]) return cargaDiariaCacheRef.current[executorEmail];
+    if (!forceRefresh && cargaDiariaCache[executorEmail]) return cargaDiariaCache[executorEmail];
 
     try {
       const PA = PlanejamentoAtividade;
@@ -219,58 +179,127 @@ export default function DocumentosTab({
         }
       });
 
-      cargaDiariaCacheRef.current = { ...cargaDiariaCacheRef.current, [executorEmail]: cargaDiaria };
+      setCargaDiariaCache(prev => ({ ...prev, [executorEmail]: cargaDiaria }));
       return cargaDiaria;
     } catch (error) {
       console.error('Erro ao carregar carga diária:', error);
       return {};
     }
-  }, []);
+  }, [cargaDiariaCache]);
 
-  const handleCascadingUpdate = useCallback(async (startDoc, etapa, executor) => {
-    if (!startDoc?.id || !startDoc?.termino_planejado || !etapa || !executor) return;
+  const handleCascadingUpdate = useCallback(async (startDoc) => {
+    let docsToUpdateQueue = [{ ...startDoc }];
+    const updatedDocsMap = new Map();
+    updatedDocsMap.set(startDoc.id, { ...startDoc });
+    const currentDocStateMap = new Map(localDocumentos.map(d => [d.id, { ...d }]));
+    currentDocStateMap.set(startDoc.id, { ...startDoc });
 
-    const terminoDate = parseDate(startDoc.termino_planejado);
-    if (!isValid(terminoDate)) return;
+    // Usar atividades já filtradas para este empreendimento (evita iterar sobre tudo)
+    const atividadesEmp = allAtividades.filter(a => !a.empreendimento_id || a.empreendimento_id === empreendimento.id);
 
-    // Passar o próprio dia do término do pai como início candidato.
-    // distribuirHorasPorDias verifica a carga restante nesse dia:
-    //   - Se houver espaço (ex: pai usou só 4h), o filho aproveita as horas livres.
-    //   - Se o dia estiver cheio (8h), avança automaticamente para o próximo dia útil.
-    const novaDataInicio = format(terminoDate, 'yyyy-MM-dd');
+    try {
+      while (docsToUpdateQueue.length > 0) {
+        const currentDoc = docsToUpdateQueue.shift();
+        const children = localDocumentos.filter(d => d.predecessora_id === currentDoc.id);
 
-    const allDocs = localDocumentosRef.current;
-    const children = allDocs.filter(d =>
-      d.predecessora_id != null && String(d.predecessora_id) === String(startDoc.id)
-    );
+        for (const child of children) {
+          setLoadingDocs(prev => ({ ...prev, [child.id]: true }));
+          const currentPredecessorState = updatedDocsMap.get(child.predecessora_id) || currentDocStateMap.get(child.predecessora_id);
 
-    for (const child of children) {
-      try {
-        await autoPlanejarRef.current?.(child, etapa, executor, 'manual', novaDataInicio);
-      } catch (err) {
-        // silently skip failed cascade child
+          if (currentPredecessorState?.termino_planejado && isValid(parseDate(currentPredecessorState.termino_planejado))) {
+            const dataTerminoPredecessor = parseDate(currentPredecessorState.termino_planejado);
+            let novaDataInicio = ensureWorkingDay(dataTerminoPredecessor);
+
+            const subdisciplinasChild = child.subdisciplinas || [];
+            const disciplinaChild = child.disciplina;
+            const fatorDificuldadeChild = child.fator_dificuldade || 1;
+
+            const etapaOverridesChild = new Map();
+            const tempoOverridesChild = new Map();
+            atividadesEmp.forEach(ativ => {
+              if (ativ.empreendimento_id === empreendimento.id && ativ.id_atividade && ativ.tempo !== -999) {
+                etapaOverridesChild.set(ativ.id_atividade, ativ.etapa);
+                etapaOverridesChild.set(ativ.id, ativ.etapa);
+                tempoOverridesChild.set(ativ.id_atividade, ativ.tempo);
+                tempoOverridesChild.set(ativ.id, ativ.tempo);
+              }
+            });
+
+            let atividadesGeraisChild = atividadesEmp.filter(ativ => {
+              if (ativ.empreendimento_id) return false;
+              return ativ.disciplina === disciplinaChild && Array.isArray(subdisciplinasChild) && subdisciplinasChild.includes(ativ.subdisciplina);
+            });
+
+            const atividadesExcluidasGlobalChild = new Set();
+            const atividadesExcluidasPorDocChild = new Set();
+            atividadesEmp.forEach(ativ => {
+              if (ativ.empreendimento_id === empreendimento.id && ativ.tempo === -999 && ativ.id_atividade) {
+                if (ativ.documento_id === child.id) atividadesExcluidasPorDocChild.add(ativ.id_atividade);
+                else if (!ativ.documento_id) atividadesExcluidasGlobalChild.add(ativ.id_atividade);
+              }
+            });
+
+            atividadesGeraisChild = atividadesGeraisChild.filter(ativ =>
+              !atividadesExcluidasGlobalChild.has(ativ.id) && !atividadesExcluidasPorDocChild.has(ativ.id)
+            );
+
+            const atividadesParaCalculoChild = atividadesGeraisChild.filter(ativ => {
+              const etapaBase = etapaOverridesChild.has(ativ.id) ? etapaOverridesChild.get(ativ.id) : ativ.etapa;
+              return etapaParaPlanejamento === "todas" || (etapaBase || '').toLowerCase() === (etapaParaPlanejamento || '').toLowerCase();
+            });
+
+            const tempoTotalChild = atividadesParaCalculoChild.reduce((total, ativ) => {
+              const tempoBase = tempoOverridesChild.has(ativ.id) ? parseFloat(tempoOverridesChild.get(ativ.id)) || 0 : parseFloat(ativ.tempo) || 0;
+              const isConfeccaoA = ativ.atividade && String(ativ.atividade).trim().startsWith('Confecção de A-');
+              return total + tempoBase * (isConfeccaoA ? 1 : fatorDificuldadeChild);
+            }, 0);
+
+            let novaDataTermino = tempoTotalChild > 0 && isValid(novaDataInicio) ? calculateEndDate(novaDataInicio, tempoTotalChild, 8) : null;
+
+            const newInicioStr = isValid(novaDataInicio) ? format(novaDataInicio, 'yyyy-MM-dd') : null;
+            const newTerminoStr = isValid(novaDataTermino) ? format(novaDataTermino, 'yyyy-MM-dd') : null;
+
+            if (newInicioStr !== child.inicio_planejado || newTerminoStr !== child.termino_planejado || tempoTotalChild !== child.tempo_total) {
+              const dbUpdatedChild = await retryWithExtendedBackoff(() => Documento.update(child.id, {
+                inicio_planejado: newInicioStr, termino_planejado: newTerminoStr, tempo_total: tempoTotalChild
+              }), `cascadeUpdate-${child.id}`);
+
+              handleLocalUpdate(dbUpdatedChild);
+              updatedDocsMap.set(dbUpdatedChild.id, dbUpdatedChild);
+              currentDocStateMap.set(dbUpdatedChild.id, dbUpdatedChild);
+              docsToUpdateQueue.push(dbUpdatedChild);
+            }
+          }
+          setLoadingDocs(prev => ({ ...prev, [child.id]: false }));
+        }
       }
+      setCargaDiariaCache({});
+    } catch (error) {
+      console.error("Erro durante cascata:", error);
+      alert("Erro ao atualizar documentos em cascata.");
+    } finally {
+      setLoadingDocs({});
     }
-  }, []);
+  }, [handleLocalUpdate, allAtividades, localDocumentos, etapaParaPlanejamento, pavimentos, empreendimento.id, setCargaDiariaCache]);
 
   const autoPlanejarAtividades = useCallback(async (documento, etapa, executorEmail, metodoData, dataManualInicio) => {
     if (!documento?.id || !executorEmail || !etapa) { alert("Dados insuficientes para planejar."); return; }
     if (etapa === 'todas') { alert("Selecione uma etapa específica antes de definir o executor."); return; }
 
-    setDocLoading(documento.id, true);
+    setLoadingDocs(prev => ({ ...prev, [documento.id]: true }));
 
     try {
       const subdisciplinasDoc = documento.subdisciplinas || [];
-      const disciplinasDoc = Array.isArray(documento.disciplinas) && documento.disciplinas.length > 0
-        ? documento.disciplinas
-        : (documento.disciplina ? [documento.disciplina] : []);
+      const disciplinaDoc = documento.disciplina;
       const fatorDificuldade = documento.fator_dificuldade || 1;
+
+      // Usar apenas atividades deste empreendimento + genéricas (pre-filtrado)
+      const atividadesEmpAuto = allAtividades.filter(a => !a.empreendimento_id || a.empreendimento_id === empreendimento.id);
 
       const etapaOverrides = new Map();
       const tempoOverrides = new Map();
-      allAtividades.forEach(ativ => {
+      atividadesEmpAuto.forEach(ativ => {
         if (ativ.empreendimento_id === empreendimento.id && ativ.id_atividade && ativ.tempo !== -999) {
-          // Indexar tanto por id_atividade (para lookup por id genérico) como pelo id original
           etapaOverrides.set(ativ.id_atividade, ativ.etapa);
           etapaOverrides.set(ativ.id, ativ.etapa);
           tempoOverrides.set(ativ.id_atividade, ativ.tempo);
@@ -278,28 +307,19 @@ export default function DocumentosTab({
         }
       });
 
-      // IDs de documentos do empreendimento para lookup
-      const documentoIdsDoEmp = allAtividades
-        .filter(a => a.empreendimento_id === empreendimento.id && a.documento_id)
-        .map(a => a.documento_id);
-
       // IDs de atividades genéricas que têm override específico nesta folha (evitar dupla contagem)
       const idsComOverrideEspecifico = new Set();
-      allAtividades.forEach(ativ => {
+      atividadesEmpAuto.forEach(ativ => {
         if (ativ.empreendimento_id === empreendimento.id && ativ.documento_id === documento.id && ativ.id_atividade && ativ.tempo !== -999) {
-          idsComOverrideEspecifico.add(String(ativ.id_atividade));
+          idsComOverrideEspecifico.add(ativ.id_atividade);
         }
       });
 
-      let atividadesGerais = allAtividades.filter(ativ => {
-        // Atividades genéricas (sem empreendimento) com disciplina/subdisciplina compatível
+      let atividadesGerais = atividadesEmpAuto.filter(ativ => {
         if (!ativ.empreendimento_id) {
-          if (idsComOverrideEspecifico.has(String(ativ.id))) return false;
-          const disciplinaMatch = disciplinasDoc.length === 0 || disciplinasDoc.includes(ativ.disciplina);
-          const subdisciplinaMatch = Array.isArray(subdisciplinasDoc) && subdisciplinasDoc.includes(ativ.subdisciplina);
-          return disciplinaMatch && subdisciplinaMatch;
+          if (idsComOverrideEspecifico.has(ativ.id)) return false;
+          return ativ.disciplina === disciplinaDoc && Array.isArray(subdisciplinasDoc) && subdisciplinasDoc.includes(ativ.subdisciplina);
         }
-        // Atividades específicas desta folha (vinculadas ao documento)
         if (ativ.empreendimento_id === empreendimento.id && ativ.documento_id === documento.id && ativ.tempo !== -999 && ativ.tempo !== 0) {
           return true;
         }
@@ -308,17 +328,17 @@ export default function DocumentosTab({
 
       const atividadesExcluidasGlobal = new Set();
       const atividadesExcluidasPorDoc = new Set();
-      allAtividades.forEach(ativ => {
+      atividadesEmpAuto.forEach(ativ => {
         if (ativ.empreendimento_id === empreendimento.id && ativ.tempo === -999 && ativ.id_atividade) {
-          if (ativ.documento_id === documento.id) atividadesExcluidasPorDoc.add(String(ativ.id_atividade));
-          else if (!ativ.documento_id) atividadesExcluidasGlobal.add(String(ativ.id_atividade));
+          if (ativ.documento_id === documento.id) atividadesExcluidasPorDoc.add(ativ.id_atividade);
+          else if (!ativ.documento_id) atividadesExcluidasGlobal.add(ativ.id_atividade);
         }
       });
 
       atividadesGerais = atividadesGerais.filter(ativ =>
         ativ.empreendimento_id // específica da folha, não filtrar por exclusão global
           ? true
-          : !atividadesExcluidasGlobal.has(String(ativ.id)) && !atividadesExcluidasPorDoc.has(String(ativ.id))
+          : !atividadesExcluidasGlobal.has(ativ.id) && !atividadesExcluidasPorDoc.has(ativ.id)
       );
 
       // Mapear etapa do catálogo para etapa do empreendimento
@@ -330,10 +350,7 @@ export default function DocumentosTab({
         return (etapaBase || '').toLowerCase() === (etapa || '').toLowerCase();
       });
 
-      if (atividadesDaEtapa.length === 0) {
-        alert(`Nenhuma atividade encontrada para a etapa "${etapa}" no documento "${documento.numero || documento.arquivo}". Verifique se as atividades do catálogo possuem esta etapa.`);
-        return;
-      }
+      if (atividadesDaEtapa.length === 0) { console.warn(`Nenhuma atividade encontrada para a etapa "${etapa}" no documento ${documento.numero}. Pulando.`); return; }
 
       const tempoTotal = atividadesDaEtapa.reduce((total, ativ) => {
         const tempoBase = tempoOverrides.has(ativ.id) ? parseFloat(tempoOverrides.get(ativ.id)) || 0 : parseFloat(ativ.tempo) || 0;
@@ -342,19 +359,17 @@ export default function DocumentosTab({
       }, 0);
 
       // Remover planejamentos antigos
-      const planejamentosAtividadeAntigos = localPlanejamentosRef.current.filter(p => p.documento_id === documento.id && p.etapa === etapa && p.tipo_plano === 'atividade');
+      const planejamentosAtividadeAntigos = localPlanejamentos.filter(p => p.documento_id === documento.id && p.etapa === etapa && p.tipo_plano === 'atividade');
       if (planejamentosAtividadeAntigos.length > 0) {
         await Promise.all(planejamentosAtividadeAntigos.map(p => retryWithBackoff(() => PlanejamentoAtividade.delete(p.id), 3, 1000, `deleteOldAtiv-${p.id}`)));
         setLocalPlanejamentos(prev => prev.filter(p => !(p.documento_id === documento.id && p.etapa === etapa && p.tipo_plano === 'atividade')));
       }
-      const planejamentosDocumentoAntigos = localPlanejamentosRef.current.filter(p => p.documento_id === documento.id && p.etapa === etapa && p.tipo_plano === 'documento');
+      const planejamentosDocumentoAntigos = localPlanejamentos.filter(p => p.documento_id === documento.id && p.etapa === etapa && p.tipo_plano === 'documento');
       if (planejamentosDocumentoAntigos.length > 0) {
         await Promise.all(planejamentosDocumentoAntigos.map(p => retryWithBackoff(() => PlanejamentoDocumento.delete(p.id), 3, 1000, `deleteOldDocPlan-${p.id}`)));
         setLocalPlanejamentos(prev => prev.filter(p => !(p.documento_id === documento.id && p.etapa === etapa && p.tipo_plano === 'documento')));
       }
 
-      // forceRefresh=true: busca carga atualizada da API após deletar planejamentos antigos,
-      // garantindo que horas deletadas de documentos anteriores no cascade não contaminem o cache.
       const cargaDiaria = await getCargaDiariaExecutor(executorEmail, true);
 
       let dataInicio;
@@ -362,15 +377,15 @@ export default function DocumentosTab({
       const hojeMidnight = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
 
       if (metodoData === 'manual' && dataManualInicio) {
-        const parsedManualDate = parseDate(dataManualInicio);
-        if (!parsedManualDate || !isValid(parsedManualDate)) throw new Error(`Data manual de início inválida: ${dataManualInicio}`);
+        const parsedManualDate = parseISO(dataManualInicio);
+        if (!isValid(parsedManualDate)) throw new Error(`Data manual de início inválida: ${dataManualInicio}`);
         dataInicio = parsedManualDate;
       } else if (documento.predecessora_id) {
-        const predecessora = localDocumentosRef.current.find(d => String(d.id) === String(documento.predecessora_id));
+        const predecessora = localDocumentos.find(d => d.id === documento.predecessora_id);
         if (!predecessora?.termino_planejado || !isValid(parseDate(predecessora.termino_planejado))) {
-          throw new Error(`Predecessora '${predecessora?.numero}' não possui data de término planejada. Planeje a predecessora primeiro.`);
+          throw new Error(`Predecessora '${predecessora?.numero}' não possui data de término planejada.`);
         }
-        dataInicio = getNextWorkingDay(parseDate(predecessora.termino_planejado));
+        dataInicio = ensureWorkingDay(parseDate(predecessora.termino_planejado));
       } else {
         let diaDisponivel = new Date(hojeMidnight);
         let tentativas = 0;
@@ -388,7 +403,6 @@ export default function DocumentosTab({
       const { distribuicao, dataTermino, novaCargaDiaria } = distribuirHorasPorDias(dataInicio, tempoTotal, 8, cargaDiaria, metodoData === 'manual');
 
       if (!distribuicao || Object.keys(distribuicao).length === 0) throw new Error(`Não foi possível distribuir as horas na agenda.`);
-      if (!dataTermino || !isValid(dataTermino)) throw new Error(`Data de término inválida após distribuição das horas.`);
 
       const diasUtilizados = Object.keys(distribuicao).sort();
       const inicioPlanejado = diasUtilizados[0];
@@ -397,8 +411,8 @@ export default function DocumentosTab({
       // Buscar predecessora_id do planejamento da predecessora (para ordenação correta no calendário)
       let predecessoraPlanejamentoId = null;
       if (documento.predecessora_id) {
-        const planoPredecessora = localPlanejamentosRef.current.find(p =>
-          String(p.documento_id) === String(documento.predecessora_id) &&
+        const planoPredecessora = localPlanejamentos.find(p =>
+          p.documento_id === documento.predecessora_id &&
           (p.etapa || '').toLowerCase() === (etapa || '').toLowerCase() &&
           p.tipo_plano === 'documento'
         );
@@ -408,7 +422,7 @@ export default function DocumentosTab({
       const novoPlano = await retryWithBackoff(() => PlanejamentoDocumento.create({
         empreendimento_id: empreendimento.id,
         documento_id: documento.id,
-        descritivo: [documento.numero, documento.arquivo, etapa].filter(Boolean).join(' - ') || etapa,
+        descritivo: `${documento.numero} - ${etapa}`,
         etapa, executor_principal: executorEmail, executores: [executorEmail],
         tempo_planejado: tempoTotal, inicio_planejado: inicioPlanejado,
         termino_planejado: terminoPlanejado, horas_por_dia: distribuicao,
@@ -423,128 +437,19 @@ export default function DocumentosTab({
 
       handleLocalUpdate(docAtualizado);
       setLocalPlanejamentos(prev => prev.filter(p => !(p.documento_id === documento.id && p.etapa === etapa)).concat({ ...novoPlano, tipo_plano: 'documento' }));
-      // Atualizar cache local com nova carga (cascade reutiliza sem nova chamada API)
-      cargaDiariaCacheRef.current = { ...cargaDiariaCacheRef.current, [executorEmail]: novaCargaDiaria };
-      await handleCascadingUpdate(docAtualizado, etapa, executorEmail);
+      setCargaDiariaCache({});
+      await handleCascadingUpdate(docAtualizado);
 
     } catch (error) {
       console.error("❌ Erro no planejamento automático:", error);
       alert(`Erro no planejamento: ${error.message || error}`);
       throw error;
     } finally {
-      setDocLoading(documento.id, false);
+      setLoadingDocs(prev => ({ ...prev, [documento.id]: false }));
     }
-  }, [allAtividades, empreendimento, handleLocalUpdate, setLocalPlanejamentos, getCargaDiariaExecutor, handleCascadingUpdate, setDocLoading]);
+  }, [allAtividades, empreendimento, handleLocalUpdate, localPlanejamentos, setLocalPlanejamentos, getCargaDiariaExecutor, handleCascadingUpdate, localDocumentos]);
 
-  // Mantém o ref sempre atualizado para o cascade usar sem criar dependência circular
-  autoPlanejarRef.current = autoPlanejarAtividades;
-
-  const [isRecalculandoTodas, setIsRecalculandoTodas] = useState(false);
-
-  const handleRecalcularTodasHoras = useCallback(async () => {
-    if (!window.confirm(`Recalcular horas de todos os ${localDocumentos.length} documentos a partir das atividades vinculadas?\n\nIsso pode levar alguns segundos.`)) return;
-    setIsRecalculandoTodas(true);
-    const ETAPA_TEMPO_MAP = {
-      'Concepção': 'tempo_concepcao', 'Planejamento': 'tempo_planejamento',
-      'Estudo Preliminar': 'tempo_estudo_preliminar', 'Ante-Projeto': 'tempo_ante_projeto',
-      'Projeto Básico': 'tempo_projeto_basico', 'Projeto Executivo': 'tempo_projeto_executivo',
-      'Liberado para Obra': 'tempo_liberado_obra',
-    };
-    const genericAtividades = (allAtividades || []).filter(a => !a.empreendimento_id && a.tempo !== -999);
-    const projectAtividades = (allAtividades || []).filter(a => a.empreendimento_id != null && a.tempo !== -999);
-
-    // Exclusões globais: atividades com tempo=-999, id_atividade preenchido e sem documento_id específico
-    const atividadesExcluidasGlobal = new Set(
-      (allAtividades || [])
-        .filter(a => a.empreendimento_id != null && a.tempo === -999 && a.id_atividade && !a.documento_id)
-        .map(a => String(a.id_atividade))
-    );
-
-    let atualizados = 0, semAtividades = 0, falhas = 0;
-    const BATCH_SIZE = 20;
-    for (let i = 0; i < localDocumentos.length; i += BATCH_SIZE) {
-      const batch = localDocumentos.slice(i, i + BATCH_SIZE);
-      await Promise.all(batch.map(async (doc) => {
-        const disciplinasDoc = doc.disciplinas?.length > 0 ? doc.disciplinas : [doc.disciplina].filter(Boolean);
-        const subdisciplinasDoc = doc.subdisciplinas || [];
-        const fatorDificuldade = doc.fator_dificuldade || 1;
-
-        // Exclusões específicas deste documento
-        const atividadesExcluidasDoc = new Set(
-          (allAtividades || [])
-            .filter(a => a.empreendimento_id != null && a.tempo === -999 && a.id_atividade && String(a.documento_id) === String(doc.id))
-            .map(a => String(a.id_atividade))
-        );
-
-        const linked = projectAtividades.filter(pa =>
-          (pa.documento_id != null && String(pa.documento_id) === String(doc.id)) ||
-          (Array.isArray(pa.documento_ids) && pa.documento_ids.some(id => String(id) === String(doc.id)))
-        );
-        // Incluir também atividades de atividadesEmpCache vinculadas a este documento
-        const linkedEmpCache = (atividadesEmpCache || []).filter(pa =>
-          pa.tempo !== -999 &&
-          ((pa.documento_id != null && String(pa.documento_id) === String(doc.id)) ||
-           (Array.isArray(pa.documento_ids) && pa.documento_ids.some(id => String(id) === String(doc.id))))
-        );
-        const linkedSeenIds = new Set(linked.map(a => a.id));
-        const allLinked = [...linked, ...linkedEmpCache.filter(a => !linkedSeenIds.has(a.id))];
-        // IDs de atividades genéricas com override específico neste documento (evitar dupla contagem)
-        const idsComOverride = new Set(allLinked.filter(pa => pa.id_atividade).map(pa => String(pa.id_atividade)));
-        const catalog = subdisciplinasDoc.length > 0 && disciplinasDoc.length > 0
-          ? genericAtividades.filter(a => {
-              const idStr = String(a.id);
-              if (idsComOverride.has(idStr)) return false;
-              if (atividadesExcluidasGlobal.has(idStr)) return false;
-              if (atividadesExcluidasDoc.has(idStr)) return false;
-              return disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina);
-            })
-          : [];
-        // Atividades do projeto sem link de documento mas com disciplina/subdisciplina compatível
-        // (equivalente ao atividadesProjetoMatch do DocumentoItem)
-        const projetoMatch = subdisciplinasDoc.length > 0 ? projectAtividades.filter(pa => {
-          if (pa.documento_id != null || (Array.isArray(pa.documento_ids) && pa.documento_ids.length > 0)) return false;
-          if (pa.id_atividade) return false;
-          if (!subdisciplinasDoc.includes(pa.subdisciplina)) return false;
-          if (disciplinasDoc.length === 0) return true;
-          return disciplinasDoc.includes(pa.disciplina);
-        }) : [];
-        const seen = new Set();
-        const docAtividades = [...allLinked, ...catalog, ...projetoMatch].filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
-        if (!docAtividades.length) { semAtividades++; return; }
-        const etapaTotais = {};
-        let total = 0;
-        docAtividades.forEach(a => {
-          if (!a.tempo || a.tempo <= 0) return;
-          const isConfeccaoA = a.atividade && String(a.atividade).trim().startsWith('Confecção de A-');
-          const tempoAjustado = a.tempo * (isConfeccaoA ? 1 : fatorDificuldade);
-          total += tempoAjustado;
-          const campo = ETAPA_TEMPO_MAP[a.etapa];
-          if (campo) etapaTotais[campo] = (etapaTotais[campo] || 0) + tempoAjustado;
-        });
-        if (total === 0) { semAtividades++; return; }
-        try {
-          const updated = await Documento.update(doc.id, { tempo_total: total, ...etapaTotais });
-          handleLocalUpdate(updated);
-          atualizados++;
-        } catch (e) { falhas++; }
-      }));
-    }
-    setIsRecalculandoTodas(false);
-    alert(`Recálculo concluído!\n\nAtualizados: ${atualizados}\nSem atividades: ${semAtividades}\nFalhas: ${falhas}`);
-  }, [allAtividades, atividadesEmpCache, localDocumentos, handleLocalUpdate]);
-
-  const handleSuccess = useCallback((savedDoc) => {
-    if (savedDoc) {
-      if (editingDocumento) {
-        handleLocalUpdate(savedDoc);
-      } else {
-        setLocalDocumentos(prev => [savedDoc, ...prev]);
-      }
-    }
-    setShowForm(false);
-    setEditingDocumento(null);
-    setCargaDiariaCache({});
-  }, [editingDocumento, handleLocalUpdate, setCargaDiariaCache]);
+  const handleSuccess = async () => { onUpdate(); setShowForm(false); setEditingDocumento(null); setCargaDiariaCache({}); };
 
   const handleExportData = () => {
     const rows = localDocumentos.map(doc => {
@@ -557,18 +462,11 @@ export default function DocumentosTab({
         (doc.disciplinas || (doc.disciplina ? [doc.disciplina] : [])).join(', '),
         (doc.subdisciplinas || []).join(', '),
         doc.escala || '',
-        doc.fator_dificuldade || '',
-        doc.tempo_total ?? '',
-        doc.tempo_estudo_preliminar ?? '',
-        doc.tempo_ante_projeto ?? '',
-        doc.tempo_projeto_basico ?? '',
-        doc.tempo_projeto_executivo ?? '',
-        doc.tempo_liberado_obra ?? '',
+        doc.fator_dificuldade || ''
       ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';');
     });
 
-    const header = ['numero', 'arquivo', 'descritivo', 'pavimento_nome', 'disciplinas', 'subdisciplinas', 'escala', 'fator_dificuldade',
-      'tempo_total', 'tempo_estudo_preliminar', 'tempo_ante_projeto', 'tempo_projeto_basico', 'tempo_projeto_executivo', 'tempo_liberado_obra'].join(';');
+    const header = ['numero', 'arquivo', 'descritivo', 'pavimento_nome', 'disciplinas', 'subdisciplinas', 'escala', 'fator_dificuldade'].join(';');
     const csvContent = [header, ...rows].join('\n');
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -580,13 +478,11 @@ export default function DocumentosTab({
   const handleExportTemplate = () => {
     const etapasDisponiveis = ["ESTUDO PRELIMINAR", "ANTE-PROJETO", "PROJETO BÁSICO", "PROJETO EXECUTIVO", "LIBERADO PARA OBRA"];
     const revisoesDefault = ["R00", "R01", "R02"];
-    const tempoHeaders = ['tempo_total', 'tempo_estudo_preliminar', 'tempo_ante_projeto', 'tempo_projeto_basico', 'tempo_projeto_executivo', 'tempo_liberado_obra'];
-    let headers = ['numero', 'arquivo', 'descritivo', 'pavimento_nome', 'disciplinas', 'subdisciplinas', 'escala', 'fator_dificuldade', ...tempoHeaders];
+    let headers = ['numero', 'arquivo', 'descritivo', 'pavimento_nome', 'disciplinas', 'subdisciplinas', 'escala', 'fator_dificuldade'];
     etapasDisponiveis.forEach(etapa => revisoesDefault.forEach(rev => headers.push(`${etapa}_${rev}`)));
     const csvContent = [
       headers.join(';'),
       ['ARQ-01', 'Planta Baixa Terreo', 'Planta baixa do pavimento terreo', 'Terreo', 'Arquitetura', 'Planta,Compat', '125', '1',
-        '40', '8', '8', '12', '8', '4',
         ...etapasDisponiveis.flatMap(() => revisoesDefault.map(() => '15/01/2025'))].join(';')
     ].join('\n');
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -639,9 +535,7 @@ export default function DocumentosTab({
 
         const datas = {};
         headers.forEach(header => {
-          if (['numero', 'arquivo', 'descritivo', 'pavimento_nome', 'disciplinas', 'subdisciplinas', 'escala', 'fator_dificuldade',
-          'tempo_total', 'tempo_concepcao', 'tempo_planejamento', 'tempo_estudo_preliminar', 'tempo_ante_projeto',
-          'tempo_projeto_basico', 'tempo_projeto_executivo', 'tempo_liberado_obra'].includes(header)) return;
+          if (['numero', 'arquivo', 'descritivo', 'pavimento_nome', 'disciplinas', 'subdisciplinas', 'escala', 'fator_dificuldade'].includes(header)) return;
           const data = row[header];
           if (!data) return;
           const parts = header.split('_');
@@ -664,14 +558,9 @@ export default function DocumentosTab({
           escala: row.escala ? parseFloat(row.escala) : null,
           fator_dificuldade: row.fator_dificuldade ? parseFloat(row.fator_dificuldade) : 1,
           pavimento_id: pavimento?.id || null, empreendimento_id: empreendimento.id,
-          tempo_total: row.tempo_total ? parseFloat(row.tempo_total) : null,
-          tempo_concepcao: row.tempo_concepcao ? parseFloat(row.tempo_concepcao) : null,
-          tempo_planejamento: row.tempo_planejamento ? parseFloat(row.tempo_planejamento) : null,
-          tempo_estudo_preliminar: row.tempo_estudo_preliminar ? parseFloat(row.tempo_estudo_preliminar) : null,
-          tempo_ante_projeto: row.tempo_ante_projeto ? parseFloat(row.tempo_ante_projeto) : null,
-          tempo_projeto_basico: row.tempo_projeto_basico ? parseFloat(row.tempo_projeto_basico) : null,
-          tempo_projeto_executivo: row.tempo_projeto_executivo ? parseFloat(row.tempo_projeto_executivo) : null,
-          tempo_liberado_obra: row.tempo_liberado_obra ? parseFloat(row.tempo_liberado_obra) : null,
+          tempo_total: 0, tempo_concepcao: 0, tempo_planejamento: 0,
+          tempo_estudo_preliminar: 0, tempo_ante_projeto: 0, tempo_projeto_basico: 0,
+          tempo_projeto_executivo: 0, tempo_liberado_obra: 0,
           datas: Object.keys(datas).length > 0 ? datas : null
         });
       }
@@ -679,72 +568,34 @@ export default function DocumentosTab({
       if (erros.length > 0) alert(`Erros encontrados:\n${erros.join('\n')}`);
       if (documentosParaImportar.length === 0) { alert('Nenhum documento válido encontrado'); return; }
 
-      const TEMPO_FIELDS = ['tempo_total', 'tempo_concepcao', 'tempo_planejamento',
-        'tempo_estudo_preliminar', 'tempo_ante_projeto', 'tempo_projeto_basico',
-        'tempo_projeto_executivo', 'tempo_liberado_obra'];
-
-      const findExisting = (doc) => {
-        const empId = String(empreendimento.id);
-        // match by numero + empreendimento, fallback to arquivo + empreendimento
-        return localDocumentos.find(d =>
-          String(d.empreendimento_id) === empId &&
-          (String(d.numero).trim() === String(doc.numero).trim() ||
-           String(d.arquivo).trim().toLowerCase() === String(doc.arquivo).trim().toLowerCase())
-        );
-      };
-
-      let sucessos = 0, falhas = 0, atualizados = 0, semMatch = 0;
+      let sucessos = 0, falhas = 0;
       const documentosCriados = [];
-      const BATCH_SIZE = 20;
-
-      for (let i = 0; i < documentosParaImportar.length; i += BATCH_SIZE) {
-        const batch = documentosParaImportar.slice(i, i + BATCH_SIZE);
-        await Promise.all(batch.map(async (doc) => {
-          const existing = importModoAtualizacao ? findExisting(doc) : null;
-          if (importModoAtualizacao && !existing) { semMatch++; return; }
-          try {
-            if (existing) {
-              const updatePayload = {};
-              TEMPO_FIELDS.forEach(f => { if (doc[f] != null) updatePayload[f] = doc[f]; });
-              if (doc.disciplinas?.length) updatePayload.disciplinas = doc.disciplinas;
-              if (doc.subdisciplinas?.length) updatePayload.subdisciplinas = doc.subdisciplinas;
-              if (doc.escala != null) updatePayload.escala = doc.escala;
-              if (!Object.keys(updatePayload).length) { semMatch++; return; }
-              const updated = await Documento.update(existing.id, updatePayload);
-              handleLocalUpdate(updated);
-              atualizados++;
-            } else {
-              const docCriado = await Documento.create(doc);
-              documentosCriados.push({ original: doc, criado: docCriado });
-              sucessos++;
-            }
-          } catch (error) { falhas++; }
-        }));
+      for (const doc of documentosParaImportar) {
+        try {
+          const docCriado = await retryWithBackoff(() => Documento.create(doc), 3, 1000, `importDoc-${doc.numero}`);
+          documentosCriados.push({ original: doc, criado: docCriado });
+          sucessos++;
+        } catch (error) { falhas++; }
       }
 
       let sucessosCadastro = 0, falhasCadastro = 0;
-      for (let i = 0; i < documentosCriados.length; i += BATCH_SIZE) {
-        const batch = documentosCriados.slice(i, i + BATCH_SIZE);
-        await Promise.all(batch.map(async ({ original, criado }) => {
-          if (!original.datas || !Object.keys(original.datas).length) return;
+      for (const { original, criado } of documentosCriados) {
+        if (original.datas && Object.keys(original.datas).length > 0) {
           try {
-            await DataCadastro.create({
+            await retryWithBackoff(() => DataCadastro.create({
               empreendimento_id: empreendimento.id,
-              ordem: documentosCriados.findIndex(d => d.criado.id === criado.id),
+              ordem: documentosCriados.indexOf(documentosCriados.find(d => d.criado.id === criado.id)),
               documento_id: criado.id, datas: original.datas
-            });
+            }), 3, 1000, `importCadastro-${criado.id}`);
             sucessosCadastro++;
           } catch (error) { falhasCadastro++; }
-        }));
+        }
       }
 
-      let mensagem = importModoAtualizacao
-        ? `Atualização concluída!\n\nDocumentos atualizados: ${atualizados}${semMatch > 0 ? `\nSem correspondência (número/arquivo não encontrado ou sem dados para atualizar): ${semMatch}` : ''}${sucessos > 0 ? `\nNovos documentos criados: ${sucessos}` : ''}${falhas > 0 ? `\nFalhas: ${falhas}` : ''}`
-        : `Importação concluída!\n\nDocumentos: ${sucessos} sucessos, ${falhas} falhas`;
+      let mensagem = `Importação concluída!\n\nDocumentos: ${sucessos} sucessos, ${falhas} falhas`;
       if (sucessosCadastro > 0 || falhasCadastro > 0) mensagem += `\nDatas de Cadastro: ${sucessosCadastro} sucessos, ${falhasCadastro} falhas`;
       alert(mensagem);
-      if (sucessos > 0) { await onUpdate(); }
-      if (atualizados > 0 || sucessos > 0) { setShowImportModal(false); setImportFile(null); setImportModoAtualizacao(false); }
+      if (sucessos > 0) { await onUpdate(); setShowImportModal(false); setImportFile(null); }
     } catch (error) {
       alert(`Erro ao processar arquivo: ${error.message}`);
     } finally {
@@ -752,8 +603,8 @@ export default function DocumentosTab({
     }
   };
 
-  const handleEdit = useCallback((doc) => { setEditingDocumento(doc); setShowForm(true); }, []);
-  const handleEditAtividade = useCallback((atividade = null) => { setEditingAtividade(atividade); setShowAtividadeForm(true); }, []);
+  const handleEdit = (doc) => { setEditingDocumento(doc); setShowForm(true); };
+  const handleEditAtividade = (atividade = null) => { setEditingAtividade(atividade); setShowAtividadeForm(true); };
   const handleAtividadeSuccess = async () => {
     const expandedState = { ...expandedRows };
     setShowAtividadeForm(false);
@@ -762,7 +613,7 @@ export default function DocumentosTab({
     setTimeout(() => setExpandedRows(expandedState), 100);
   };
 
-  const handleDelete = useCallback(async (id) => {
+  const handleDelete = async (id) => {
     if (!window.confirm("Tem certeza que deseja excluir este documento?")) return;
     try {
       try {
@@ -778,7 +629,7 @@ export default function DocumentosTab({
     } catch (error) {
       alert("Ocorreu um erro ao excluir o documento.");
     }
-  }, [setCargaDiariaCache, onUpdate]);
+  };
 
   const handleOpenDocEtapaModal = useCallback((doc) => {
     setDocumentForDocEtapaModal(doc);
@@ -792,19 +643,8 @@ export default function DocumentosTab({
     setExecutorPreSelecionado(null);
   }, []);
 
-  const handleSaveDocEtapaPlanning = useCallback((result) => {
+  const handleSaveDocEtapaPlanning = useCallback(() => {
     setCargaDiariaCache({});
-
-    // Se o modal retornou o documento atualizado, sincronizar localmente e acionar cascade
-    if (result?.docAtualizado) {
-      handleLocalUpdate(result.docAtualizado);
-      const planos = result.planejamentos || [];
-      if (planos.length > 0) {
-        const firstPlan = planos[0];
-        handleCascadingUpdate(result.docAtualizado, firstPlan.etapa, firstPlan.executor_principal);
-      }
-    }
-
     setTimeout(() => {
       Promise.all([
         retryWithBackoff(() => PlanejamentoAtividade.filter({ empreendimento_id: empreendimento.id }), 3, 500).catch(() => []),
@@ -818,64 +658,47 @@ export default function DocumentosTab({
     }, 200);
     handleCloseDocEtapaModal();
     setExecutorPreSelecionado(null);
-  }, [empreendimento.id, handleCloseDocEtapaModal, handleLocalUpdate, handleCascadingUpdate]);
+  }, [empreendimento.id, handleCloseDocEtapaModal]);
 
   const toggleRow = useCallback((id) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
   const handlePredecessoraChange = useCallback(async (documentoId, predecessoraId) => {
-    const documento = localDocumentosRef.current.find(d => d.id === documentoId);
-    if (!documento) return;
-
-    // Optimistic update — atualiza UI imediatamente sem esperar API
-    const optimisticDoc = {
-      ...documento,
-      predecessora_id: predecessoraId || null,
-      inicio_planejado: null,
-      termino_planejado: null,
-      tempo_total: 0,
-      ...(!predecessoraId && !documento.multiplos_executores ? { executor_principal: null } : {}),
-    };
-    handleLocalUpdate(optimisticDoc);
-
-    setDocLoading(documentoId, true);
+    setLoadingDocs(prev => ({ ...prev, [documentoId]: true }));
     try {
-      const planejamentosExistentes = localPlanejamentosRef.current.filter(p => p.documento_id === documentoId);
+      const documento = localDocumentos.find(d => d.id === documentoId);
+      if (!documento) return;
+
+      const planejamentosExistentes = localPlanejamentos.filter(p => p.documento_id === documentoId);
       if (planejamentosExistentes.length > 0) {
         await Promise.all(planejamentosExistentes.map(p =>
           p.tipo_plano === 'atividade'
-            ? retryWithBackoff(() => PlanejamentoAtividade.delete(p.id), 3, 1000, `deleteOldPlanOnPredChange-${p.id}`)
-            : retryWithBackoff(() => PlanejamentoDocumento.delete(p.id), 3, 1000, `deleteOldPlanDocOnPredChange-${p.id}`)
+            ? retryWithExtendedBackoff(() => PlanejamentoAtividade.delete(p.id), `deleteOldPlanOnPredChange-${p.id}`)
+            : retryWithExtendedBackoff(() => PlanejamentoDocumento.delete(p.id), `deleteOldPlanDocOnPredChange-${p.id}`)
         ));
         setLocalPlanejamentos(prev => prev.filter(p => p.documento_id !== documentoId));
       }
 
-      const updateData = {
-        predecessora_id: predecessoraId || null,
-        inicio_planejado: null,
-        termino_planejado: null,
-        tempo_total: 0,
-        ...(!predecessoraId && !documento.multiplos_executores ? { executor_principal: null } : {}),
-      };
-      const updatedDocFromAPI = await retryWithBackoff(() => Documento.update(documentoId, updateData), 3, 1000, `setPredecessor-${documentoId}`);
+      let updateData = { predecessora_id: predecessoraId, inicio_planejado: null, termino_planejado: null, tempo_total: 0 };
+      if (!predecessoraId && !documento.multiplos_executores) updateData.executor_principal = null;
+
+      const updatedDocFromAPI = await retryWithExtendedBackoff(() => Documento.update(documentoId, updateData), `setPredecessor-${documentoId}`);
       handleLocalUpdate(updatedDocFromAPI);
       setCargaDiariaCache({});
 
-      if (predecessoraId) alert(`✅ Predecessora definida! Os planejamentos antigos foram removidos.\n\nDefina o executor novamente para replanejar.`);
+      if (predecessoraId) alert(`✅ Predecessora alterada! Os planejamentos antigos foram removidos.\n\nDefina o executor novamente para replanejar.`);
     } catch (error) {
-      // Reverter update otimista em caso de erro
-      handleLocalUpdate(documento);
       alert('Ocorreu um erro ao definir a predecessora.');
     } finally {
-      setDocLoading(documentoId, false);
+      setLoadingDocs(prev => ({ ...prev, [documentoId]: false }));
     }
-  }, [handleLocalUpdate, setCargaDiariaCache, setDocLoading]);
+  }, [localDocumentos, localPlanejamentos, handleLocalUpdate, setCargaDiariaCache]);
 
   const handleDataInicioChange = useCallback(async (documentoId, novaDataStr) => {
-    setDocLoading(documentoId, true);
+    setLoadingDocs(prev => ({ ...prev, [documentoId]: true }));
     try {
-      const documento = localDocumentosRef.current.find(d => d.id === documentoId);
+      const documento = localDocumentos.find(d => d.id === documentoId);
       if (!documento) return;
 
       // Permitir limpar a data
@@ -901,9 +724,10 @@ export default function DocumentosTab({
       const updatedDocFromAPI = await retryWithExtendedBackoff(() => Documento.update(documentoId, updateData), `setStartDate-${documentoId}`);
       handleLocalUpdate(updatedDocFromAPI);
       setCargaDiariaCache({});
+      await handleCascadingUpdate(updatedDocFromAPI);
 
       if (updatedDocFromAPI.executor_principal && !updatedDocFromAPI.multiplos_executores) {
-        const planejamentosDoDoc = localPlanejamentosRef.current.filter(p => p.documento_id === documentoId);
+        const planejamentosDoDoc = localPlanejamentos.filter(p => p.documento_id === documentoId);
         const etapasComPlanejamento = [...new Set(planejamentosDoDoc.map(p => p.etapa))];
         for (const etapa of etapasComPlanejamento) {
           await autoPlanejarAtividades(updatedDocFromAPI, etapa, updatedDocFromAPI.executor_principal, 'manual', novaDataStr);
@@ -912,37 +736,36 @@ export default function DocumentosTab({
     } catch (error) {
       alert('Erro ao atualizar data de início.');
     } finally {
-      setDocLoading(documentoId, false);
+      setLoadingDocs(prev => ({ ...prev, [documentoId]: false }));
     }
-  }, [handleLocalUpdate, setCargaDiariaCache, autoPlanejarAtividades, setDocLoading]);
+  }, [localDocumentos, handleLocalUpdate, setCargaDiariaCache, handleCascadingUpdate, localPlanejamentos, autoPlanejarAtividades]);
 
-  const handleRemoveExecutor = useCallback(async (doc) => {
-    if (!doc?.id) return;
-    setDocLoading(doc.id, true);
-    try {
-      const planejamentosDoDoc = localPlanejamentosRef.current.filter(p => p.documento_id === doc.id);
-      if (planejamentosDoDoc.length > 0) {
-        await Promise.all(planejamentosDoDoc.map(p =>
-          p.tipo_plano === 'atividade'
-            ? retryWithExtendedBackoff(() => PlanejamentoAtividade.delete(p.id), `removeExec-deleteAtiv-${p.id}`)
-            : retryWithExtendedBackoff(() => PlanejamentoDocumento.delete(p.id), `removeExec-deleteDoc-${p.id}`)
-        ));
-        setLocalPlanejamentos(prev => prev.filter(p => p.documento_id !== doc.id));
-      }
-      const updatedDoc = await retryWithExtendedBackoff(
-        () => Documento.update(doc.id, { executor_principal: null, inicio_planejado: null, termino_planejado: null }),
-        `removeExec-${doc.id}`
-      );
-      handleLocalUpdate(updatedDoc);
-      setCargaDiariaCache({});
-    } catch (error) {
-      alert('Erro ao remover executor.');
-    } finally {
-      setDocLoading(doc.id, false);
+  const filteredDocumentos = useMemo(() => {
+    let filtered = localDocumentos.filter(doc =>
+      (doc.numero?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
+      (doc.arquivo?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
+      (doc.descritivo?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()))
+    );
+    if (filtroArea !== "todas") filtered = filtered.filter(doc => doc.pavimento_id === filtroArea);
+    return filtered.sort((a, b) => (a.arquivo || '').trim().toLowerCase().localeCompare((b.arquivo || '').trim().toLowerCase(), 'pt-BR', { numeric: true, sensitivity: 'base' }));
+  }, [localDocumentos, debouncedSearchTerm, filtroArea]);
+
+  const documentosPorDisciplina = useMemo(() => {
+    const grupos = {};
+    filteredDocumentos.forEach(doc => {
+      const disciplina = doc.disciplina || 'Sem Disciplina';
+      if (!grupos[disciplina]) grupos[disciplina] = [];
+      grupos[disciplina].push(doc);
+    });
+    return Object.entries(grupos).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filteredDocumentos]);
+
+  const etapasDisponiveis = useMemo(() => {
+    if (empreendimento?.etapas && empreendimento.etapas.length > 0) {
+      return empreendimento.etapas;
     }
-  }, [handleLocalUpdate, setCargaDiariaCache, setDocLoading]);
-
-  const etapasDisponiveis = ['Estudo Preliminar', 'Ante-Projeto', 'Projeto Básico', 'Projeto Executivo', 'Liberado para Obra'];
+    return ['Estudo Preliminar', 'Ante-Projeto', 'Projeto Básico', 'Projeto Executivo', 'Liberado para Obra'];
+  }, [empreendimento?.etapas]);
 
   const usuariosOrdenados = useMemo(() => {
     const usuariosList = Array.isArray(usuarios) ? usuarios : [];
@@ -953,45 +776,14 @@ export default function DocumentosTab({
     });
   }, [usuarios]);
 
-  const docIdsWithActivities = useMemo(() => {
-    const result = new Set();
-    const catalogPairs = new Set();
-    (allAtividades || []).forEach(a => {
-      if (!a.empreendimento_id) {
-        if (a.tempo !== -999 && a.disciplina && a.subdisciplina)
-          catalogPairs.add(`${a.disciplina}|${a.subdisciplina}`);
-      } else if (a.tempo !== -999) {
-        if (a.documento_id != null) result.add(String(a.documento_id));
-        if (Array.isArray(a.documento_ids)) a.documento_ids.forEach(id => result.add(String(id)));
-      }
-    });
-    (atividadesEmpCache || []).forEach(a => {
-      if (a.tempo !== -999) {
-        if (a.documento_id != null) result.add(String(a.documento_id));
-        if (Array.isArray(a.documento_ids)) a.documento_ids.forEach(id => result.add(String(id)));
-      }
-    });
-    if (catalogPairs.size > 0) {
-      (localDocumentos || []).forEach(doc => {
-        const subs = doc.subdisciplinas || [];
-        const discs = doc.disciplinas?.length > 0 ? doc.disciplinas : [doc.disciplina].filter(Boolean);
-        if (subs.length > 0 && discs.length > 0 && discs.some(d => subs.some(s => catalogPairs.has(`${d}|${s}`)))) {
-          result.add(String(doc.id));
-        }
-      });
-    }
-    return result;
-  }, [allAtividades, atividadesEmpCache, localDocumentos]);
+  // Pré-filtrar atividades: apenas genéricas + específicas deste empreendimento
+  // Isso reduz drasticamente o volume de iterações em cada DocumentoItem (400+ docs × N atividades)
+  const atividadesFiltradas = useMemo(() => {
+    if (!allAtividades) return [];
+    return allAtividades.filter(a => !a.empreendimento_id || a.empreendimento_id === empreendimento.id);
+  }, [allAtividades, empreendimento.id]);
 
-  // Pre-compute sorted doc options once — avoids O(N log N) sort inside every DocumentoItem
-  const sortedDocOptionsList = useMemo(() =>
-    [...localDocumentos]
-      .sort((a, b) => (a.numero || '').localeCompare(b.numero || ''))
-      .map(d => ({ id: d.id, label: `${d.numero} — ${d.arquivo || d.titulo || ''}` })),
-    [localDocumentos]
-  );
-
-  const sharedProps = useMemo(() => ({
+  const sharedProps = {
     localDocumentos,
     localPlanejamentos,
     setLocalPlanejamentos,
@@ -1000,16 +792,15 @@ export default function DocumentosTab({
     getCargaDiariaExecutor,
     handleCascadingUpdate,
     autoPlanejarAtividades,
+    expandedRows,
     toggleRow,
     usuariosOrdenados,
     pavimentos,
     handleEditAtividade,
     atividadesEmpCache,
-    handleRemoveExecutor,
-    setExecutorPreSelecionado,
-    registerLoadingSetter,
-    sortedDocOptionsList,
-  }), [localDocumentos, localPlanejamentos, setLocalPlanejamentos, handleLocalUpdate, setCargaDiariaCache, getCargaDiariaExecutor, handleCascadingUpdate, autoPlanejarAtividades, toggleRow, usuariosOrdenados, pavimentos, handleEditAtividade, atividadesEmpCache, handleRemoveExecutor, setExecutorPreSelecionado, registerLoadingSetter, sortedDocOptionsList]);
+  };
+
+  // (MemoDocumentoItem é definido fora do componente, abaixo)
 
   return (
     <div className="space-y-6">
@@ -1022,14 +813,11 @@ export default function DocumentosTab({
           </div>
           {!readOnly && (
             <div className="flex gap-2">
-              <Button variant="outline" size="icon" onClick={handleExportData} title="Exportar" className="border-blue-500 text-blue-600 hover:bg-blue-50">
-                <Download className="w-4 h-4" />
+              <Button variant="outline" onClick={handleExportData} className="border-blue-500 text-blue-600 hover:bg-blue-50">
+                <Download className="w-4 h-4 mr-2" />Exportar
               </Button>
-              <Button variant="outline" size="icon" onClick={() => setShowImportModal(true)} title="Importar" className="border-green-500 text-green-600 hover:bg-green-50">
-                <Upload className="w-4 h-4" />
-              </Button>
-              <Button variant="outline" size="icon" onClick={handleRecalcularTodasHoras} disabled={isRecalculandoTodas} title="Recalcular Horas" className="border-orange-500 text-orange-600 hover:bg-orange-50">
-                {isRecalculandoTodas ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              <Button variant="outline" onClick={() => setShowImportModal(true)} className="border-green-500 text-green-600 hover:bg-green-50">
+                <Upload className="w-4 h-4 mr-2" />Importar
               </Button>
               <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-700">
                 <Plus className="w-4 h-4 mr-2" />Novo Documento
@@ -1048,7 +836,7 @@ export default function DocumentosTab({
           )}
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <Input placeholder="Buscar documentos..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
+            <Input placeholder="Buscar documentos..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" disabled={Object.keys(loadingDocs).some(id => loadingDocs[id])} />
           </div>
         </CardContent>
       </Card>
@@ -1099,14 +887,11 @@ export default function DocumentosTab({
           ) : (
             <div className="space-y-6">
               {documentosPorDisciplina.map(([disciplina, docs]) => {
-                const isMinimizado = disciplinasMinimizadas[disciplina] !== false;
+                const isMinimizado = disciplinasMinimizadas[disciplina];
                 return (
                   <div key={disciplina} className="border rounded-lg overflow-hidden">
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 border-b flex items-center justify-between cursor-pointer hover:from-blue-100 hover:to-indigo-100 transition-colors"
-                      onClick={() => setDisciplinasMinimizadas(prev => {
-                        const current = prev[disciplina] !== false;
-                        return { ...prev, [disciplina]: !current };
-                      })}>
+                      onClick={() => setDisciplinasMinimizadas(prev => ({ ...prev, [disciplina]: !prev[disciplina] }))}>
                       <h3 className="font-semibold text-lg text-gray-800 flex items-center gap-2">
                         <div className="w-1 h-6 bg-blue-600 rounded-full"></div>
                         {disciplina}
@@ -1130,23 +915,23 @@ export default function DocumentosTab({
                               {!readOnly && <th className="p-3 text-left text-sm font-medium">Executor</th>}
                               {!readOnly && <th className="p-3 text-left text-sm font-medium">Datas</th>}
                               {!readOnly && <th className="p-3 text-left text-sm font-medium">Tempo</th>}
-                              {!readOnly && <th className="p-3 text-left text-sm font-medium w-[130px]">Ações</th>}
+                              {!readOnly && <th className="p-3 text-left text-sm font-medium w-[100px]">Ações</th>}
                             </tr>
                           </thead>
                           <tbody>
                             {docs.map(doc => (
-                              <DocumentoItem
+                              <MemoDocumentoItem
                                 key={doc.id}
                                 doc={doc}
-                                isExpanded={!!expandedRows[doc.id]}
-                                hasActivities={docIdsWithActivities.has(String(doc.id))}
-                                allAtividades={allAtividades}
+                                planejamentos={localPlanejamentos}
+                                allAtividades={atividadesFiltradas}
                                 handleEdit={handleEdit}
                                 handleDelete={handleDelete}
                                 handleOpenDocEtapaModal={handleOpenDocEtapaModal}
                                 handlePredecessoraChange={handlePredecessoraChange}
                                 handleDataInicioChange={handleDataInicioChange}
                                 etapaParaPlanejamento={etapaParaPlanejamento}
+                                loadingDocs={loadingDocs}
                                 empreendimento={empreendimento}
                                 onUpdate={onUpdate}
                                 readOnly={readOnly}
@@ -1190,7 +975,6 @@ export default function DocumentosTab({
           allAtividades={allAtividades}
           executorPadrao={executorPreSelecionado}
           etapaParaPlanejamento={etapaParaPlanejamento}
-          planejamentos={localPlanejamentos}
           isOpen={isDocEtapaModalOpen}
           onClose={handleCloseDocEtapaModal}
           onSuccess={handleSaveDocEtapaPlanning}
@@ -1244,17 +1028,6 @@ export default function DocumentosTab({
                 <input type="file" accept=".csv" onChange={(e) => setImportFile(e.target.files?.[0] || null)} className="w-full" />
                 {importFile && <p className="text-sm text-green-600 mt-2">✓ Arquivo selecionado: {importFile.name}</p>}
               </div>
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={importModoAtualizacao}
-                  onChange={e => setImportModoAtualizacao(e.target.checked)}
-                  className="w-4 h-4 accent-blue-600"
-                />
-                <span className="text-sm text-gray-700">
-                  Atualizar documentos existentes (por número) — use para corrigir horas e outros campos
-                </span>
-              </label>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => { setShowImportModal(false); setImportFile(null); }} disabled={isImporting}>Cancelar</Button>
                 <Button onClick={handleImport} disabled={!importFile || isImporting} className="bg-green-600 hover:bg-green-700">

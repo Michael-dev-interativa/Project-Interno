@@ -7,14 +7,16 @@ const ALLOWED_DOC_COLUMNS = new Set([
   'escala', 'fator_dificuldade', 'empreendimento_id',
   'tempo_total', 'tempo_estudo_preliminar', 'tempo_ante_projeto',
   'tempo_projeto_basico', 'tempo_projeto_executivo', 'tempo_liberado_obra',
-  'tempo_concepcao', 'tempo_planejamento', 'tempo_execucao_total'
+  'tempo_concepcao', 'tempo_planejamento', 'tempo_execucao_total',
+  'tempo_pre'
 ]);
 
 const NUMERIC_DOC_COLUMNS = new Set([
   'predecessora_id', 'pavimento_id', 'disciplina_id', 'fator_dificuldade', 'empreendimento_id',
   'tempo_total', 'tempo_estudo_preliminar', 'tempo_ante_projeto',
   'tempo_projeto_basico', 'tempo_projeto_executivo', 'tempo_liberado_obra',
-  'tempo_concepcao', 'tempo_planejamento', 'tempo_execucao_total'
+  'tempo_concepcao', 'tempo_planejamento', 'tempo_execucao_total',
+  'tempo_pre'
 ]);
 
 const BOOLEAN_DOC_COLUMNS = new Set(['multiplos_executores']);
