@@ -467,12 +467,16 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate, activeT
   }, [combinedActivities, empreendimentoId, allEmpreendimentos]);
 
   // Re-busca itensPRE quando a aba analítica fica ativa (dados podem ter sido editados no PRETab)
+  // Delay de 800ms para garantir que qualquer save em andamento no PRETab termine antes do fetch
   useEffect(() => {
     if (activeTab !== 'atividades_projeto' || !empreendimentoId) return;
-    retryWithBackoff(
-      () => ItemPRE.filter({ empreendimento_id: empreendimentoId }),
-      3, 500, 'refreshItensPRE'
-    ).then(data => setItensPRE(data || [])).catch(() => {});
+    const timer = setTimeout(() => {
+      retryWithBackoff(
+        () => ItemPRE.filter({ empreendimento_id: empreendimentoId }),
+        3, 500, 'refreshItensPRE'
+      ).then(data => setItensPRE(data || [])).catch(() => {});
+    }, 800);
+    return () => clearTimeout(timer);
   }, [activeTab, empreendimentoId]);
 
   // Soma de tempo dos itens PRE vinculados por documento_id (IDs normalizados para string)
