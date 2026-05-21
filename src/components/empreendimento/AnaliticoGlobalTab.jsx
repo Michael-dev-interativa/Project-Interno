@@ -1878,11 +1878,9 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                 ) : (
                                   <Checkbox
                                     checked={isFolhaConcluida}
-                                    disabled={isFolhaConcluida || isFolhaConcluindo}
-                                    onCheckedChange={(checked) => {
-                                      if (checked) handleConcluirFolha(folha);
-                                    }}
-                                    title="Marcar como concluída"
+                                    disabled={isFolhaConcluindo}
+                                    onCheckedChange={(checked) => handleToggleFolhaConcluida(folha, checked)}
+                                    title={isFolhaConcluida ? 'Desfazer conclusão' : 'Marcar como concluída'}
                                   />
                                 )}
                               </div>
