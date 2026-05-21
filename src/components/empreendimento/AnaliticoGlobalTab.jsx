@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Atividade, Disciplina, PlanejamentoAtividade, Documento, AlteracaoEtapa, Empreendimento, Usuario, AtividadesDoProjeto } from '@/entities/all';
+import { Atividade, Disciplina, PlanejamentoAtividade, Documento, AlteracaoEtapa, Empreendimento, Usuario, AtividadesDoProjeto, ItemPRE } from '@/entities/all';
 
 const PlanejamentoDocumento = base44.entities.PlanejamentoDocumento;
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { EtapaEditModal, EditarEtapaEmFolhasModal, ExcluirDeFolhasModal } from './AnaliticoModais';
-import { PlusCircle, Search, Filter, MoreHorizontal, Edit, Trash2, Loader2, PackageOpen, Layers, XCircle, FileX, RefreshCw, Edit2, ChevronRight, ChevronDown, Calendar, CheckCircle2, Users2, CheckCircle } from 'lucide-react';
+import { PlusCircle, Search, Filter, MoreHorizontal, Edit, Trash2, Loader2, PackageOpen, Layers, XCircle, FileX, RefreshCw, Edit2, ChevronRight, ChevronDown, Calendar, CheckCircle2, Users2, CheckCircle, Plus } from 'lucide-react';
 import PlanejamentoAtividadeModal from './PlanejamentoAtividadeModal';
 import AtividadeFormModal from './AtividadeFormModal';
 import { debounce } from 'lodash';
@@ -77,12 +77,16 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
   const [planejamentos, setPlanejamentos] = useState([]);
 
   const [allEmpreendimentos, setAllEmpreendimentos] = useState([]);
+  const [itensPRE, setItensPRE] = useState([]);
+  const [showAddEtapa, setShowAddEtapa] = useState(false);
+  const [novaEtapaNome, setNovaEtapaNome] = useState('');
+  const [isSavingNovaEtapa, setIsSavingNovaEtapa] = useState(false);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       const [
-        projectActivities, 
+        projectActivities,
         planejamentosData,
         allActivities,
         documentosData,
@@ -93,7 +97,8 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
         todosEmpreendimentos,
         atividadesDoProjetoData,
         atividadesEmpreendimentoData,
-        pavimentosData
+        pavimentosData,
+        itensPREData
       ] = await Promise.all([
         retryWithBackoff(() => Atividade.filter({ empreendimento_id: empreendimentoId }), 3, 500, 'fetchProjectActivities'),
         retryWithBackoff(() => PlanejamentoAtividade.filter({ empreendimento_id: empreendimentoId }), 3, 500, 'fetchPlanejamentos'),
@@ -106,7 +111,8 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
         retryWithBackoff(() => Empreendimento.list(), 3, 500, 'fetchAllEmpreendimentos'),
         retryWithBackoff(() => AtividadesDoProjeto.filter({ empreendimento_id: empreendimentoId }), 3, 500, 'fetchAtividadesDoProjeto'),
         retryWithBackoff(() => base44.entities.AtividadesEmpreendimento.filter({ empreendimento_id: empreendimentoId }), 3, 500, 'fetchAtividadesEmpreendimento'),
-        retryWithBackoff(() => base44.entities.Pavimento.filter({ empreendimento_id: empreendimentoId }), 3, 500, 'fetchPavimentos')
+        retryWithBackoff(() => base44.entities.Pavimento.filter({ empreendimento_id: empreendimentoId }), 3, 500, 'fetchPavimentos'),
+        retryWithBackoff(() => ItemPRE.filter({ empreendimento_id: empreendimentoId }), 3, 500, 'fetchItensPRE')
       ]);
 
       setDocumentos(documentosData || []);
@@ -114,6 +120,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
       setAlteracoesEtapa(alteracoesData || []);
       setUsuarios(usuariosData || []);
       setPlanejamentos(planejamentosData || []);
+      setItensPRE(itensPREData || []);
       setAllEmpreendimentos(todosEmpreendimentos || []);
       
       // Usar AtividadesDoProjeto se disponível, senão usar projectActivities
@@ -457,7 +464,22 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
     }
     // Fallback: etapas únicas das atividades
     return [...new Set(combinedActivities.map(a => a.etapa).filter(Boolean))];
-  }, [combinedActivities, empreendimentoId]);
+  }, [combinedActivities, empreendimentoId, allEmpreendimentos]);
+
+  // Soma de tempo dos itens PRE vinculados por documento_id
+  const preTempoByDocumentoId = useMemo(() => {
+    const map = new Map();
+    (itensPRE || []).forEach(pre => {
+      const vinculados = pre.documentos_vinculados || [];
+      const tempo = Number(pre.tempo_atendimento) || 0;
+      if (tempo > 0 && vinculados.length > 0) {
+        vinculados.forEach(docId => {
+          map.set(docId, (map.get(docId) || 0) + tempo);
+        });
+      }
+    });
+    return map;
+  }, [itensPRE]);
 
   const handleOpenModal = (atividade = null) => {
     setSelectedAtividade(atividade);
@@ -1476,7 +1498,20 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                         })()
                                       ) : null}
                                     </TableCell>
-                                    <TableCell className="text-sm">{folha.tempo ? `${Number(folha.tempo).toFixed(1)}h` : '-'}</TableCell>
+                                    <TableCell className="text-sm">
+                                      {(() => {
+                                        const baseTempo = folha.tempo ? Number(folha.tempo) : 0;
+                                        const preTempo = preTempoByDocumentoId.get(folha.source_documento_id) || 0;
+                                        if (baseTempo === 0 && preTempo === 0) return '-';
+                                        if (preTempo === 0) return `${baseTempo.toFixed(1)}h`;
+                                        return (
+                                          <div>
+                                            <span>{(baseTempo + preTempo).toFixed(1)}h</span>
+                                            <div className="text-xs text-orange-500">+{preTempo.toFixed(1)}h PRE</div>
+                                          </div>
+                                        );
+                                      })()}
+                                    </TableCell>
                                     <TableCell>
                                       <div className="flex items-center gap-2">
                                         {isFolhaConcluindo ? (
@@ -1869,7 +1904,20 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                 })()
                               ) : null}
                             </TableCell>
-                            <TableCell className="text-sm">{folha.tempo ? `${Number(folha.tempo).toFixed(1)}h` : '-'}</TableCell>
+                            <TableCell className="text-sm">
+                              {(() => {
+                                const baseTempo = folha.tempo ? Number(folha.tempo) : 0;
+                                const preTempo = preTempoByDocumentoId.get(folha.source_documento_id) || 0;
+                                if (baseTempo === 0 && preTempo === 0) return '-';
+                                if (preTempo === 0) return `${baseTempo.toFixed(1)}h`;
+                                return (
+                                  <div>
+                                    <span>{(baseTempo + preTempo).toFixed(1)}h</span>
+                                    <div className="text-xs text-orange-500">+{preTempo.toFixed(1)}h PRE</div>
+                                  </div>
+                                );
+                              })()}
+                            </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 {isFolhaConcluindo ? (
@@ -3220,6 +3268,33 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
     }
   };
 
+  const handleAddEtapa = async () => {
+    const nome = novaEtapaNome.trim();
+    if (!nome) return;
+    setIsSavingNovaEtapa(true);
+    try {
+      const emp = allEmpreendimentos?.find(e => e.id === empreendimentoId);
+      const etapasAtuais = (emp?.etapas?.length > 0)
+        ? emp.etapas
+        : ['Estudo Preliminar', 'Ante-Projeto', 'Projeto Básico', 'Projeto Executivo', 'Liberado para Obra'];
+      if (etapasAtuais.some(e => e.toLowerCase() === nome.toLowerCase())) {
+        alert('Esta etapa já existe.');
+        return;
+      }
+      await retryWithBackoff(
+        () => Empreendimento.update(empreendimentoId, { etapas: [...etapasAtuais, nome] }),
+        3, 500, 'addNovaEtapa'
+      );
+      setShowAddEtapa(false);
+      setNovaEtapaNome('');
+      await fetchData();
+    } catch {
+      alert('Erro ao adicionar etapa. Tente novamente.');
+    } finally {
+      setIsSavingNovaEtapa(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -3361,6 +3436,31 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                     {[...new Set(etapasUnicas)].map(etapa => <SelectItem key={etapa} value={etapa}>{etapa}</SelectItem>)}
                 </SelectContent>
             </Select>
+            <Popover open={showAddEtapa} onOpenChange={setShowAddEtapa}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="text-blue-600 border-blue-300 hover:bg-blue-50 h-9 px-2" title="Adicionar nova etapa ao projeto">
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 p-3" align="start">
+                <p className="text-sm font-semibold mb-2 text-gray-700">Nova Etapa</p>
+                <Input
+                  placeholder="Ex: Revisão do Executivo"
+                  value={novaEtapaNome}
+                  onChange={(e) => setNovaEtapaNome(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && novaEtapaNome.trim()) handleAddEtapa(); }}
+                  className="mb-2 text-sm"
+                  autoFocus
+                />
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" size="sm" onClick={() => { setShowAddEtapa(false); setNovaEtapaNome(''); }}>Cancelar</Button>
+                  <Button size="sm" onClick={handleAddEtapa} disabled={!novaEtapaNome.trim() || isSavingNovaEtapa} className="bg-blue-600 hover:bg-blue-700 text-white">
+                    {isSavingNovaEtapa ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                    Adicionar
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
         </div>
         <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-gray-400" />

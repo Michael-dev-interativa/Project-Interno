@@ -8,10 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Printer, Save, FileText, Loader2, Upload, X, File, ZoomIn, CalendarPlus, FileUp, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ItemPRE, Disciplina, Usuario, PlanejamentoAtividade } from "@/entities/all";
+import { ItemPRE, Disciplina, Usuario, PlanejamentoAtividade, Documento } from "@/entities/all";
 import { format } from "date-fns";
 import { retryWithBackoff } from "@/components/utils/apiUtils";
 import { base44 } from "@/api/base44Client";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const LOGO_URL = "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/577f93874_logo_Interativa_versao_final_sem_fundo_0002.png";
 
@@ -105,6 +106,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
   const [importSelectedFile, setImportSelectedFile] = useState(null);
   const importFileRef = useRef(/** @type {HTMLInputElement | null} */ (null));
   const [disciplinas, setDisciplinas] = useState(/** @type {any[]} */ ([]));
+  const [documentosDisponiveis, setDocumentosDisponiveis] = useState(/** @type {any[]} */ ([]));
   const [filtroDispline, setFiltroDispline] = useState('todas');
   const [headerData, setHeaderData] = useState({
     cliente: empreendimento?.cliente || '',
@@ -125,6 +127,16 @@ export default function PRETab({ empreendimento, readOnly = false }) {
       }));
       loadItems(empreendimento.id);
     }
+  }, [empreendimento?.id]);
+
+  useEffect(() => {
+    if (!empreendimento?.id) return;
+    retryWithBackoff(
+      () => Documento.filter({ empreendimento_id: empreendimento.id }),
+      3, 2000, 'PRETab-Documentos'
+    ).then(docs => setDocumentosDisponiveis(
+      (docs || []).sort((a, b) => (a.arquivo || '').localeCompare(b.arquivo || '', 'pt-BR'))
+    )).catch(() => {});
   }, [empreendimento?.id]);
 
   // AutoSave com debounce — só para itens já persistidos (sem temp-)
@@ -250,6 +262,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
           resposta: itemParaPlanejar.resposta,
           imagens: itemParaPlanejar.imagens || [],
           tempo_atendimento: itemParaPlanejar.tempo_atendimento ?? null,
+          documentos_vinculados: itemParaPlanejar.documentos_vinculados || [],
           planejamento_executor: planejamentoForm.executor,
           planejamento_executor_nome: nomeExecutor,
         }), 3, 2000, 'PRE-Update-Executor');
@@ -286,6 +299,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
       resposta: '',
       imagens: [],
       tempo_atendimento: null,
+      documentos_vinculados: [],
       isNew: true
     };
     setItems([...items, newItem]);
@@ -340,6 +354,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
         resposta: updatedItem.resposta,
         imagens: updatedItem.imagens,
         tempo_atendimento: updatedItem.tempo_atendimento ?? null,
+        documentos_vinculados: updatedItem.documentos_vinculados || [],
       };
 
       // Salva no banco
@@ -393,6 +408,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
             tempo_atendimento: item.tempo_atendimento ?? null,
             planejamento_executor: item.planejamento_executor ?? null,
             planejamento_executor_nome: item.planejamento_executor_nome ?? null,
+            documentos_vinculados: item.documentos_vinculados || [],
           };
 
           if (item.isNew || item.id.toString().startsWith('temp-')) {
@@ -1147,6 +1163,67 @@ export default function PRETab({ empreendimento, readOnly = false }) {
                       )}
                     </div>
 
+                    {/* Documentos Vinculados */}
+                    <div className="no-print">
+                      <label className="text-xs font-semibold text-gray-600 block mb-1">Docs. Vinculados</label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className="w-full text-xs justify-start h-8">
+                            <FileText className="w-3 h-3 mr-1 flex-shrink-0" />
+                            <span className="truncate">
+                              {(item.documentos_vinculados || []).length > 0
+                                ? `${(item.documentos_vinculados || []).length} doc(s)`
+                                : 'Vincular...'}
+                            </span>
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-72 p-2" align="end">
+                          <p className="text-xs font-semibold text-gray-500 mb-2">Selecionar documentos</p>
+                          <div className="space-y-1 max-h-48 overflow-y-auto">
+                            {documentosDisponiveis.length === 0 ? (
+                              <p className="text-xs text-gray-400 text-center py-2">Nenhum documento cadastrado</p>
+                            ) : (
+                              documentosDisponiveis.map(doc => {
+                                const isChecked = (item.documentos_vinculados || []).includes(doc.id);
+                                return (
+                                  <label key={doc.id} className="flex items-start gap-2 text-xs cursor-pointer hover:bg-gray-50 p-1.5 rounded">
+                                    <input
+                                      type="checkbox"
+                                      className="mt-0.5 flex-shrink-0"
+                                      checked={isChecked}
+                                      onChange={(e) => {
+                                        const current = item.documentos_vinculados || [];
+                                        const newDocs = e.target.checked
+                                          ? [...current, doc.id]
+                                          : current.filter(id => id !== doc.id);
+                                        handleUpdateItem(item.id, 'documentos_vinculados', newDocs);
+                                      }}
+                                    />
+                                    <span className="leading-tight">{doc.numero ? `${doc.numero} - ` : ''}{doc.arquivo}</span>
+                                  </label>
+                                );
+                              })
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                      {(item.documentos_vinculados || []).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {(item.documentos_vinculados || []).slice(0, 2).map(docId => {
+                            const doc = documentosDisponiveis.find(d => d.id === docId);
+                            return doc ? (
+                              <Badge key={docId} variant="outline" className="text-xs px-1 py-0 max-w-full">
+                                <span className="truncate max-w-[90px] block">{doc.numero || (doc.arquivo || '').substring(0, 12)}</span>
+                              </Badge>
+                            ) : null;
+                          })}
+                          {(item.documentos_vinculados || []).length > 2 && (
+                            <Badge variant="outline" className="text-xs px-1 py-0">+{(item.documentos_vinculados || []).length - 2}</Badge>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Ações */}
                     <div className="pt-4 no-print space-y-2">
                       {item.planejamento_executor ? (
@@ -1189,6 +1266,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
                                   resposta: item.resposta,
                                   imagens: item.imagens || [],
                                   tempo_atendimento: item.tempo_atendimento ?? null,
+                                  documentos_vinculados: item.documentos_vinculados || [],
                                   planejamento_executor: null,
                                   planejamento_executor_nome: null,
                                 }), 3, 2000, 'PRE-Remove-Executor');
