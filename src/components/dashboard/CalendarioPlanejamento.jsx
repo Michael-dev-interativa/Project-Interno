@@ -23,7 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { PlanejamentoAtividade, Atividade, Documento, Empreendimento, Execucao, PlanejamentoDocumento } from '@/entities/all';
 import { ChevronsUpDown } from 'lucide-react';
-import { isActivityOverdue as isOverdueShared, distribuirHorasPorDias } from '../utils/DateCalculator';
+import { isActivityOverdue as isOverdueShared, distribuirHorasPorDias, getNextWorkingDay } from '../utils/DateCalculator';
 import { retryWithBackoff } from '../utils/apiUtils';
 // Removed: import { useUserProfile } from '../hooks/useUserProfile'; // This hook is no longer used here
 
@@ -2491,6 +2491,10 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
 
     const grouped = {};
     const processedPlanIds = new Set(); // Para não duplicar com execuções
+    const hojeDate = startOfDay(new Date());
+    const hojeKey = format(hojeDate, 'yyyy-MM-dd');
+    // Atividades "recentes" = vencidas nos últimos 30 dias
+    const recentCutoff = addDays(hojeDate, -30);
 
     // 1. Processar todos os planejamentos (atividades planejadas, planejamentos de documento e rápidas com planejamento)
     filteredPlanejamentos.forEach(plano => {
@@ -2503,6 +2507,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
 
       const diasParaExibir = new Set();
       const isQuickActivity = plano.is_quick_activity || plano.isQuickActivity;
+      let _isExtendedToToday = false; // marca se esta atividade está sendo estendida para hoje
 
       // Para atividades rápidas (concluídas ou não), usar APENAS horas_executadas_por_dia
       // Atividades rápidas não têm planejamento de dias - aparecem onde foram executadas
@@ -2599,6 +2604,19 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
               }
             });
           }
+
+          // Extensão automática: atividade atrasada recente aparece no dia atual
+          if (isActivityOverdue(plano)) {
+            const terminoRef = plano.termino_ajustado || plano.termino_planejado;
+            if (terminoRef) {
+              const terminoDate = parseLocalDate(terminoRef);
+              const jaEstaHoje = !!(plano.horas_por_dia?.[hojeKey] && Number(plano.horas_por_dia[hojeKey]) >= 0.05);
+              if (terminoDate && isValid(terminoDate) && terminoDate >= recentCutoff && !jaEstaHoje) {
+                diasParaExibir.add(hojeKey);
+                _isExtendedToToday = true;
+              }
+            }
+          }
         }
       }
 
@@ -2614,6 +2632,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
             // Detecta apenas atividades rápidas com flag explícita
             isQuickActivity: !!plano.is_quick_activity,
             isLegacyExecution: false, // Explicitly set to false for actual PlanejamentoAtividade
+            _isExtended: _isExtendedToToday && dayKey === hojeKey,
           };
           grouped[dayKey].push(planoParaExibir);
         }
@@ -2709,6 +2728,49 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
           const idxB = orderMap.has(String(b.id)) ? orderMap.get(String(b.id)) : 9999;
           return idxA - idxB;
         });
+      }
+    }
+
+    // Push: quando uma atividade se estende para hoje, arrasta a última da fila de prioridade para o próximo dia útil
+    if (grouped[hojeKey] && grouped[hojeKey].some(a => a._isExtended)) {
+      const elegiveisPush = grouped[hojeKey].filter(a => {
+        const st = activityStatusMap.get(normalizeActivityId(a.id)) || a.status || 'nao_iniciado';
+        return (
+          !a._isExtended &&
+          !a.isLegacyExecution &&
+          !a.isQuickActivity &&
+          st !== 'concluido' &&
+          st !== 'concluido_com_atraso'
+        );
+      });
+
+      if (elegiveisPush.length > 0) {
+        const ultimaAtividade = elegiveisPush[elegiveisPush.length - 1];
+
+        // Remover do dia atual
+        grouped[hojeKey] = grouped[hojeKey].filter(a => a.id !== ultimaAtividade.id);
+
+        // Adicionar ao próximo dia útil
+        const proximoDiaUtil = getNextWorkingDay(hojeDate);
+        const proximoDiaKey = format(proximoDiaUtil, 'yyyy-MM-dd');
+        if (!grouped[proximoDiaKey]) grouped[proximoDiaKey] = [];
+        if (!grouped[proximoDiaKey].some(a => a.id === ultimaAtividade.id)) {
+          grouped[proximoDiaKey].push({ ...ultimaAtividade, _isPushed: true });
+
+          // Re-ordenar o próximo dia para encaixar a atividade na posição certa
+          grouped[proximoDiaKey].sort((a, b) => {
+            const statusA = activityStatusMap.get(normalizeActivityId(a.id)) || a.status || 'nao_iniciado';
+            const statusB = activityStatusMap.get(normalizeActivityId(b.id)) || b.status || 'nao_iniciado';
+            const isConcA = statusA === 'concluido' || statusA === 'concluido_com_atraso';
+            const isConcB = statusB === 'concluido' || statusB === 'concluido_com_atraso';
+            if (isConcA && !isConcB) return 1;
+            if (!isConcA && isConcB) return -1;
+            const inicioA = a.inicio_planejado ? parseISO(a.inicio_planejado) : null;
+            const inicioB = b.inicio_planejado ? parseISO(b.inicio_planejado) : null;
+            if (inicioA && inicioB) return inicioA.getTime() - inicioB.getTime();
+            return 0;
+          });
+        }
       }
     }
 

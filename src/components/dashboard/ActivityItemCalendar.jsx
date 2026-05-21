@@ -6,13 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { User, Trash2, RefreshCw, Play, ListMusic, PlusCircle, Loader2, Edit2 } from "lucide-react";
+import { User, Trash2, RefreshCw, Play, ListMusic, PlusCircle, Loader2, Edit2, X, Check } from "lucide-react";
 import { ActivityTimerContext } from '../contexts/ActivityTimerContext';
 import FinalizarAtividadeButton from './FinalizarAtividadeButton';
 import { formatHoras } from '../utils/formatHours';
 import { Execucao, PlanejamentoAtividade, PlanejamentoDocumento } from '@/entities/all';
 import { retryWithBackoff } from '../utils/apiUtils';
-import { distribuirHorasPorDias } from '../utils/DateCalculator';
+import { distribuirHorasPorDias, isActivityOverdue } from '../utils/DateCalculator';
 import { format } from 'date-fns';
 
 // Import calculateActivityStatus from parent
@@ -58,21 +58,24 @@ export default function ActivityItemCalendar({
   const [editForm, setEditForm] = useState({});
 
   const realStatus = useMemo(() => {
-    if (plano.status === 'concluido_com_atraso') {
-      return 'concluido_com_atraso';
-    }
-    if (plano.status === 'concluido') {
-      return 'concluido';
-    }
+    if (plano.status === 'concluido_com_atraso') return 'concluido_com_atraso';
+    if (plano.status === 'concluido') return 'concluido';
 
     const tempoExec = Number(plano.tempo_executado) || 0;
     const tempoPlanj = Number(plano.tempo_planejado) || 0;
-    if (tempoPlanj > 0 && tempoExec >= tempoPlanj) {
-      return 'concluido';
+    if (tempoPlanj > 0 && tempoExec >= tempoPlanj) return 'concluido';
+
+    const overdue = isActivityOverdue(plano);
+    if (overdue) {
+      const foiIniciada = plano.inicio_real != null ||
+        plano.status === 'em_andamento' ||
+        plano.status === 'pausado' ||
+        tempoExec > 0;
+      return foiIniciada ? 'atrasado_em_andamento' : 'atrasado_nao_iniciado';
     }
 
     return plano.status || 'nao_iniciado';
-  }, [plano.status, plano.tempo_executado, plano.tempo_planejado]);
+  }, [plano.status, plano.tempo_executado, plano.tempo_planejado, plano.inicio_real, plano.termino_planejado, plano.termino_ajustado]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -81,7 +84,9 @@ export default function ActivityItemCalendar({
       case 'concluido': return '#10b981';
       case 'concluido_com_atraso': return '#ef4444';
       case 'atrasado':
-      case 'replanejado_atrasado': return '#ef4444';
+      case 'replanejado_atrasado':
+      case 'atrasado_nao_iniciado': return '#ef4444';
+      case 'atrasado_em_andamento': return '#f59e0b';
       case 'impactado_por_atraso': return '#8b5cf6';
       case 'nao_iniciado':
       default: return '#6b7280';
@@ -245,7 +250,12 @@ export default function ActivityItemCalendar({
   };
 
   const isConcluded = realStatus === 'concluido' || realStatus === 'concluido_com_atraso';
-  const shouldShowStartButton = () => !isConcluded && !activeExecution && !plano.isLegacyExecution;
+  const shouldShowStartButton = () =>
+    !isConcluded &&
+    !activeExecution &&
+    !plano.isLegacyExecution &&
+    realStatus !== 'atrasado_nao_iniciado' &&
+    realStatus !== 'atrasado_em_andamento';
   
   const shouldShowDeleteButton = () => {
     if (!user) return false;
@@ -344,7 +354,9 @@ export default function ActivityItemCalendar({
           borderLeft: `3px solid ${getStatusColor(realStatus)}`,
           backgroundColor: isSelected ? '#e0e7ff' :
                          realStatus === 'concluido_com_atraso' ? '#fef2f2' :
+                         realStatus === 'atrasado_nao_iniciado' ? '#fef2f2' :
                          realStatus === 'atrasado' ? '#fef2f2' :
+                         realStatus === 'atrasado_em_andamento' ? '#fffbeb' :
                          realStatus === 'em_andamento' ? '#eff6ff' :
                          realStatus === 'concluido' ? '#f0fdf4' :
                          realStatus === 'pausado' ? '#fffbeb' : '#ffffff',
@@ -482,6 +494,18 @@ export default function ActivityItemCalendar({
                   <span className="text-red-600 font-medium">Concluída c/ Atraso</span>
                 </div>
               )}
+              {realStatus === 'atrasado_nao_iniciado' && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="w-2 h-2 bg-red-500 rounded-full shrink-0"></div>
+                  <span className="text-red-600 font-medium">Não Iniciada — Atrasada</span>
+                </div>
+              )}
+              {realStatus === 'atrasado_em_andamento' && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full shrink-0"></div>
+                  <span className="text-amber-600 font-medium">Em Andamento — Atrasada</span>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
@@ -523,6 +547,47 @@ export default function ActivityItemCalendar({
         )}
 
         <div className="flex gap-1 mt-2">
+          {/* Cenário 3: Concluída no prazo — verde com ✓ */}
+          {realStatus === 'concluido' && (
+            <div className="flex-1 h-6 flex items-center justify-center gap-1 bg-green-100 rounded text-green-700 text-xs font-medium">
+              <Check className="w-3 h-3" /> Concluída
+            </div>
+          )}
+
+          {/* Cenário 2 após finalizar: Concluída com atraso — vermelho com ✓ */}
+          {realStatus === 'concluido_com_atraso' && (
+            <div className="flex-1 h-6 flex items-center justify-center gap-1 bg-red-100 rounded text-red-700 text-xs font-medium">
+              <Check className="w-3 h-3" /> Concluída c/ Atraso
+            </div>
+          )}
+
+          {/* Cenário 1: Atrasada e não iniciada — vermelho com X (ainda clicável para iniciar) */}
+          {realStatus === 'atrasado_nao_iniciado' && !plano.isLegacyExecution && (
+            <Button
+              onClick={handleStartActivity}
+              disabled={!!activeExecution || isStarting}
+              size="sm"
+              className="flex-1 h-6 text-xs bg-red-600 hover:bg-red-700"
+            >
+              <X className="w-3 h-3 mr-1" />
+              {isStarting ? "Iniciando..." : "Iniciar"}
+            </Button>
+          )}
+
+          {/* Cenário 2: Iniciada mas não finalizada e atrasada — amarelo com ▶ */}
+          {realStatus === 'atrasado_em_andamento' && !plano.isLegacyExecution && (
+            <Button
+              onClick={handleStartActivity}
+              disabled={!!activeExecution || isStarting}
+              size="sm"
+              className="flex-1 h-6 text-xs bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              <Play className="w-3 h-3 mr-1" />
+              {isStarting ? "Iniciando..." : "Continuar"}
+            </Button>
+          )}
+
+          {/* Botão padrão de iniciar (atividades dentro do prazo) */}
           {shouldShowStartButton() && (
             <Button
               onClick={handleStartActivity}
@@ -534,9 +599,9 @@ export default function ActivityItemCalendar({
               {isStarting ? "Iniciando..." : "Iniciar"}
             </Button>
           )}
-          
+
           {shouldShowFinalizarButton() && (
-            <FinalizarAtividadeButton 
+            <FinalizarAtividadeButton
               plano={plano}
               displayName={displayName}
               onSuccess={onDelete}
