@@ -1130,7 +1130,8 @@ export default function PRETab({ empreendimento, readOnly = false }) {
                         min="0"
                         step="0.5"
                         value={item.tempo_atendimento !== null && item.tempo_atendimento !== undefined ? String(Number(item.tempo_atendimento)) : ''}
-                        onChange={(e) => handleUpdateItem(item.id, 'tempo_atendimento', e.target.value ? parseFloat(e.target.value) : null)}
+                        onChange={(e) => handleUpdateItem(item.id, 'tempo_atendimento', e.target.value !== '' ? parseFloat(e.target.value) : null)}
+                        onBlur={() => handleAutoSave()}
                         className="h-9 text-sm print:border-none print:bg-transparent"
                         disabled={readOnly}
                         placeholder="0.0"
