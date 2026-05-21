@@ -81,7 +81,7 @@ export default function DocumentosTab({
     // Inicializar todas as disciplinas como colapsadas para não renderizar todos os itens de uma vez
     const inicial = {};
     documentos.forEach(doc => {
-      const d = doc.disciplina || 'Sem Disciplina';
+      const d = doc.disciplina || (Array.isArray(doc.disciplinas) && doc.disciplinas.length > 0 ? doc.disciplinas[0] : null) || 'Sem Disciplina';
       inicial[d] = true;
     });
     return inicial;
@@ -753,7 +753,7 @@ export default function DocumentosTab({
   const documentosPorDisciplina = useMemo(() => {
     const grupos = {};
     filteredDocumentos.forEach(doc => {
-      const disciplina = doc.disciplina || 'Sem Disciplina';
+      const disciplina = doc.disciplina || (Array.isArray(doc.disciplinas) && doc.disciplinas.length > 0 ? doc.disciplinas[0] : null) || 'Sem Disciplina';
       if (!grupos[disciplina]) grupos[disciplina] = [];
       grupos[disciplina].push(doc);
     });
