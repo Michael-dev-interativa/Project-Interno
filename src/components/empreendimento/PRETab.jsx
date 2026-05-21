@@ -114,6 +114,9 @@ export default function PRETab({ empreendimento, readOnly = false, onAfterSave }
   });
   const saveTimeoutRef = React.useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
   const isSavingRef = React.useRef(false);
+  const onAfterSaveRef = React.useRef(onAfterSave);
+  React.useEffect(() => { onAfterSaveRef.current = onAfterSave; }, [onAfterSave]);
+  const documentosRef = React.useRef([]);
 
   useEffect(() => {
     if (empreendimento) {
@@ -175,8 +178,9 @@ export default function PRETab({ empreendimento, readOnly = false, onAfterSave }
 
 
 
-  // Mantém ref sincronizada com state para callbacks sem re-criação
+  // Mantém refs sincronizadas com state para callbacks sem re-criação
   React.useEffect(() => { itemsRef.current = items; }, [items]);
+  React.useEffect(() => { documentosRef.current = documentos; }, [documentos]);
 
   const loadItems = async (empId) => {
     try {
@@ -202,6 +206,11 @@ export default function PRETab({ empreendimento, readOnly = false, onAfterSave }
         return 0;
       });
       setItems(sortedItems);
+      itemsRef.current = sortedItems;
+      // Backfill tempo_pre para itens existentes carregados agora
+      atualizarTempoDocumentos().then(() => {
+        if (onAfterSaveRef.current) onAfterSaveRef.current();
+      }).catch(() => {});
     } catch {
       setItems([]);
     }
@@ -438,7 +447,7 @@ export default function PRETab({ empreendimento, readOnly = false, onAfterSave }
 
       // Atualiza tempo_pre nos documentos vinculados e notifica pai
       await atualizarTempoDocumentos();
-      if (onAfterSave) onAfterSave();
+      if (onAfterSaveRef.current) onAfterSaveRef.current();
     } catch (err) {
       console.error('Erro no autoSave PRE:', err);
       // Recoloca os itens como dirty para tentar novamente
@@ -459,8 +468,8 @@ export default function PRETab({ empreendimento, readOnly = false, onAfterSave }
       (item.documentos_vinculados || []).forEach(docId => docIdsComVinculo.add(docId));
     });
 
-    // Também inclui documentos que já têm tempo_pre > 0 (para poder zerado se foram desvinculados)
-    const docIdsParaZerar = documentos.filter(d => Number(d.tempo_pre) > 0 && !docIdsComVinculo.has(d.id)).map(d => d.id);
+    // Também inclui documentos que já têm tempo_pre > 0 (para poder zerá-los se foram desvinculados)
+    const docIdsParaZerar = documentosRef.current.filter(d => Number(d.tempo_pre) > 0 && !docIdsComVinculo.has(d.id)).map(d => d.id);
 
     const todosDocIds = new Set([...docIdsComVinculo, ...docIdsParaZerar]);
     if (todosDocIds.size === 0) return;
@@ -508,7 +517,7 @@ export default function PRETab({ empreendimento, readOnly = false, onAfterSave }
     await atualizarTempoDocumentos();
 
     // Notifica o pai para recarregar os documentos com os novos tempo_pre
-    if (onAfterSave) onAfterSave();
+    if (onAfterSaveRef.current) onAfterSaveRef.current();
 
     alert('Dados salvos com sucesso!');
   };
