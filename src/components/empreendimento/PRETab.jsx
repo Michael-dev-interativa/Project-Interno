@@ -435,6 +435,10 @@ export default function PRETab({ empreendimento, readOnly = false, onAfterSave }
       }));
 
       setLastSaved(new Date());
+
+      // Atualiza tempo_pre nos documentos vinculados e notifica pai
+      await atualizarTempoDocumentos();
+      if (onAfterSave) onAfterSave();
     } catch (err) {
       console.error('Erro no autoSave PRE:', err);
       // Recoloca os itens como dirty para tentar novamente

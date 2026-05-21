@@ -491,6 +491,7 @@ function DocumentoItem({
   const tempoExibido = campTempo
     ? (doc[campTempo] ?? null)
     : doc.tempo_total;
+  const tempoPre = Number(doc.tempo_pre) || 0;
 
   const handleRecalcularHoras = async () => {
     setIsRecalculating(true);
@@ -624,8 +625,9 @@ function DocumentoItem({
               </div>
             </td>
 
-            <td className="p-3 text-sm">
+            <td className="p-3 text-sm whitespace-nowrap">
               {tempoExibido != null ? formatHoras(tempoExibido) : '—'}
+              {tempoPre > 0 && <span className="text-purple-600 ml-1 text-xs">(+{tempoPre}h PRE)</span>}
             </td>
 
             <td className="p-3 w-[130px]">
