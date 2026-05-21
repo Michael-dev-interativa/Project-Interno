@@ -1,5 +1,11 @@
 const { pool } = require('../db/pool');
 
+const ALLOWED_ITEMPRE_COLUMNS = new Set([
+  'empreendimento_id', 'item', 'data', 'de', 'descritiva', 'localizacao', 'assunto',
+  'comentario', 'disciplina', 'status', 'resposta', 'imagens', 'tempo_atendimento',
+  'planejamento_executor', 'planejamento_executor_nome', 'documentos_vinculados',
+]);
+
 function serializeJsonb(v) {
   if (v === null || v === undefined) return null;
   if (typeof v === 'string') {
@@ -62,7 +68,7 @@ async function getItemById(id) {
 }
 
 async function updateItem(id, fields) {
-  const keys = Object.keys(fields || {});
+  const keys = Object.keys(fields || {}).filter(k => ALLOWED_ITEMPRE_COLUMNS.has(k));
   if (!keys.length) return await getItemById(id);
 
   const sets = [];

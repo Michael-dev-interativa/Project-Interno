@@ -395,7 +395,6 @@ export default function PRETab({ empreendimento, readOnly = false, onAfterSave }
     imagens: item.imagens || [],
     tempo_atendimento: item.tempo_atendimento ?? null,
     documentos_vinculados: item.documentos_vinculados || [],
-    etapa_adicional: item.etapa_adicional || null,
     planejamento_executor: item.planejamento_executor ?? null,
     planejamento_executor_nome: item.planejamento_executor_nome ?? null,
   });
