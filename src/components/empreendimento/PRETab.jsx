@@ -108,6 +108,21 @@ export default function PRETab({ empreendimento, readOnly = false }) {
   const [disciplinas, setDisciplinas] = useState(/** @type {any[]} */ ([]));
   const [documentosDisponiveis, setDocumentosDisponiveis] = useState(/** @type {any[]} */ ([]));
   const [filtroDispline, setFiltroDispline] = useState('todas');
+
+  // Calcula mapa de documentos para itens PRE vinculados e soma de tempo
+  const docVincPRE = useMemo(() => {
+    // docId: { count, tempoTotal }
+    const map = {};
+    items.forEach(item => {
+      (item.documentos_vinculados || []).forEach(docId => {
+        if (!map[docId]) map[docId] = { count: 0, tempoTotal: 0 };
+        map[docId].count += 1;
+        map[docId].tempoTotal += Number(item.tempo_atendimento) || 0;
+      });
+    });
+    return map;
+  }, [items]);
+
   const [headerData, setHeaderData] = useState({
     cliente: empreendimento?.cliente || '',
     obra: empreendimento?.nome || '',
@@ -810,6 +825,40 @@ export default function PRETab({ empreendimento, readOnly = false }) {
         </div>
 
         <div className="bg-white border border-gray-400 shadow-lg">
+          {/* Seção de documentos vinculados com contagem e tempo */}
+          {documentosDisponiveis.length > 0 && (
+            <div className="p-4 border-b border-gray-300 bg-gray-50">
+              <h3 className="font-semibold text-gray-700 mb-2">Documentos Vinculados (PRE)</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-[400px] w-full text-xs border border-gray-200">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="p-2 border-b text-left">Nº</th>
+                      <th className="p-2 border-b text-left">Arquivo</th>
+                      <th className="p-2 border-b text-left">Itens PRE</th>
+                      <th className="p-2 border-b text-left">Tempo Total (h)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {documentosDisponiveis.map(doc => {
+                      const vinc = docVincPRE[doc.id] || { count: 0, tempoTotal: 0 };
+                      // Tempo do documento (se existir campo tempo)
+                      const tempoDoc = Number(doc.tempo) || 0;
+                      const tempoTotal = tempoDoc + vinc.tempoTotal;
+                      return (
+                        <tr key={doc.id}>
+                          <td className="p-2 border-b">{doc.numero || ''}</td>
+                          <td className="p-2 border-b">{doc.arquivo}</td>
+                          <td className="p-2 border-b">{vinc.count}</td>
+                          <td className="p-2 border-b">{tempoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
           <div className="border-b-2 border-gray-800 p-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <img src={LOGO_URL} alt="Interativa" className="h-16" />
