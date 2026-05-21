@@ -444,6 +444,7 @@ export default function EmpreendimentoPage() {
                 documentosProp={tabData.documentos.data?.documentos || []}
                 pavimentosProp={tabData.pavimentos.data || []}
                 allAtividadesProp={sharedData.atividades || []}
+                activeTab={activeTab}
               />
             ) : null}
           </TabsContent>

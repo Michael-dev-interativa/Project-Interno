@@ -26,7 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 // @ts-ignore
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 
-export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
+export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate, activeTab }) {
   // Tipagem explícita para evitar erro de 'never' em projetos JS/TS mistos
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [combinedActivities, setCombinedActivities] = useState([]); // array de atividades
@@ -466,7 +466,16 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
     return [...new Set(combinedActivities.map(a => a.etapa).filter(Boolean))];
   }, [combinedActivities, empreendimentoId, allEmpreendimentos]);
 
-  // Soma de tempo dos itens PRE vinculados por documento_id
+  // Re-busca itensPRE quando a aba analítica fica ativa (dados podem ter sido editados no PRETab)
+  useEffect(() => {
+    if (activeTab !== 'atividades_projeto' || !empreendimentoId) return;
+    retryWithBackoff(
+      () => ItemPRE.filter({ empreendimento_id: empreendimentoId }),
+      3, 500, 'refreshItensPRE'
+    ).then(data => setItensPRE(data || [])).catch(() => {});
+  }, [activeTab, empreendimentoId]);
+
+  // Soma de tempo dos itens PRE vinculados por documento_id (IDs normalizados para string)
   const preTempoByDocumentoId = useMemo(() => {
     const map = new Map();
     (itensPRE || []).forEach(pre => {
@@ -474,7 +483,8 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
       const tempo = Number(pre.tempo_atendimento) || 0;
       if (tempo > 0 && vinculados.length > 0) {
         vinculados.forEach(docId => {
-          map.set(docId, (map.get(docId) || 0) + tempo);
+          const key = String(docId);
+          map.set(key, (map.get(key) || 0) + tempo);
         });
       }
     });
@@ -1501,7 +1511,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                     <TableCell className="text-sm">
                                       {(() => {
                                         const baseTempo = folha.tempo ? Number(folha.tempo) : 0;
-                                        const preTempo = preTempoByDocumentoId.get(folha.source_documento_id) || 0;
+                                        const preTempo = preTempoByDocumentoId.get(String(folha.source_documento_id)) || 0;
                                         if (baseTempo === 0 && preTempo === 0) return '-';
                                         if (preTempo === 0) return `${baseTempo.toFixed(1)}h`;
                                         return (
@@ -1907,7 +1917,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                             <TableCell className="text-sm">
                               {(() => {
                                 const baseTempo = folha.tempo ? Number(folha.tempo) : 0;
-                                const preTempo = preTempoByDocumentoId.get(folha.source_documento_id) || 0;
+                                const preTempo = preTempoByDocumentoId.get(String(folha.source_documento_id)) || 0;
                                 if (baseTempo === 0 && preTempo === 0) return '-';
                                 if (preTempo === 0) return `${baseTempo.toFixed(1)}h`;
                                 return (
