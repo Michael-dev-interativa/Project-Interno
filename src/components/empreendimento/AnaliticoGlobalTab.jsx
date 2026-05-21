@@ -813,7 +813,6 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
       }
 
       await fetchData();
-      if (onUpdate) onUpdate();
     } catch (error) {
       console.error('Erro ao alterar status da folha:', error);
       alert('Não foi possível alterar o status desta folha. Tente novamente.');
