@@ -362,7 +362,7 @@ export default function ActivityItemCalendar({
                          realStatus === 'pausado' ? '#fffbeb' : '#ffffff',
           ...(isDragging && { boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', transform: 'rotate(2deg)'})
         }}
-        className={`p-2 rounded border mb-1 text-xs group hover:shadow-md transition-shadow relative ${
+        className={`p-2 rounded border mb-1 text-xs group hover:shadow-md transition-shadow relative overflow-hidden w-full ${
           isSelected ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-gray-200'
         }`}
       >
@@ -402,8 +402,8 @@ export default function ActivityItemCalendar({
           </svg>
         </div>
 
-        <div className="flex items-start justify-between mb-1.5">
-          <div className={`flex-1 mr-2 ${hasSelections || isSelected ? 'ml-12' : 'ml-6'}`}>
+        <div className="flex items-start justify-between mb-1.5 min-w-0">
+          <div className={`flex-1 min-w-0 mr-2 ${hasSelections || isSelected ? 'ml-12' : 'ml-6'}`}>
             <p className="font-medium text-gray-800 break-words" title={displayName}>
               {displayName}
               {plano.isQuickActivity && (
@@ -473,9 +473,9 @@ export default function ActivityItemCalendar({
           </div>
         )}
 
-        <div className="mb-1.5">
-          <div className="flex items-start justify-between gap-2 min-w-0 flex-wrap">
-            <div className="flex items-center gap-3 flex-wrap min-w-0">
+        <div className="mb-1.5 min-w-0">
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap min-w-0 overflow-hidden">
               {subdisciplina && (
                 <div className="flex items-center gap-1.5 shrink-0">
                   <div className="w-2 h-2 bg-blue-400 rounded-full shrink-0"></div>
@@ -508,12 +508,13 @@ export default function ActivityItemCalendar({
               )}
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="font-mono text-blue-600 flex flex-col items-end">
-                <span className="font-semibold text-sm" title={contemDiasFuturos ? "Planejado / Executado (continua nos próximos dias)" : "Planejado / Executado"}>
-                  {formatHoras(horasAlocadasDia)}/{formatHoras(horasExecutadasDia)}{contemDiasFuturos ? ' ...' : ''}
-                </span>
-              </div>
+            <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+              <span
+                className="font-mono font-semibold text-xs text-blue-600 whitespace-nowrap"
+                title={contemDiasFuturos ? "Planejado / Executado (continua nos próximos dias)" : "Planejado / Executado"}
+              >
+                {formatHoras(horasAlocadasDia)}/{formatHoras(horasExecutadasDia)}{contemDiasFuturos ? '…' : ''}
+              </span>
 
               {realStatus === 'concluido' && (
                 <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shrink-0">
