@@ -100,6 +100,10 @@ export default function PRETab({ empreendimento, readOnly = false }) {
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = React.useRef(/** @type {{ x: number; y: number } | null} */ (null));
   const [items, setItems] = useState(/** @type {any[]} */ ([]));
+  // Tempo total da folha (soma dos tempos dos comentários)
+  const totalTempoFolha = useMemo(() => {
+    return items.reduce((acc, item) => acc + (parseFloat(item.comentario_tempo) || 0), 0);
+  }, [items]);
   const [lastSaved, setLastSaved] = useState(/** @type {Date | null} */ (null));
   const [isImporting, setIsImporting] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -108,21 +112,6 @@ export default function PRETab({ empreendimento, readOnly = false }) {
   const [disciplinas, setDisciplinas] = useState(/** @type {any[]} */ ([]));
   const [documentosDisponiveis, setDocumentosDisponiveis] = useState(/** @type {any[]} */ ([]));
   const [filtroDispline, setFiltroDispline] = useState('todas');
-
-  // Calcula mapa de documentos para itens PRE vinculados e soma de tempo
-  const docVincPRE = useMemo(() => {
-    // docId: { count, tempoTotal }
-    const map = {};
-    items.forEach(item => {
-      (item.documentos_vinculados || []).forEach(docId => {
-        if (!map[docId]) map[docId] = { count: 0, tempoTotal: 0 };
-        map[docId].count += 1;
-        map[docId].tempoTotal += Number(item.tempo_atendimento) || 0;
-      });
-    });
-    return map;
-  }, [items]);
-
   const [headerData, setHeaderData] = useState({
     cliente: empreendimento?.cliente || '',
     obra: empreendimento?.nome || '',
@@ -309,6 +298,8 @@ export default function PRETab({ empreendimento, readOnly = false }) {
       localizacao: '',
       assunto: '',
       comentario: '',
+      comentario_documentos_vinculados: [], // NOVO
+      comentario_tempo: '', // NOVO
       disciplina: '',
       status: 'Em andamento',
       resposta: '',
@@ -825,40 +816,6 @@ export default function PRETab({ empreendimento, readOnly = false }) {
         </div>
 
         <div className="bg-white border border-gray-400 shadow-lg">
-          {/* Seção de documentos vinculados com contagem e tempo */}
-          {documentosDisponiveis.length > 0 && (
-            <div className="p-4 border-b border-gray-300 bg-gray-50">
-              <h3 className="font-semibold text-gray-700 mb-2">Documentos Vinculados (PRE)</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-[400px] w-full text-xs border border-gray-200">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="p-2 border-b text-left">Nº</th>
-                      <th className="p-2 border-b text-left">Arquivo</th>
-                      <th className="p-2 border-b text-left">Itens PRE</th>
-                      <th className="p-2 border-b text-left">Tempo Total (h)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {documentosDisponiveis.map(doc => {
-                      const vinc = docVincPRE[doc.id] || { count: 0, tempoTotal: 0 };
-                      // Tempo do documento (se existir campo tempo)
-                      const tempoDoc = Number(doc.tempo) || 0;
-                      const tempoTotal = tempoDoc + vinc.tempoTotal;
-                      return (
-                        <tr key={doc.id}>
-                          <td className="p-2 border-b">{doc.numero || ''}</td>
-                          <td className="p-2 border-b">{doc.arquivo}</td>
-                          <td className="p-2 border-b">{vinc.count}</td>
-                          <td className="p-2 border-b">{tempoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
           <div className="border-b-2 border-gray-800 p-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <img src={LOGO_URL} alt="Interativa" className="h-16" />
@@ -938,6 +895,10 @@ export default function PRETab({ empreendimento, readOnly = false }) {
           </div>
 
           <div className="space-y-4 p-4">
+            {/* Tempo total da folha */}
+            <div className="mb-2 text-right text-xs font-semibold text-blue-700">
+              Tempo total da folha (comentários): {totalTempoFolha}h
+            </div>
             {filteredItems.length === 0 ? (
               <Card>
                 <CardContent className="p-8 text-center">
@@ -992,7 +953,7 @@ export default function PRETab({ empreendimento, readOnly = false }) {
                       </div>
                     </div>
 
-                    {/* Comentário */}
+                    {/* Comentário + Documentos Vinculados + Tempo */}
                     <div>
                       <label className="text-xs font-semibold text-gray-600 block mb-1">Comentário</label>
                       <Textarea
@@ -1003,6 +964,40 @@ export default function PRETab({ empreendimento, readOnly = false }) {
                         disabled={readOnly}
                         placeholder="Comentários adicionais..."
                       />
+                      <div className="flex gap-2 mt-2">
+                        <div className="flex-1">
+                          <label className="text-xs font-semibold text-gray-600 block mb-1">Docs. do Comentário</label>
+                          <Select
+                            multiple
+                            value={item.comentario_documentos_vinculados || []}
+                            onValueChange={vals => handleUpdateItem(item.id, 'comentario_documentos_vinculados', vals)}
+                            disabled={readOnly}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Vincular documentos ao comentário..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {documentosDisponiveis.map(doc => (
+                                <SelectItem key={doc.id} value={doc.id}>
+                                  {doc.numero ? `${doc.numero} - ` : ''}{doc.arquivo}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="w-32">
+                          <label className="text-xs font-semibold text-gray-600 block mb-1">Tempo (h)</label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={item.comentario_tempo || ''}
+                            onChange={e => handleUpdateItem(item.id, 'comentario_tempo', e.target.value)}
+                            disabled={readOnly}
+                            placeholder="0.0"
+                          />
+                        </div>
+                      </div>
                     </div>
 
                     {/* Resposta */}
