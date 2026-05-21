@@ -750,7 +750,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
     setIsExcluirDeFolhasModalOpen(true);
   };
 
-  const handleConcluirFolha = async (folha) => {
+  const handleToggleFolhaConcluida = async (folha, concluir) => {
     const chave = `${folha.source_documento_id}-${folha.base_atividade_id}`;
     setIsConcluindo(prev => ({ ...prev, [chave]: true }));
     try {
@@ -760,43 +760,55 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
           documento_id: folha.source_documento_id,
           atividade_id: folha.base_atividade_id
         }),
-        3, 500, `findPlanosParaConcluirFolha-${chave}`
+        3, 500, `findPlanosToggleFolha-${chave}`
       );
 
-      if (planos.length > 0) {
-        await Promise.all(
-          planos.map(p =>
-            retryWithBackoff(
-              () => PlanejamentoAtividade.update(p.id, { status: 'concluido' }),
-              3, 500, `concluirFolha-${p.id}`
+      if (concluir) {
+        if (planos.length > 0) {
+          await Promise.all(
+            planos.map(p =>
+              retryWithBackoff(
+                () => PlanejamentoAtividade.update(p.id, { status: 'concluido' }),
+                3, 500, `concluirFolha-${p.id}`
+              )
             )
-          )
-        );
+          );
+        } else {
+          const baseAtiv = combinedActivities.find(a => a.id === folha.base_atividade_id);
+          const descritivo = baseAtiv?.atividade || folha.source_documento_arquivo || '';
+          const hoje = format(new Date(), 'yyyy-MM-dd');
+          await retryWithBackoff(
+            () => PlanejamentoAtividade.create({
+              empreendimento_id: empreendimentoId,
+              documento_id: folha.source_documento_id,
+              atividade_id: folha.base_atividade_id,
+              etapa: folha.etapa || '',
+              descritivo,
+              tempo_planejado: folha.tempo || 0,
+              status: 'concluido',
+              termino_real: hoje,
+              horas_por_dia: {}
+            }),
+            3, 500, `criarPlanoConcluidoFolha-${chave}`
+          );
+        }
       } else {
-        const baseAtiv = combinedActivities.find(a => a.id === folha.base_atividade_id);
-        const descritivo = baseAtiv?.atividade || folha.source_documento_arquivo || '';
-        const hoje = format(new Date(), 'yyyy-MM-dd');
-        await retryWithBackoff(
-          () => PlanejamentoAtividade.create({
-            empreendimento_id: empreendimentoId,
-            documento_id: folha.source_documento_id,
-            atividade_id: folha.base_atividade_id,
-            etapa: folha.etapa || '',
-            descritivo,
-            tempo_planejado: folha.tempo || 0,
-            status: 'concluido',
-            termino_real: hoje,
-            horas_por_dia: {}
-          }),
-          3, 500, `criarPlanoConcluidoFolha-${chave}`
+        await Promise.all(
+          planos.map(p => {
+            const novoStatus = (p.inicio_planejado && p.termino_planejado) ? 'nao_iniciado' : 'nao_iniciado';
+            return retryWithBackoff(
+              () => PlanejamentoAtividade.update(p.id, { status: novoStatus, termino_real: null }),
+              3, 500, `reverterFolha-${p.id}`
+            );
+          })
         );
       }
 
       await fetchData();
       if (onUpdate) onUpdate();
     } catch (error) {
-      console.error('Erro ao concluir folha:', error);
-      alert('Não foi possível concluir a atividade nesta folha. Tente novamente.');
+      console.error('Erro ao alterar status da folha:', error);
+      alert('Não foi possível alterar o status desta folha. Tente novamente.');
     } finally {
       setIsConcluindo(prev => ({ ...prev, [chave]: false }));
     }
@@ -1465,11 +1477,9 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
                                         ) : (
                                           <Checkbox
                                             checked={isFolhaConcluida}
-                                            disabled={isFolhaConcluida || isFolhaConcluindo}
-                                            onCheckedChange={(checked) => {
-                                              if (checked) handleConcluirFolha(folha);
-                                            }}
-                                            title="Marcar como concluída"
+                                            disabled={isFolhaConcluindo}
+                                            onCheckedChange={(checked) => handleToggleFolhaConcluida(folha, checked)}
+                                            title={isFolhaConcluida ? 'Desfazer conclusão' : 'Marcar como concluída'}
                                           />
                                         )}
                                       </div>
