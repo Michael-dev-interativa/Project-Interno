@@ -968,7 +968,11 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate, activeT
 
       const doc = documentosMap.get(folha.source_documento_id);
       const fator = doc?.fator_dificuldade || 1;
-      const tempoCalculado = (atividadeOriginal.tempo || 0) * fator;
+      // folha.tempo is already the per-folha calculated time; fall back to atividade base * fator
+      const tempoCalculado = Number(folha.tempo) || (Number(atividadeOriginal.tempo) * fator) || 0;
+      if (tempoCalculado <= 0) {
+        throw new Error('Esta atividade não possui tempo configurado. Defina o tempo padrão antes de planejar.');
+      }
 
       let dataInicio = dataInicioCustom ? new Date(dataInicioCustom) : new Date(hojeMidnight);
       if (dataInicioCustom) {

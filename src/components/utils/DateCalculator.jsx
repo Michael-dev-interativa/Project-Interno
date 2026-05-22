@@ -230,6 +230,9 @@ export const distribuirHorasPorDias = (dataInicio, horasTotais, limiteDiario = 8
   }
 
   const diasDistribuidos = Object.keys(distribuicao).sort();
+  if (diasDistribuidos.length === 0) {
+    throw new Error('Nenhum dia disponível para alocar as horas. Verifique a agenda do executor.');
+  }
   const lastDayStr = diasDistribuidos[diasDistribuidos.length - 1];
   const [dyear, dmonth, dday] = lastDayStr.split('-').map(Number);
   const dataTermino = new Date(dyear, dmonth - 1, dday); // local midnight — avoids UTC timezone shift
