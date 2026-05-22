@@ -17,6 +17,8 @@ import {
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import AnaliticoFolhaRow from './AnaliticoFolhaRow';
+import { PlanejamentoAtividade, Atividade } from '@/entities/all';
+import { retryWithBackoff } from '../utils/apiUtils';
 
 export default function AnaliticoRenderContent({
   isLoading,
@@ -67,10 +69,89 @@ export default function AnaliticoRenderContent({
 }) {
   // folhasSelecionadas lives here so checkbox clicks don't re-render the entire parent
   const [folhasSelecionadas, setFolhasSelecionadas] = useState(new Set());
+  const [isConcluindoFolhas, setIsConcluindoFolhas] = useState(false);
 
   const handleConcluirFolha = useCallback(() => {
     if (fetchData) fetchData();
   }, [fetchData]);
+
+  const handleConcluirFolhasSelecionadas = useCallback(async () => {
+    if (folhasSelecionadas.size === 0) return;
+    setIsConcluindoFolhas(true);
+    const hoje = format(new Date(), 'yyyy-MM-dd');
+
+    // Collect all folha objects matching selected ids
+    const folhasParaConcluir = [];
+    for (const grupo of (atividadesAgrupadas || [])) {
+      for (const folha of (grupo.folhas || [])) {
+        if (folhasSelecionadas.has(folha.source_documento_id) && folha.status !== 'Concluída') {
+          folhasParaConcluir.push(folha);
+        }
+      }
+    }
+
+    let erros = 0;
+    for (const folha of folhasParaConcluir) {
+      try {
+        const atividadeId = folha.base_atividade_id;
+        const docId = folha.source_documento_id;
+
+        const planos = await retryWithBackoff(
+          () => PlanejamentoAtividade.filter({ empreendimento_id: empreendimentoId, atividade_id: atividadeId, documento_id: docId }),
+          3, 300, `plano-${docId}-${atividadeId}`
+        );
+
+        if (planos.length > 0) {
+          await retryWithBackoff(
+            () => PlanejamentoAtividade.update(planos[0].id, { status: 'concluido', termino_real: hoje }),
+            3, 300, `concluir-${planos[0].id}`
+          );
+        } else {
+          await retryWithBackoff(
+            () => PlanejamentoAtividade.create({
+              empreendimento_id: empreendimentoId,
+              atividade_id: atividadeId,
+              documento_id: docId,
+              etapa: folha.etapa,
+              descritivo: folha.atividade,
+              tempo_planejado: folha.tempo || 0,
+              status: 'concluido',
+              termino_real: hoje,
+              horas_por_dia: {},
+            }),
+            3, 300, `criarConcluir-${docId}`
+          );
+        }
+
+        const marcadores = await retryWithBackoff(
+          () => Atividade.filter({ empreendimento_id: empreendimentoId, id_atividade: atividadeId, documento_id: docId, tempo: 0 }),
+          3, 300, `marcador-${docId}`
+        );
+        if (!marcadores || marcadores.length === 0) {
+          await retryWithBackoff(
+            () => Atividade.create({
+              etapa: folha.etapa,
+              disciplina: folha.disciplina,
+              subdisciplina: folha.subdisciplina,
+              atividade: `(Concluída na folha ${folha.source_documento_numero || docId}) ${String(folha.atividade || '')}`,
+              empreendimento_id: empreendimentoId,
+              id_atividade: atividadeId,
+              documento_id: docId,
+              tempo: 0,
+            }),
+            3, 300, `criarMarcador-${docId}`
+          );
+        }
+      } catch {
+        erros++;
+      }
+    }
+
+    setFolhasSelecionadas(new Set());
+    setIsConcluindoFolhas(false);
+    if (erros > 0) alert(`${erros} folha(s) não puderam ser concluídas. Verifique o console.`);
+    if (fetchData) fetchData();
+  }, [folhasSelecionadas, atividadesAgrupadas, empreendimentoId, fetchData]);
 
   // Deduplicate users by email — the API can return the same user twice
   const usuariosSemDuplicatas = useMemo(() => {
@@ -166,6 +247,33 @@ export default function AnaliticoRenderContent({
               )}
             </Button>
           )}
+        </div>
+      )}
+
+      {folhasSelecionadas.size > 0 && (
+        <div className="flex items-center justify-between p-4 border-2 border-green-500 rounded-lg bg-green-50 shadow-sm">
+          <div className="flex items-center gap-3">
+            <Badge className="bg-green-600 text-white">
+              {folhasSelecionadas.size} folha{folhasSelecionadas.size > 1 ? 's' : ''} selecionada{folhasSelecionadas.size > 1 ? 's' : ''}
+            </Badge>
+            <span className="text-sm text-gray-700">Concluir as folhas selecionadas</span>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleConcluirFolhasSelecionadas}
+              className="bg-green-600 hover:bg-green-700"
+              disabled={isConcluindoFolhas}
+              size="sm"
+            >
+              {isConcluindoFolhas
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Concluindo...</>
+                : <><CheckCircle2 className="w-4 h-4 mr-2" />Concluir Selecionadas</>
+              }
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setFolhasSelecionadas(new Set())} disabled={isConcluindoFolhas}>
+              Cancelar
+            </Button>
+          </div>
         </div>
       )}
 
