@@ -180,8 +180,8 @@ export default function AnaliticoRenderContent({
         );
         for (const plano of planos) {
           await retryWithBackoff(
-            () => PlanejamentoAtividade.update(plano.id, { status: 'nao_iniciado', termino_real: null }),
-            3, 300, `reverter-${plano.id}`
+            () => PlanejamentoAtividade.delete(plano.id),
+            3, 300, `deletePlanoReverter-${plano.id}`
           );
         }
 
