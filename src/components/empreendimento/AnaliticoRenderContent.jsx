@@ -59,6 +59,10 @@ export default function AnaliticoRenderContent({
   setEditandoTempo,
   handleSalvarTempoPadrao,
   itensPRE,
+  handleSaveFolhaExecutor,
+  datasInicioFolha,
+  setDatasInicioFolha,
+  isSavingFolhaExecutor,
 }) {
   const preTempoByDocumentoId = useMemo(() => {
     const map = new Map();
@@ -109,6 +113,11 @@ export default function AnaliticoRenderContent({
     atividadesSelecionadasParaExcluir,
     setAtividadesSelecionadasParaExcluir,
     hasCheckboxColumn,
+    usuarios,
+    handleSaveFolhaExecutor: handleSaveFolhaExecutor || (() => {}),
+    datasInicioFolha: datasInicioFolha || {},
+    setDatasInicioFolha: setDatasInicioFolha || (() => {}),
+    isSavingFolhaExecutor: isSavingFolhaExecutor || {},
   };
 
   return (

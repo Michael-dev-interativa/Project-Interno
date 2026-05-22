@@ -65,6 +65,8 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate, activeT
   const [novosTempoPadrao, setNovosTempoPadrao] = useState({});
   const [atividadesSelecionadasParaExcluir, setAtividadesSelecionadasParaExcluir] = useState(new Set());
   const [isExcluindoMultiplasFolhas, setIsExcluindoMultiplasFolhas] = useState(false);
+  const [datasInicioFolha, setDatasInicioFolha] = useState({});
+  const [isSavingFolhaExecutor, setIsSavingFolhaExecutor] = useState({});
 
   const documentosMap = useMemo(() => {
     return new Map((documentos || []).map(doc => [doc.id, doc]));
@@ -913,6 +915,105 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate, activeT
     }
   };
 
+  const handleSaveFolhaExecutor = async (folha, executorEmail, dataInicioCustom = null) => {
+    const folhaKey = `${folha.source_documento_id}-${folha.base_atividade_id}`;
+    setIsSavingFolhaExecutor(prev => ({ ...prev, [folhaKey]: true }));
+    try {
+      const atividadeId = folha.base_atividade_id;
+      const atividadeOriginalArr = await retryWithBackoff(
+        () => Atividade.filter({ id: atividadeId }),
+        3, 500, `getFolhaAtiv-${atividadeId}`
+      );
+      if (!atividadeOriginalArr || atividadeOriginalArr.length === 0) throw new Error('Atividade não encontrada.');
+      const atividadeOriginal = atividadeOriginalArr[0];
+
+      // Check for existing plan
+      const planejamentosExistentes = await retryWithBackoff(
+        () => PlanejamentoAtividade.filter({
+          empreendimento_id: empreendimentoId,
+          atividade_id: atividadeId,
+          documento_id: folha.source_documento_id,
+        }),
+        3, 500, `checkFolhaPlan-${folhaKey}`
+      );
+      if (planejamentosExistentes && planejamentosExistentes.length > 0) {
+        await retryWithBackoff(() => PlanejamentoAtividade.update(planejamentosExistentes[0].id, { executor_principal: executorEmail, executores: [executorEmail] }), 3, 500, `updateFolhaPlan-${folhaKey}`);
+        setDatasInicioFolha(prev => ({ ...prev, [folhaKey]: null }));
+        await fetchData();
+        return;
+      }
+
+      // Load executor existing plans to compute daily load
+      const [planosAtiv, planosDoc] = await Promise.all([
+        retryWithExtendedBackoff(() => PlanejamentoAtividade.filter({ executor_principal: executorEmail }), 'loadAtivForFolha'),
+        retryWithExtendedBackoff(() => PlanejamentoDocumento.filter({ executor_principal: executorEmail }), 'loadDocForFolha'),
+      ]);
+      const hoje = new Date();
+      const hojeMidnight = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+      const cargaDiaria = {};
+      [...(planosAtiv || []), ...(planosDoc || [])].forEach(plano => {
+        if (plano.horas_por_dia && typeof plano.horas_por_dia === 'object') {
+          Object.entries(plano.horas_por_dia).forEach(([data, horas]) => {
+            try {
+              const dataObj = parseISO(data);
+              if (isValid(dataObj) && dataObj >= hojeMidnight) {
+                const diaKey = format(dataObj, 'yyyy-MM-dd');
+                const h = Number(horas) || 0;
+                if (h > 0 && h <= 12) cargaDiaria[diaKey] = (cargaDiaria[diaKey] || 0) + h;
+              }
+            } catch {}
+          });
+        }
+      });
+
+      const doc = documentosMap.get(folha.source_documento_id);
+      const fator = doc?.fator_dificuldade || 1;
+      const tempoCalculado = (atividadeOriginal.tempo || 0) * fator;
+
+      let dataInicio = dataInicioCustom ? new Date(dataInicioCustom) : new Date(hojeMidnight);
+      if (dataInicioCustom) {
+        if (!isWorkingDay(dataInicio)) dataInicio = getNextWorkingDay(dataInicio);
+      } else {
+        let t = 0;
+        while (t < 365) {
+          if (isWorkingDay(dataInicio) && (8 - (cargaDiaria[format(dataInicio, 'yyyy-MM-dd')] || 0)) >= 0.5) break;
+          dataInicio = addDays(dataInicio, 1);
+          t++;
+        }
+        if (t >= 365) throw new Error('Sem data disponível para o executor.');
+      }
+
+      const resultado = distribuirHorasPorDias(dataInicio, tempoCalculado, 8, cargaDiaria, false);
+      if (!resultado?.distribuicao || !Object.keys(resultado.distribuicao).length) throw new Error('Não foi possível distribuir as horas.');
+      const { distribuicao, dataTermino } = resultado;
+      const diasUtilizados = Object.keys(distribuicao).sort();
+      const descritivo = [doc?.numero, doc?.arquivo, atividadeOriginal.atividade].filter(Boolean).join(' - ');
+
+      await retryWithBackoff(() => PlanejamentoAtividade.create({
+        empreendimento_id: empreendimentoId,
+        atividade_id: atividadeId,
+        documento_id: folha.source_documento_id,
+        etapa: folha.etapa || atividadeOriginal.etapa || '',
+        descritivo,
+        tempo_planejado: tempoCalculado,
+        executor_principal: executorEmail,
+        executores: [executorEmail],
+        inicio_planejado: diasUtilizados[0],
+        termino_planejado: format(dataTermino, 'yyyy-MM-dd'),
+        horas_por_dia: distribuicao,
+        status: 'nao_iniciado',
+      }), 3, 500, `createFolhaPlan-${folhaKey}`);
+
+      setDatasInicioFolha(prev => ({ ...prev, [folhaKey]: null }));
+      await fetchData();
+    } catch (error) {
+      console.error('Erro ao planejar folha:', error);
+      alert(`Erro ao planejar folha: ${error.message}`);
+    } finally {
+      setIsSavingFolhaExecutor(prev => ({ ...prev, [folhaKey]: false }));
+    }
+  };
+
   const renderContent = () => (
     <AnaliticoRenderContent
       isLoading={isLoading} atividadesAgrupadas={atividadesAgrupadas} atividadesPorDisciplina={atividadesPorDisciplina}
@@ -931,6 +1032,9 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate, activeT
       usuarios={usuarios} editandoTempo={editandoTempo}
       novosTempoPadrao={novosTempoPadrao} setNovosTempoPadrao={setNovosTempoPadrao} setEditandoTempo={setEditandoTempo}
       handleSalvarTempoPadrao={handleSalvarTempoPadrao} itensPRE={itensPRE}
+      handleSaveFolhaExecutor={handleSaveFolhaExecutor}
+      datasInicioFolha={datasInicioFolha} setDatasInicioFolha={setDatasInicioFolha}
+      isSavingFolhaExecutor={isSavingFolhaExecutor}
     />
   );
 
