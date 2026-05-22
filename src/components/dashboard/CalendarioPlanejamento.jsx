@@ -660,9 +660,9 @@ const ActivityItem = ({ plano, dayKey, onDelete, onUpdate, executorMap, allPlane
           }`}
       >
         {orderIndex !== undefined && (
-          <span className="absolute left-1 top-1 z-20 text-[8px] text-gray-400 font-medium pointer-events-none leading-none">
-            {orderIndex + 1}.
-          </span>
+          <div className="absolute -left-3 -top-3 z-20 min-w-[26px] h-[26px] flex items-center justify-center bg-indigo-700 text-white text-xs font-bold rounded-full pointer-events-none shadow-md border-2 border-white px-1">
+            {orderIndex + 1}
+          </div>
         )}
 
         {isReprogramando && (
