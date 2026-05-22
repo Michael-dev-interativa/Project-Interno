@@ -141,19 +141,22 @@ function AnaliticoFolhaRow({
   return (
     <>
       <TableRow className={isConcluida ? 'bg-blue-50/80' : 'bg-blue-50/30'}>
-        {hasCheckboxColumn && (
-          <TableCell>
-            <Checkbox checked={isSelected} onCheckedChange={handleToggleSelecao} />
-          </TableCell>
-        )}
-        <TableCell className="pl-12">
-          <ChevronRight className="w-3 h-3 text-gray-400 inline mr-1" />
+        {/* col 1 — alignment with selectedIds column (only when it exists) */}
+        {hasCheckboxColumn && <TableCell />}
+        {/* col 2 — folha selection checkbox (always shown) */}
+        <TableCell>
+          <Checkbox checked={isSelected} onCheckedChange={handleToggleSelecao} />
         </TableCell>
-        <TableCell className="text-sm text-gray-600 min-w-[220px]">
+        {/* col 3 — expand/indent column */}
+        <TableCell className="pl-8">
+          <ChevronRight className="w-3 h-3 text-gray-400" />
+        </TableCell>
+        {/* col 4 — document info (Atividade column) */}
+        <TableCell className="text-sm text-gray-600">
           <span className="font-medium text-blue-700">{folha.source_documento_numero}</span>
           {folha.source_documento_arquivo && <span className="ml-1">— {folha.source_documento_arquivo}</span>}
         </TableCell>
-        <TableCell></TableCell>
+        {/* col 5 — Status */}
         <TableCell>
           {isConcluida
             ? <Badge className="bg-blue-600 text-white font-semibold flex items-center gap-1 w-fit text-xs"><CheckCircle2 className="w-3 h-3" />Concluída</Badge>
@@ -162,29 +165,30 @@ function AnaliticoFolhaRow({
               : <Badge variant="outline" className="text-xs text-gray-600">{folha.status}</Badge>
           }
         </TableCell>
-        <TableCell className="text-sm text-gray-500">{folha.etapa}</TableCell>
+        {/* col 6 — Executor column: executor name + etapa + planned dates */}
         <TableCell>
-          {executorNome ? (
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0" />
-              <span className="text-xs font-medium text-green-800 truncate max-w-[120px]">{executorNome}</span>
-            </div>
-          ) : (
-            <span className="text-xs text-gray-400">-</span>
-          )}
+          <div className="flex flex-col gap-0.5">
+            {executorNome ? (
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0" />
+                <span className="text-xs font-medium text-green-800 truncate max-w-[120px]">{executorNome}</span>
+              </div>
+            ) : (
+              <span className="text-xs text-gray-400">{folha.etapa || '-'}</span>
+            )}
+            {(folha.status === 'Planejada' || isConcluida) && plano?.inicio_planejado && plano?.termino_planejado && (
+              <div className="flex items-center gap-1 text-gray-500 text-xs">
+                <Calendar className="w-3 h-3" />
+                <span>{format(parseISO(plano.inicio_planejado), 'dd/MM')} – {format(parseISO(plano.termino_planejado), 'dd/MM')}</span>
+              </div>
+            )}
+          </div>
         </TableCell>
-        <TableCell>
-          {(folha.status === 'Planejada' || isConcluida) && plano?.inicio_planejado && plano?.termino_planejado ? (
-            <div className="flex items-center gap-1 text-gray-600 text-xs">
-              <Calendar className="w-3 h-3" />
-              <span>{format(parseISO(plano.inicio_planejado), 'dd/MM')} - {format(parseISO(plano.termino_planejado), 'dd/MM')}</span>
-            </div>
-          ) : (
-            <span className="text-xs text-gray-400">-</span>
-          )}
+        {/* col 7 — Horas */}
+        <TableCell className="text-sm text-gray-600">
+          {folha.tempo ? `${Number(folha.tempo).toFixed(1)}h` : '-'}
         </TableCell>
-        <TableCell className="text-sm">{folha.tempo ? `${Number(folha.tempo).toFixed(1)}h` : '-'}</TableCell>
-        <TableCell className="text-sm">{folha.tempo ? `${Number(folha.tempo).toFixed(1)}h` : '-'}</TableCell>
+        {/* col 8 — Ações */}
         <TableCell>
           <div className="flex items-center gap-1">
             {folha.status !== 'Planejada' && !isConcluida && (
@@ -213,6 +217,8 @@ function AnaliticoFolhaRow({
             </Button>
           </div>
         </TableCell>
+        {/* col 9 — dropdown alignment (empty for folha rows) */}
+        <TableCell />
       </TableRow>
       {showPlanejamentoModal && (
         <PlanejamentoFolhaUnicaModal
