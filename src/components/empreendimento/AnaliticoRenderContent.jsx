@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import {
   Loader2, PackageOpen, PlusCircle, ChevronRight, ChevronDown, Trash2, Edit, Edit2,
-  Calendar, CheckCircle2, XCircle, FileX, Layers, Users2, CheckCircle, MoreHorizontal
+  Calendar, CheckCircle2, XCircle, FileX, Layers, Users2, CheckCircle, MoreHorizontal, RotateCcw
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -70,6 +70,8 @@ export default function AnaliticoRenderContent({
   // folhasSelecionadas lives here so checkbox clicks don't re-render the entire parent
   const [folhasSelecionadas, setFolhasSelecionadas] = useState(new Set());
   const [isConcluindoFolhas, setIsConcluindoFolhas] = useState(false);
+  const [isReverendoFolhas, setIsReverendoFolhas] = useState(false);
+  const [isExcluindoFolhas, setIsExcluindoFolhas] = useState(false);
 
   const handleConcluirFolha = useCallback(() => {
     if (fetchData) fetchData();
@@ -150,6 +152,120 @@ export default function AnaliticoRenderContent({
     setFolhasSelecionadas(new Set());
     setIsConcluindoFolhas(false);
     if (erros > 0) alert(`${erros} folha(s) não puderam ser concluídas. Verifique o console.`);
+    if (fetchData) fetchData();
+  }, [folhasSelecionadas, atividadesAgrupadas, empreendimentoId, fetchData]);
+
+  const handleReverterFolhasSelecionadas = useCallback(async () => {
+    if (folhasSelecionadas.size === 0) return;
+    setIsReverendoFolhas(true);
+
+    const folhasParaReverter = [];
+    for (const grupo of (atividadesAgrupadas || [])) {
+      for (const folha of (grupo.folhas || [])) {
+        if (folhasSelecionadas.has(folha.source_documento_id)) {
+          folhasParaReverter.push(folha);
+        }
+      }
+    }
+
+    let erros = 0;
+    for (const folha of folhasParaReverter) {
+      try {
+        const atividadeId = folha.base_atividade_id;
+        const docId = folha.source_documento_id;
+
+        const planos = await retryWithBackoff(
+          () => PlanejamentoAtividade.filter({ empreendimento_id: empreendimentoId, atividade_id: atividadeId, documento_id: docId }),
+          3, 300, `planoReverter-${docId}-${atividadeId}`
+        );
+        for (const plano of planos) {
+          await retryWithBackoff(
+            () => PlanejamentoAtividade.update(plano.id, { status: 'nao_iniciado', termino_real: null }),
+            3, 300, `reverter-${plano.id}`
+          );
+        }
+
+        const marcadores = await retryWithBackoff(
+          () => Atividade.filter({ empreendimento_id: empreendimentoId, id_atividade: atividadeId, documento_id: docId, tempo: 0 }),
+          3, 300, `marcadoresReverter-${docId}`
+        );
+        for (const m of marcadores) {
+          await retryWithBackoff(() => Atividade.delete(m.id), 3, 300, `deleteMarcadorReverter-${m.id}`);
+        }
+      } catch {
+        erros++;
+      }
+    }
+
+    setFolhasSelecionadas(new Set());
+    setIsReverendoFolhas(false);
+    if (erros > 0) alert(`${erros} folha(s) não puderam ser revertidas.`);
+    if (fetchData) fetchData();
+  }, [folhasSelecionadas, atividadesAgrupadas, empreendimentoId, fetchData]);
+
+  const handleExcluirFolhasSelecionadas = useCallback(async () => {
+    if (folhasSelecionadas.size === 0) return;
+    if (!confirm(`Excluir ${folhasSelecionadas.size} folha(s) selecionada(s) do empreendimento? Esta ação não pode ser desfeita.`)) return;
+    setIsExcluindoFolhas(true);
+
+    const folhasParaExcluir = [];
+    for (const grupo of (atividadesAgrupadas || [])) {
+      for (const folha of (grupo.folhas || [])) {
+        if (folhasSelecionadas.has(folha.source_documento_id)) {
+          folhasParaExcluir.push(folha);
+        }
+      }
+    }
+
+    let erros = 0;
+    for (const folha of folhasParaExcluir) {
+      try {
+        const atividadeId = folha.base_atividade_id;
+        const docId = folha.source_documento_id;
+
+        const planos = await retryWithBackoff(
+          () => PlanejamentoAtividade.filter({ empreendimento_id: empreendimentoId, atividade_id: atividadeId, documento_id: docId }),
+          3, 300, `planoExcluir-${docId}-${atividadeId}`
+        );
+        for (const plano of planos) {
+          await retryWithBackoff(() => PlanejamentoAtividade.delete(plano.id), 3, 300, `deletePlano-${plano.id}`);
+        }
+
+        const marcadores = await retryWithBackoff(
+          () => Atividade.filter({ empreendimento_id: empreendimentoId, id_atividade: atividadeId, documento_id: docId, tempo: 0 }),
+          3, 300, `marcadoresExcluir-${docId}`
+        );
+        for (const m of marcadores) {
+          await retryWithBackoff(() => Atividade.delete(m.id), 3, 300, `deleteMarcadorExcluir-${m.id}`);
+        }
+
+        const existingExclusion = await retryWithBackoff(
+          () => Atividade.filter({ empreendimento_id: empreendimentoId, id_atividade: atividadeId, documento_id: docId, tempo: -999 }),
+          3, 300, `checkExclusaoFolha-${docId}`
+        );
+        if (!existingExclusion || existingExclusion.length === 0) {
+          await retryWithBackoff(
+            () => Atividade.create({
+              empreendimento_id: empreendimentoId,
+              id_atividade: atividadeId,
+              documento_id: docId,
+              etapa: folha.etapa,
+              disciplina: folha.disciplina,
+              subdisciplina: folha.subdisciplina,
+              atividade: `(Excluída) ${String(folha.atividade || '')}`,
+              tempo: -999,
+            }),
+            3, 300, `createExclusaoFolha-${docId}`
+          );
+        }
+      } catch {
+        erros++;
+      }
+    }
+
+    setFolhasSelecionadas(new Set());
+    setIsExcluindoFolhas(false);
+    if (erros > 0) alert(`${erros} folha(s) não puderam ser excluídas.`);
     if (fetchData) fetchData();
   }, [folhasSelecionadas, atividadesAgrupadas, empreendimentoId, fetchData]);
 
@@ -251,18 +367,30 @@ export default function AnaliticoRenderContent({
       )}
 
       {folhasSelecionadas.size > 0 && (
-        <div className="flex items-center justify-between p-4 border-2 border-green-500 rounded-lg bg-green-50 shadow-sm">
+        <div className="flex items-center justify-between p-4 border-2 border-green-500 rounded-lg bg-green-50 shadow-sm flex-wrap gap-3">
           <div className="flex items-center gap-3">
             <Badge className="bg-green-600 text-white">
               {folhasSelecionadas.size} folha{folhasSelecionadas.size > 1 ? 's' : ''} selecionada{folhasSelecionadas.size > 1 ? 's' : ''}
             </Badge>
-            <span className="text-sm text-gray-700">Concluir as folhas selecionadas</span>
+            <span className="text-sm text-gray-700">Ações em lote para as folhas selecionadas</span>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              onClick={handleReverterFolhasSelecionadas}
+              variant="outline"
+              className="border-blue-500 text-blue-600 hover:bg-blue-50"
+              disabled={isConcluindoFolhas || isReverendoFolhas || isExcluindoFolhas}
+              size="sm"
+            >
+              {isReverendoFolhas
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Revertendo...</>
+                : <><RotateCcw className="w-4 h-4 mr-2" />Disponível Novamente</>
+              }
+            </Button>
             <Button
               onClick={handleConcluirFolhasSelecionadas}
               className="bg-green-600 hover:bg-green-700"
-              disabled={isConcluindoFolhas}
+              disabled={isConcluindoFolhas || isReverendoFolhas || isExcluindoFolhas}
               size="sm"
             >
               {isConcluindoFolhas
@@ -270,7 +398,23 @@ export default function AnaliticoRenderContent({
                 : <><CheckCircle2 className="w-4 h-4 mr-2" />Concluir Selecionadas</>
               }
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setFolhasSelecionadas(new Set())} disabled={isConcluindoFolhas}>
+            <Button
+              onClick={handleExcluirFolhasSelecionadas}
+              variant="destructive"
+              disabled={isConcluindoFolhas || isReverendoFolhas || isExcluindoFolhas}
+              size="sm"
+            >
+              {isExcluindoFolhas
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Excluindo...</>
+                : <><Trash2 className="w-4 h-4 mr-2" />Excluir</>
+              }
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFolhasSelecionadas(new Set())}
+              disabled={isConcluindoFolhas || isReverendoFolhas || isExcluindoFolhas}
+            >
               Cancelar
             </Button>
           </div>
