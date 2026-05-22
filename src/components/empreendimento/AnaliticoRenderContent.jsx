@@ -63,7 +63,6 @@ export default function AnaliticoRenderContent({
   datasInicioFolha,
   setDatasInicioFolha,
   isSavingFolhaExecutor,
-  empreendimentoId,
   fetchData,
 }) {
   // folhasSelecionadas lives here so checkbox clicks don't re-render the entire parent
