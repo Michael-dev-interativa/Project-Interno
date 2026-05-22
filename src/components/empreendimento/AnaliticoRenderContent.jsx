@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -63,7 +63,26 @@ export default function AnaliticoRenderContent({
   datasInicioFolha,
   setDatasInicioFolha,
   isSavingFolhaExecutor,
+  empreendimentoId,
+  fetchData,
 }) {
+  // folhasSelecionadas lives here so checkbox clicks don't re-render the entire parent
+  const [folhasSelecionadas, setFolhasSelecionadas] = useState(new Set());
+
+  const handleConcluirFolha = useCallback(() => {
+    if (fetchData) fetchData();
+  }, [fetchData]);
+
+  // Deduplicate users by email — the API can return the same user twice
+  const usuariosSemDuplicatas = useMemo(() => {
+    const seen = new Set();
+    return (usuarios || []).filter(u => {
+      if (!u.email || seen.has(u.email)) return false;
+      seen.add(u.email);
+      return true;
+    });
+  }, [usuarios]);
+
   const preTempoByDocumentoId = useMemo(() => {
     const map = new Map();
     (itensPRE || []).forEach(pre => {
@@ -113,11 +132,15 @@ export default function AnaliticoRenderContent({
     atividadesSelecionadasParaExcluir,
     setAtividadesSelecionadasParaExcluir,
     hasCheckboxColumn,
-    usuarios,
+    usuarios: usuariosSemDuplicatas,
     handleSaveFolhaExecutor: handleSaveFolhaExecutor || (() => {}),
     datasInicioFolha: datasInicioFolha || {},
     setDatasInicioFolha: setDatasInicioFolha || (() => {}),
     isSavingFolhaExecutor: isSavingFolhaExecutor || {},
+    empreendimentoId,
+    onConcluirFolha: handleConcluirFolha,
+    folhasSelecionadas,
+    setFolhasSelecionadas,
   };
 
   return (
@@ -497,7 +520,7 @@ export default function AnaliticoRenderContent({
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 bg-green-500 rounded-full"></div>
               <span className="text-xs font-medium text-green-800">
-                {usuarios.find(u => u.email === ativ.executor_principal)?.nome || ativ.executor_principal}
+                {usuariosSemDuplicatas.find(u => u.email === ativ.executor_principal)?.nome || ativ.executor_principal}
               </span>
             </div>
             <Button
@@ -539,7 +562,7 @@ export default function AnaliticoRenderContent({
                 <SelectValue placeholder="Selecionar Executor" />
               </SelectTrigger>
               <SelectContent>
-                {usuarios
+                {usuariosSemDuplicatas
                   .filter(u => u.status === 'ativo')
                   .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
                   .map(u => (

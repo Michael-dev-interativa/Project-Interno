@@ -1039,6 +1039,7 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate, activeT
       handleSaveFolhaExecutor={handleSaveFolhaExecutor}
       datasInicioFolha={datasInicioFolha} setDatasInicioFolha={setDatasInicioFolha}
       isSavingFolhaExecutor={isSavingFolhaExecutor}
+      fetchData={fetchData}
     />
   );
 
