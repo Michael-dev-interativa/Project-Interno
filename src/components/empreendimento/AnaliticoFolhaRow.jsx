@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useTransition, useRef } from 'react';
 import { TableRow, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,9 +23,19 @@ function AnaliticoFolhaRow({
 }) {
   const [isConc, setIsConc] = useState(false);
   const [showPlanejamentoModal, setShowPlanejamentoModal] = useState(false);
+  const [, startTransition] = useTransition();
 
   const isConcluida = folha.status === 'Concluída';
   const isSelected = folhasSelecionadas.has(folha.source_documento_id);
+
+  // Optimistic local state so the checkbox responds instantly without waiting
+  // for the expensive AnaliticoRenderContent re-render to complete.
+  const [localChecked, setLocalChecked] = useState(isSelected);
+  const prevIsSelectedRef = useRef(isSelected);
+  if (prevIsSelectedRef.current !== isSelected) {
+    prevIsSelectedRef.current = isSelected;
+    if (localChecked !== isSelected) setLocalChecked(isSelected);
+  }
 
   const plano = useMemo(() =>
     planejamentos?.find(p =>
@@ -41,11 +51,14 @@ function AnaliticoFolhaRow({
   }, [plano?.executor_principal, usuarios]);
 
   const handleToggleSelecao = useCallback((checked) => {
-    setFolhasSelecionadas(prev => {
-      const newSet = new Set(prev);
-      if (checked) newSet.add(folha.source_documento_id);
-      else newSet.delete(folha.source_documento_id);
-      return newSet;
+    setLocalChecked(checked); // instant visual feedback
+    startTransition(() => {
+      setFolhasSelecionadas(prev => {
+        const newSet = new Set(prev);
+        if (checked) newSet.add(folha.source_documento_id);
+        else newSet.delete(folha.source_documento_id);
+        return newSet;
+      });
     });
   }, [folha.source_documento_id, setFolhasSelecionadas]);
 
@@ -145,7 +158,7 @@ function AnaliticoFolhaRow({
         {hasCheckboxColumn && <TableCell />}
         {/* col 2 — folha selection checkbox (always shown) */}
         <TableCell>
-          <Checkbox checked={isSelected} onCheckedChange={handleToggleSelecao} />
+          <Checkbox checked={localChecked} onCheckedChange={handleToggleSelecao} />
         </TableCell>
         {/* col 3 — expand/indent column */}
         <TableCell className="pl-8">

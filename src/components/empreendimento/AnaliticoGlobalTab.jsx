@@ -232,6 +232,10 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate, activeT
         }
       });
 
+      // IDs das atividades do projeto — impede que atividades do projeto caiam no
+      // loop do catálogo (allGenericActivitiesMap) por colisão de ID.
+      const projectActivityIdSet = new Set((projectActivities || []).map(pa => pa.id));
+
       let documentActivities = [];
       (documentosData || []).forEach(doc => {
         const subdisciplinasDoc = doc.subdisciplinas || [];
@@ -286,6 +290,8 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate, activeT
         });
         
         allGenericActivitiesMap.forEach(baseAtividade => {
+          // Pula se esta atividade do catálogo tem o mesmo ID que uma atividade do projeto
+          if (projectActivityIdSet.has(baseAtividade.id)) return;
           const isExcludedFromProject = excludedActivitiesSet.has(baseAtividade.id);
           const isExcludedFromThisDoc = excludedFromDocumentMap.has(baseAtividade.id) && excludedFromDocumentMap.get(baseAtividade.id).has(doc.id);
           if (isExcludedFromProject || isExcludedFromThisDoc) return;

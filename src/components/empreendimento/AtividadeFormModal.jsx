@@ -133,27 +133,44 @@ export default function AtividadeFormModal({ isOpen, onClose, empreendimentoId, 
 
   const documentosFiltrados = useMemo(() => {
     if (!formData.disciplina) return documentos;
-    
+
     return documentos.filter(doc => {
-      // Filtrar por disciplina principal
-      if (doc.disciplina === formData.disciplina) return true;
-      
-      // Filtrar por disciplinas array (se existir)
-      if (doc.disciplinas && Array.isArray(doc.disciplinas)) {
-        return doc.disciplinas.includes(formData.disciplina);
+      const matchesDisciplina = doc.disciplina === formData.disciplina ||
+        (doc.disciplinas && Array.isArray(doc.disciplinas) && doc.disciplinas.includes(formData.disciplina));
+
+      if (!matchesDisciplina) return false;
+
+      // Quando subdisciplinas estão selecionadas, filtrar apenas docs que têm ao menos uma delas
+      if (selectedSubdisciplinas.length > 0) {
+        const docSubs = doc.subdisciplinas || [];
+        return selectedSubdisciplinas.some(sub => docSubs.includes(sub));
       }
-      
-      return false;
+
+      return true;
     });
-  }, [documentos, formData.disciplina]);
+  }, [documentos, formData.disciplina, selectedSubdisciplinas]);
 
   const handleToggleSubdisciplina = (subdisciplina) => {
     setSelectedSubdisciplinas(prev => {
-      if (prev.includes(subdisciplina)) {
-        return prev.filter(s => s !== subdisciplina);
-      } else {
-        return [...prev, subdisciplina];
+      const next = prev.includes(subdisciplina)
+        ? prev.filter(s => s !== subdisciplina)
+        : [...prev, subdisciplina];
+
+      // Auto-selecionar documentos que têm ao menos uma das subdisciplinas
+      if (!atividade) {
+        const matchingIds = documentos
+          .filter(doc => {
+            const matchesDisciplina = doc.disciplina === formData.disciplina ||
+              (doc.disciplinas && Array.isArray(doc.disciplinas) && doc.disciplinas.includes(formData.disciplina));
+            if (!matchesDisciplina) return false;
+            const docSubs = doc.subdisciplinas || [];
+            return next.some(sub => docSubs.includes(sub));
+          })
+          .map(doc => doc.id);
+        setSelectedDocumentoIds(matchingIds);
       }
+
+      return next;
     });
   };
 

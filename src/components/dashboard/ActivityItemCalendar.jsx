@@ -547,6 +547,12 @@ export default function ActivityItemCalendar({
           </div>
         )}
 
+        {plano.observacao && (
+          <p className="text-gray-500 italic text-xs mt-1 break-words border-l-2 border-gray-300 pl-2">
+            {plano.observacao}
+          </p>
+        )}
+
         <div className="flex gap-1 mt-2">
           {/* Cenário 3: Concluída no prazo — verde com ✓ */}
           {realStatus === 'concluido' && (
