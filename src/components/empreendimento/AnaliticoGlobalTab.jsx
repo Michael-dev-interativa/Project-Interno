@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Atividade, Disciplina, PlanejamentoAtividade, Documento, AlteracaoEtapa, Empreendimento, Usuario, AtividadesDoProjeto, ItemPRE } from '@/entities/all';
 import AnaliticoRenderContent from './AnaliticoRenderContent';
 import AnaliticoFolhaRow from './AnaliticoFolhaRow';
@@ -26,7 +26,7 @@ import { ptBR } from 'date-fns/locale';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 
-export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
+export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate, activeTab }) {
   const [combinedActivities, setCombinedActivities] = useState([]);
   const [disciplinas, setDisciplinas] = useState([]);
   const [documentos, setDocumentos] = useState([]);
@@ -363,6 +363,16 @@ export default function AnaliticoGlobalTab({ empreendimentoId, onUpdate }) {
       fetchData();
     }
   }, [fetchData, empreendimentoId]);
+
+  const _isFirstActiveTab = useRef(true);
+  useEffect(() => {
+    if (_isFirstActiveTab.current) { _isFirstActiveTab.current = false; return; }
+    if (activeTab !== 'atividades_projeto' || !empreendimentoId) return;
+    retryWithBackoff(
+      () => ItemPRE.filter({ empreendimento_id: empreendimentoId }),
+      3, 500, 'refreshItensPRE'
+    ).then(data => setItensPRE(data || [])).catch(() => {});
+  }, [activeTab, empreendimentoId]);
 
   const debouncedSetSearch = useCallback(debounce((value) => {
     setFilters(prev => ({ ...prev, search: value }));
