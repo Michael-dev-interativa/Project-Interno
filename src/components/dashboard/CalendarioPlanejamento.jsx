@@ -15,7 +15,7 @@ import { PlanejamentoAtividade, Atividade, Documento, Empreendimento, Execucao, 
 import { ChevronsUpDown } from 'lucide-react';
 import { isActivityOverdue as isOverdueShared, distribuirHorasPorDias, getNextWorkingDay } from '../utils/DateCalculator';
 import { retryWithBackoff } from '../utils/apiUtils';
-import CalendarioActivityItem from './CalendarioActivityItem';
+import CalendarioActivityItem from './ActivityItemCalendar';
 import DailyActivityGroup from './DailyActivityGroup';
 const ActivityItem = (p) => <CalendarioActivityItem {...p} />;
 
