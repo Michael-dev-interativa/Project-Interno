@@ -83,8 +83,8 @@ export default function AnaliticoFolhaRow({
                 <SelectValue placeholder="Planejar folha" />
               </SelectTrigger>
               <SelectContent>
-                {usuarios
-                  .filter(u => u.status === 'ativo')
+                {(usuarios || [])
+                  .filter(u => u.nome || u.email)
                   .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
                   .map(u => (
                     <SelectItem key={u.email} value={u.email} className="text-xs">
