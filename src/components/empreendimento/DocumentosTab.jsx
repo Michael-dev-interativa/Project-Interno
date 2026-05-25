@@ -293,13 +293,25 @@ export default function DocumentosTab({
       const disciplinaDoc = documento.disciplina;
       const fatorDificuldade = documento.fator_dificuldade || 1;
 
+      // Helper: verifica vínculo com o documento (singular ou array)
+      const vinculadaAoDocumento = (ativ) =>
+        String(ativ.documento_id) === String(documento.id) ||
+        (Array.isArray(ativ.documento_ids) && ativ.documento_ids.some(id => String(id) === String(documento.id)));
+
+      // Mesclar allAtividades com atividadesEmpCache para cobrir ambas as fontes
+      const idsJaIncluidos = new Set(allAtividades.map(a => a.id));
+      const todasAtividades = [
+        ...allAtividades,
+        ...(atividadesEmpCache || []).filter(a => !idsJaIncluidos.has(a.id))
+      ];
+
       // Usar apenas atividades deste empreendimento + genéricas (pre-filtrado)
-      const atividadesEmpAuto = allAtividades.filter(a => !a.empreendimento_id || a.empreendimento_id === empreendimento.id);
+      const atividadesEmpAuto = todasAtividades.filter(a => !a.empreendimento_id || String(a.empreendimento_id) === String(empreendimento.id));
 
       const etapaOverrides = new Map();
       const tempoOverrides = new Map();
       atividadesEmpAuto.forEach(ativ => {
-        if (ativ.empreendimento_id === empreendimento.id && ativ.id_atividade && ativ.tempo !== -999) {
+        if (String(ativ.empreendimento_id) === String(empreendimento.id) && ativ.id_atividade && ativ.tempo !== -999) {
           etapaOverrides.set(ativ.id_atividade, ativ.etapa);
           etapaOverrides.set(ativ.id, ativ.etapa);
           tempoOverrides.set(ativ.id_atividade, ativ.tempo);
@@ -310,7 +322,7 @@ export default function DocumentosTab({
       // IDs de atividades genéricas que têm override específico nesta folha (evitar dupla contagem)
       const idsComOverrideEspecifico = new Set();
       atividadesEmpAuto.forEach(ativ => {
-        if (ativ.empreendimento_id === empreendimento.id && ativ.documento_id === documento.id && ativ.id_atividade && ativ.tempo !== -999) {
+        if (String(ativ.empreendimento_id) === String(empreendimento.id) && vinculadaAoDocumento(ativ) && ativ.id_atividade && ativ.tempo !== -999) {
           idsComOverrideEspecifico.add(ativ.id_atividade);
         }
       });
@@ -320,7 +332,7 @@ export default function DocumentosTab({
           if (idsComOverrideEspecifico.has(ativ.id)) return false;
           return ativ.disciplina === disciplinaDoc && Array.isArray(subdisciplinasDoc) && subdisciplinasDoc.includes(ativ.subdisciplina);
         }
-        if (ativ.empreendimento_id === empreendimento.id && ativ.documento_id === documento.id && ativ.tempo !== -999 && ativ.tempo !== 0) {
+        if (String(ativ.empreendimento_id) === String(empreendimento.id) && vinculadaAoDocumento(ativ) && ativ.tempo !== -999 && ativ.tempo !== 0) {
           return true;
         }
         return false;
@@ -329,9 +341,9 @@ export default function DocumentosTab({
       const atividadesExcluidasGlobal = new Set();
       const atividadesExcluidasPorDoc = new Set();
       atividadesEmpAuto.forEach(ativ => {
-        if (ativ.empreendimento_id === empreendimento.id && ativ.tempo === -999 && ativ.id_atividade) {
-          if (ativ.documento_id === documento.id) atividadesExcluidasPorDoc.add(ativ.id_atividade);
-          else if (!ativ.documento_id) atividadesExcluidasGlobal.add(ativ.id_atividade);
+        if (String(ativ.empreendimento_id) === String(empreendimento.id) && ativ.tempo === -999 && ativ.id_atividade) {
+          if (vinculadaAoDocumento(ativ)) atividadesExcluidasPorDoc.add(ativ.id_atividade);
+          else if (!ativ.documento_id && !(Array.isArray(ativ.documento_ids) && ativ.documento_ids.length > 0)) atividadesExcluidasGlobal.add(ativ.id_atividade);
         }
       });
 
@@ -447,7 +459,7 @@ export default function DocumentosTab({
     } finally {
       setLoadingDocs(prev => ({ ...prev, [documento.id]: false }));
     }
-  }, [allAtividades, empreendimento, handleLocalUpdate, localPlanejamentos, setLocalPlanejamentos, getCargaDiariaExecutor, handleCascadingUpdate, localDocumentos]);
+  }, [allAtividades, atividadesEmpCache, empreendimento, handleLocalUpdate, localPlanejamentos, setLocalPlanejamentos, getCargaDiariaExecutor, handleCascadingUpdate, localDocumentos]);
 
   const handleSuccess = async () => { onUpdate(); setShowForm(false); setEditingDocumento(null); setCargaDiariaCache({}); };
 

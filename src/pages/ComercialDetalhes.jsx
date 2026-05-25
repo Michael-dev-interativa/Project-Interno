@@ -8,7 +8,8 @@ import {
   PlanejamentoAtividade,
   Usuario,
   Pavimento,
-  Execucao
+  Execucao,
+  AtividadesEmpreendimento
 } from "@/entities/all";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -98,17 +99,21 @@ export default function ComercialDetalhesPage() {
     setSharedData(prev => ({ ...prev, loading: true }));
 
     try {
-      const [disciplinasData, usuariosData, atividadesData, execucoesData] = await Promise.all([
+      const [disciplinasData, usuariosData, atividadesData, atividadesEmpData, execucoesData] = await Promise.all([
         retryWithBackoff(() => Disciplina.list(), 3, 1000, 'loadDisciplinas'),
         retryWithBackoff(() => Usuario.list(), 3, 1000, 'loadUsuarios'),
         retryWithExtendedBackoff(() => Atividade.list(), 'loadAtividadesGlobais'),
+        retryWithBackoff(() => AtividadesEmpreendimento.filter({ empreendimento_id: comercialId }), 3, 1000, 'loadAtividadesEmp').catch(() => []),
         retryWithExtendedBackoff(() => Execucao.filter({ empreendimento_id: comercialId }), 'loadExecucoes')
       ]);
 
       setSharedData({
         disciplinas: disciplinasData || [],
         usuarios: usuariosData || [],
-        atividades: atividadesData || [],
+        atividades: [
+          ...(atividadesData || []),
+          ...(atividadesEmpData || []),
+        ],
         execucoes: execucoesData || [],
         loaded: true,
         loading: false
