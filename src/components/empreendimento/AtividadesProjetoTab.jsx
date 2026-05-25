@@ -27,6 +27,7 @@ import {
 import AplicarAtividadeModal from "./AplicarAtividadeModal";
 import PlanejamentoAtividadeModal from "./PlanejamentoAtividadeModal";
 import AtividadesProjetoFilters from "./AtividadesProjetoFilters";
+import { ordenarAtividades } from "../utils/AtividadeOrdering";
 
 const initialState = {
   etapa: '',
@@ -386,10 +387,10 @@ export default function AtividadesProjetoTab({ empreendimentoId, atividades = []
   // Agrupar atividades por disciplina
   const atividadesPorDisciplina = useMemo(() => {
     const grupos = {};
-    
-    filteredAtividades.forEach(atividade => {
+
+    ordenarAtividades(filteredAtividades).forEach(atividade => {
       const disciplina = atividade.disciplina || 'Sem Disciplina';
-      
+
       if (!grupos[disciplina]) {
         grupos[disciplina] = [];
       }
