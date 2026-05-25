@@ -291,6 +291,7 @@ export default function DocumentosTab({
     try {
       const subdisciplinasDoc = documento.subdisciplinas || [];
       const disciplinaDoc = documento.disciplina;
+      const disciplinasDoc = documento.disciplinas?.length > 0 ? documento.disciplinas : [disciplinaDoc].filter(Boolean);
       const fatorDificuldade = documento.fator_dificuldade || 1;
 
       // Helper: verifica vínculo com o documento (singular ou array)
@@ -330,10 +331,18 @@ export default function DocumentosTab({
       let atividadesGerais = atividadesEmpAuto.filter(ativ => {
         if (!ativ.empreendimento_id) {
           if (idsComOverrideEspecifico.has(ativ.id)) return false;
-          return ativ.disciplina === disciplinaDoc && Array.isArray(subdisciplinasDoc) && subdisciplinasDoc.includes(ativ.subdisciplina);
+          return disciplinasDoc.includes(ativ.disciplina) && Array.isArray(subdisciplinasDoc) && subdisciplinasDoc.includes(ativ.subdisciplina);
         }
-        if (String(ativ.empreendimento_id) === String(empreendimento.id) && vinculadaAoDocumento(ativ) && ativ.tempo !== -999 && ativ.tempo !== 0) {
-          return true;
+        if (String(ativ.empreendimento_id) === String(empreendimento.id) && ativ.tempo !== -999 && ativ.tempo !== 0) {
+          if (vinculadaAoDocumento(ativ)) return true;
+          // Atividades do projeto sem link explícito a documento mas com subdisciplina compatível
+          // (equivalente a atividadesProjetoMatch em DocumentoItem)
+          const semLinkDoc = !ativ.documento_id && !(Array.isArray(ativ.documento_ids) && ativ.documento_ids.length > 0);
+          if (semLinkDoc && !ativ.id_atividade && Array.isArray(subdisciplinasDoc) && subdisciplinasDoc.length > 0) {
+            const subMatch = subdisciplinasDoc.includes(ativ.subdisciplina);
+            const disMatch = disciplinasDoc.length === 0 || disciplinasDoc.includes(ativ.disciplina);
+            return subMatch && disMatch;
+          }
         }
         return false;
       });
