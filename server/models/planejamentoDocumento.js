@@ -1,6 +1,14 @@
 const { pool } = require('../db/pool');
 
-const JSONB_FIELDS = new Set(['horas_por_dia', 'horas_executadas_por_dia', 'executores']);
+const JSONB_FIELDS = new Set(['horas_por_dia', 'horas_executadas_por_dia', 'executores', 'ordem_por_dia']);
+
+const VALID_COLUMNS = new Set([
+  'planejamento_atividade_id', 'documento_id', 'etapa', 'executor_principal', 'executores',
+  'inicio_planejado', 'termino_planejado', 'tempo_planejado', 'tempo_executado',
+  'horas_por_dia', 'horas_executadas_por_dia', 'status',
+  'inicio_real', 'termino_real',
+  'ordem', 'ordem_por_dia',
+]);
 
 async function linkDocumentoToPlanejamento(payload = {}) {
   const cols = [
@@ -57,7 +65,7 @@ async function deleteById(id) {
 }
 
 async function updateById(id, fields = {}) {
-  const keys = Object.keys(fields || {});
+  const keys = Object.keys(fields || {}).filter(k => VALID_COLUMNS.has(k));
   if (!keys.length) return (await pool.query('SELECT * FROM planejamento_documentos WHERE id = $1', [id])).rows[0] || null;
 
   const sets = keys.map((k, i) =>

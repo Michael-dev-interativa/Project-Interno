@@ -1,7 +1,7 @@
 const { pool } = require('../db/pool');
 
 const NUMERIC_FIELDS = new Set(['atividade_id', 'empreendimento_id', 'documento_id', 'executor_id', 'tempo_planejado', 'tempo_executado']);
-const JSONB_FIELDS = new Set(['executores', 'horas_por_dia', 'horas_executadas_por_dia']);
+const JSONB_FIELDS = new Set(['executores', 'horas_por_dia', 'horas_executadas_por_dia', 'ordem_por_dia']);
 
 // Whitelist de colunas válidas — campos fora da lista são ignorados silenciosamente
 // para evitar erro 500 quando o frontend envia campos que ainda não existem na tabela.
@@ -13,6 +13,7 @@ const VALID_COLUMNS = new Set([
   'tempo_planejado', 'tempo_executado',
   'horas_por_dia', 'horas_executadas_por_dia',
   'status', 'is_quick_activity', 'etapa',
+  'ordem', 'ordem_por_dia',
 ]);
 
 // Frontend uses 'descritivo'; DB column is 'titulo'. Expose both so all callers work.
