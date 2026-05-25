@@ -350,8 +350,8 @@ const ActivityContainer = ({ activities, containerClass = "", disciplinas, dayKe
         )}
         {activitiesParaRenderizar.map((atividade, index) => (
           <Draggable
-            key={atividade.id}
-            draggableId={`${atividade.id}`}
+            key={`${atividade.id}-${dayKey}`}
+            draggableId={`${atividade.id}-${dayKey}`}
             index={index}
             isDragDisabled={
               modoOrdenacao
@@ -887,10 +887,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
 
   const [selectedActivities, setSelectedActivities] = useState(new Set());
   const [modoOrdenacao, setModoOrdenacao] = useState(false);
-  const [activityOrder, setActivityOrder] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('calendar-activity-order') || '{}'); }
-    catch { return {}; }
-  });
+  const [activityOrder, setActivityOrder] = useState({});
 
   const clearDayOrder = useCallback((dayKey) => {
     setActivityOrder(prev => {
@@ -989,30 +986,29 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
 
       setEnrichedData(finalData);
 
-      // Reconstruir activityOrder a partir do campo `ordem` salvo no banco
-      // Agrupa por dia e ordena pelo campo `ordem`, depois persiste no localStorage
+      // Reconstruir activityOrder a partir de ordem_por_dia (por dia) ou ordem (global fallback)
       const orderByDay = {};
       finalData.forEach(plano => {
-        if (plano.isLegacyExecution || plano.ordem == null) return;
+        if (plano.isLegacyExecution) return;
         const dias = Object.keys(plano.horas_por_dia || {}).filter(d => Number(plano.horas_por_dia[d]) >= 0.05);
         dias.forEach(dayKey => {
+          const ordemNoDia = (plano.ordem_por_dia && plano.ordem_por_dia[dayKey] != null)
+            ? Number(plano.ordem_por_dia[dayKey])
+            : (plano.ordem != null ? Number(plano.ordem) : null);
+          if (ordemNoDia == null) return;
           if (!orderByDay[dayKey]) orderByDay[dayKey] = [];
-          orderByDay[dayKey].push({ id: String(plano.id), ordem: Number(plano.ordem) });
+          orderByDay[dayKey].push({ id: String(plano.id), ordem: ordemNoDia });
         });
       });
       const newActivityOrder = {};
       for (const dayKey in orderByDay) {
-        const sorted = orderByDay[dayKey].sort((a, b) => a.ordem - b.ordem);
-        // Só sobrescrever se todos os itens do dia tiverem ordem definida (> 0)
-        const todosTemOrdem = sorted.every(x => x.ordem > 0);
-        if (todosTemOrdem) {
-          newActivityOrder[dayKey] = sorted.map(x => x.id);
+        const withOrder = orderByDay[dayKey].filter(x => x.ordem != null && x.ordem > 0).sort((a, b) => a.ordem - b.ordem);
+        const withoutOrder = orderByDay[dayKey].filter(x => x.ordem == null || x.ordem <= 0);
+        if (withOrder.length > 0) {
+          newActivityOrder[dayKey] = [...withOrder, ...withoutOrder].map(x => x.id);
         }
       }
-      if (Object.keys(newActivityOrder).length > 0) {
-        localStorage.setItem('calendar-activity-order', JSON.stringify(newActivityOrder));
-        setActivityOrder(newActivityOrder);
-      }
+      setActivityOrder(newActivityOrder);
 
     } catch (error) {
       // Log removido para otimização de desempenho
@@ -1026,9 +1022,11 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
   // Disparar carregamento imediato quando o filtro de usuário mudar
   useEffect(() => {
     if (filters.user) {
+      setActivityOrder({});
       loadCalendarData(filters.user);
     } else {
       setEnrichedData([]);
+      setActivityOrder({});
       setIsCalendarLoading(false);
     }
   }, [filters.user]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1133,13 +1131,13 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       const [movedId] = reorderedIds.splice(source.index, 1);
       reorderedIds.splice(destination.index, 0, movedId);
       const newOrder = { ...activityOrder, [dayKey]: reorderedIds };
-      localStorage.setItem('calendar-activity-order', JSON.stringify(newOrder));
       setActivityOrder(newOrder);
       reorderedIds.forEach((id, idx) => {
         const plano = dayActivities.find(a => String(a.id) === id);
         if (!plano || plano.isLegacyExecution) return;
         const entity = plano.tipo_planejamento === 'documento' ? PlanejamentoDocumento : PlanejamentoAtividade;
-        entity.update(id, { ordem: idx + 1 }).catch(() => {});
+        const novaOrdemPorDia = { ...(plano.ordem_por_dia || {}), [dayKey]: idx + 1 };
+        entity.update(id, { ordem_por_dia: novaOrdemPorDia }).catch(() => {});
       });
       return;
     }
@@ -1179,14 +1177,15 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       })();
       return;
     }
-    const activitiesToMove = selectedActivities.has(draggableId) && selectedActivities.size > 1 ? Array.from(selectedActivities) : [draggableId];
+    const activityId = draggableId.replace(/-\d{4}-\d{2}-\d{2}$/, '');
+    const activitiesToMove = selectedActivities.has(activityId) && selectedActivities.size > 1 ? Array.from(selectedActivities) : [activityId];
     if (activitiesToMove.some(id => { const a = (enrichedData || []).find(p => normalizeActivityId(p.id) === normalizeActivityId(id)); return !a || a.isLegacyExecution || a.status === 'concluido' || a.status === 'concluido_com_atraso'; })) { alert("Algumas atividades não podem ser reprogramadas."); return; }
     (async () => {
       let ok = 0, err = 0;
-      for (const activityId of activitiesToMove) {
-        const atividadeMovida = (enrichedData || []).find(p => normalizeActivityId(p.id) === normalizeActivityId(activityId));
+      for (const id of activitiesToMove) {
+        const atividadeMovida = (enrichedData || []).find(p => normalizeActivityId(p.id) === normalizeActivityId(id));
         if (!atividadeMovida) continue;
-        try { await handleReprogramarAtividade(activityId, destination.droppableId, atividadeMovida.executor_principal); ok++; await new Promise(r => setTimeout(r, 500)); } catch { err++; }
+        try { await handleReprogramarAtividade(id, destination.droppableId, atividadeMovida.executor_principal); ok++; await new Promise(r => setTimeout(r, 500)); } catch { err++; }
       }
       if (ok > 0) { alert(`✅ ${ok} atividade(s) reprogramadas!${err > 0 ? `\n⚠️ ${err} falharam` : ''}`); clearSelection(); } else alert('❌ Erro ao mover atividades.');
     })();

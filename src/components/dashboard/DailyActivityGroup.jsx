@@ -89,8 +89,8 @@ export default function DailyActivityGroup({
         <div className="p-1.5 bg-white space-y-1">
           {atividades.map((atividade, index) => (
             <Draggable
-              key={atividade.id}
-              draggableId={`${atividade.id}`}
+              key={`${atividade.id}-${dayKey}`}
+              draggableId={`${atividade.id}-${dayKey}`}
               index={index}
               isDragDisabled={
                 !canReprogram ||
