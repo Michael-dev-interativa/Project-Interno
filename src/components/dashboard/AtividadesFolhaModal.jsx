@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
-import { Analitico, Atividade } from '@/entities/all';
+import { Analitico, Atividade, PlanejamentoAtividade } from '@/entities/all';
 
 const STATUS_LABELS = {
   nao_iniciado: 'Não Iniciado',
@@ -28,73 +28,154 @@ const STATUS_COLORS = {
   nao_planejado: 'bg-purple-50 text-purple-600 border-purple-200',
 };
 
+const PLAN_PRIORITY = { em_andamento: 3, nao_iniciado: 2, atrasado: 2, concluido: 1, concluido_com_atraso: 0 };
+
 export default function AtividadesFolhaModal({ isOpen, onClose, planejamentoDocumento: plano, executorMap, allPlanejamentos }) {
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [debugInfo, setDebugInfo] = useState(null);
 
   useEffect(() => {
     if (!isOpen || !plano) return;
 
     const load = async () => {
       setIsLoading(true);
+      setDebugInfo(null);
       try {
-        const documentoId = String(plano.documento_id || '');
-        const etapaFiltro = plano.etapa;
+        const docId = String(plano.documento_id || '');
+        const etapaFiltro = plano.etapa || null;
 
-        // 1. Fetch all Analitico records for this document
-        const analiticos = await Analitico.filter({ documento_id: documentoId });
+        // Strategy 1: use PlanejamentoAtividade.list() (cached from CalendarioPlanejamento)
+        // This is already in memory from when the calendar loaded.
+        const allPlanos = await PlanejamentoAtividade.list();
+        const planosDoDoc = allPlanos.filter(p => String(p.documento_id) === docId);
 
-        // 2. Filter by stage
-        const filtrados = etapaFiltro
-          ? analiticos.filter(a => a.etapa === etapaFiltro)
-          : analiticos;
+        if (planosDoDoc.length > 0) {
+          // Fetch the Analitico records referenced by these plans (to get etapa + tempo_real)
+          const analiticoIds = [...new Set(planosDoDoc.map(p => p.analitico_id).filter(Boolean).map(String))];
+          let analiticoMap = {};
+          if (analiticoIds.length > 0) {
+            try {
+              const analiticos = await Analitico.filter({ id: { $in: analiticoIds } });
+              analiticos.forEach(a => { analiticoMap[String(a.id)] = a; });
+            } catch (_) {}
+          }
 
-        if (filtrados.length === 0) { setRows([]); return; }
+          // Filter by etapa (compare against the Analitico's etapa)
+          const filtrados = etapaFiltro
+            ? planosDoDoc.filter(p => {
+                const a = analiticoMap[String(p.analitico_id)];
+                // If Analitico not found or has no etapa, fallback to plan's own etapa field
+                const etapaReal = a?.etapa || p.etapa || null;
+                return etapaReal === etapaFiltro;
+              })
+            : planosDoDoc;
 
-        // 3. Resolve activity names from Atividade entity (bulk)
-        const atividadeIds = [...new Set(filtrados.map(a => a.atividade_id).filter(Boolean))];
-        let atividadesMap = {};
-        if (atividadeIds.length > 0) {
-          try {
-            const atividadesData = await Atividade.filter({ id: { $in: atividadeIds } });
-            atividadesData.forEach(a => { atividadesMap[String(a.id)] = a; });
-          } catch (_) {}
+          if (filtrados.length === 0) {
+            // Debug: show what etapas were found
+            const etapasEncontradas = [...new Set(
+              planosDoDoc.map(p => analiticoMap[String(p.analitico_id)]?.etapa || p.etapa || '(sem etapa)'))
+            ];
+            setDebugInfo({ docId, etapaFiltro, totalPlanos: planosDoDoc.length, etapasEncontradas });
+            setRows([]);
+            return;
+          }
+
+          // Bulk-fetch atividade names
+          const atividadeIds = [...new Set(filtrados.map(p => p.atividade_id).filter(Boolean).map(String))];
+          let atividadesMap = {};
+          if (atividadeIds.length > 0) {
+            try {
+              const atividadesData = await Atividade.filter({ id: { $in: atividadeIds } });
+              atividadesData.forEach(a => { atividadesMap[String(a.id)] = a; });
+            } catch (_) {}
+          }
+
+          // Group by analitico_id, pick best status plan per analitico
+          const bestPlanByAnalitico = {};
+          filtrados.forEach(p => {
+            const key = p.analitico_id ? String(p.analitico_id) : `plan-${p.id}`;
+            if (!bestPlanByAnalitico[key]) { bestPlanByAnalitico[key] = p; return; }
+            const prev = bestPlanByAnalitico[key];
+            if ((PLAN_PRIORITY[p.status] ?? -1) > (PLAN_PRIORITY[prev.status] ?? -1)) {
+              bestPlanByAnalitico[key] = p;
+            }
+          });
+
+          const result = Object.values(bestPlanByAnalitico).map(plan => {
+            const ativ = atividadesMap[String(plan.atividade_id)];
+            const analitico = analiticoMap[String(plan.analitico_id)];
+            const executor = plan.executor_principal ? executorMap?.[plan.executor_principal] : null;
+            return {
+              key: String(plan.id),
+              nome: ativ?.atividade || plan.descritivo || analitico?.descritivo || `Atividade #${plan.atividade_id}`,
+              subdisciplina: ativ?.subdisciplina || null,
+              tempoPlanejado: analitico?.tempo_real || plan.tempo_planejado || 0,
+              tempoExecutado: plan.tempo_executado != null ? Number(plan.tempo_executado) : null,
+              status: plan.status || 'nao_iniciado',
+              executor,
+            };
+          });
+
+          setRows(result);
+          return;
         }
 
-        // 4. Cross with allPlanejamentos to get planning status per analitico
-        const analiticoIdSet = new Set(filtrados.map(a => String(a.id)));
-        const planejamentosDoDoc = (allPlanejamentos || []).filter(p =>
-          p.tipo_planejamento !== 'documento' &&
-          p.analitico_id && analiticoIdSet.has(String(p.analitico_id))
-        );
+        // Strategy 2: fallback — fetch Analitico directly by documento_id
+        if (docId) {
+          const analiticos = await Analitico.filter({ documento_id: docId });
+          const filtrados = etapaFiltro
+            ? analiticos.filter(a => a.etapa === etapaFiltro)
+            : analiticos;
 
-        // Build map: analitico_id → best planejamento (prefer em_andamento > nao_iniciado > concluido)
-        const planMap = {};
-        planejamentosDoDoc.forEach(p => {
-          const key = String(p.analitico_id);
-          if (!planMap[key]) { planMap[key] = p; return; }
-          // prefer active over finished
-          const priority = { em_andamento: 3, nao_iniciado: 2, concluido: 1, concluido_com_atraso: 0 };
-          if ((priority[p.status] ?? -1) > (priority[planMap[key].status] ?? -1)) planMap[key] = p;
-        });
+          if (filtrados.length === 0) {
+            setDebugInfo({ docId, etapaFiltro, totalAnaliticos: analiticos.length, strategy: 'analitico' });
+            setRows([]);
+            return;
+          }
 
-        // 5. Build display rows
-        const result = filtrados.map(analitico => {
-          const ativ = atividadesMap[String(analitico.atividade_id)];
-          const plan = planMap[String(analitico.id)];
-          const executor = plan?.executor_principal ? executorMap?.[plan.executor_principal] : null;
-          return {
-            key: analitico.id,
-            nome: ativ?.atividade || analitico.descritivo || `Atividade #${analitico.atividade_id}`,
-            subdisciplina: ativ?.subdisciplina || null,
-            tempoPlanejado: analitico.tempo_real || 0,
-            tempoExecutado: plan ? (Number(plan.tempo_executado) || 0) : null,
-            status: plan ? (plan.status || 'nao_iniciado') : 'nao_planejado',
-            executor,
-          };
-        });
+          const atividadeIds = [...new Set(filtrados.map(a => a.atividade_id).filter(Boolean))];
+          let atividadesMap = {};
+          if (atividadeIds.length > 0) {
+            try {
+              const atividadesData = await Atividade.filter({ id: { $in: atividadeIds } });
+              atividadesData.forEach(a => { atividadesMap[String(a.id)] = a; });
+            } catch (_) {}
+          }
 
-        setRows(result);
+          // Cross with allPlanejamentos for status
+          const analiticoIdSet = new Set(filtrados.map(a => String(a.id)));
+          const planosVinculados = (allPlanejamentos || []).filter(p =>
+            p.tipo_planejamento !== 'documento' && p.analitico_id && analiticoIdSet.has(String(p.analitico_id))
+          );
+          const planMap = {};
+          planosVinculados.forEach(p => {
+            const key = String(p.analitico_id);
+            if (!planMap[key]) { planMap[key] = p; return; }
+            if ((PLAN_PRIORITY[p.status] ?? -1) > (PLAN_PRIORITY[planMap[key].status] ?? -1)) planMap[key] = p;
+          });
+
+          const result = filtrados.map(analitico => {
+            const ativ = atividadesMap[String(analitico.atividade_id)];
+            const plan = planMap[String(analitico.id)];
+            const executor = plan?.executor_principal ? executorMap?.[plan.executor_principal] : null;
+            return {
+              key: String(analitico.id),
+              nome: ativ?.atividade || analitico.descritivo || `Atividade #${analitico.atividade_id}`,
+              subdisciplina: ativ?.subdisciplina || null,
+              tempoPlanejado: analitico.tempo_real || 0,
+              tempoExecutado: plan ? (Number(plan.tempo_executado) || 0) : null,
+              status: plan ? (plan.status || 'nao_iniciado') : 'nao_planejado',
+              executor,
+            };
+          });
+
+          setRows(result);
+          return;
+        }
+
+        setDebugInfo({ docId, etapaFiltro, msg: 'documento_id ausente no planejamento' });
+        setRows([]);
       } finally {
         setIsLoading(false);
       }
@@ -124,8 +205,24 @@ export default function AtividadesFolhaModal({ isOpen, onClose, planejamentoDocu
               <span className="text-gray-500 text-sm">Carregando atividades...</span>
             </div>
           ) : rows.length === 0 ? (
-            <div className="text-center py-10 text-gray-500 text-sm">
-              Nenhuma atividade encontrada para esta folha na etapa <strong>{etapa}</strong>.
+            <div className="text-center py-10 text-gray-500 text-sm space-y-2">
+              <p>Nenhuma atividade encontrada para esta folha na etapa <strong>{etapa}</strong>.</p>
+              {debugInfo && (
+                <div className="text-left bg-gray-50 border border-gray-200 rounded p-3 text-xs text-gray-500 space-y-1">
+                  <p><strong>Documento ID:</strong> {debugInfo.docId || '(vazio)'}</p>
+                  <p><strong>Etapa buscada:</strong> {debugInfo.etapaFiltro || '(nenhuma)'}</p>
+                  {debugInfo.totalPlanos !== undefined && (
+                    <p><strong>Planejamentos do documento:</strong> {debugInfo.totalPlanos}</p>
+                  )}
+                  {debugInfo.etapasEncontradas && (
+                    <p><strong>Etapas encontradas:</strong> {debugInfo.etapasEncontradas.join(', ')}</p>
+                  )}
+                  {debugInfo.totalAnaliticos !== undefined && (
+                    <p><strong>Analíticos do documento:</strong> {debugInfo.totalAnaliticos}</p>
+                  )}
+                  {debugInfo.msg && <p><strong>Info:</strong> {debugInfo.msg}</p>}
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
