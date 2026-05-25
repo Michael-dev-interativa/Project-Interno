@@ -110,13 +110,18 @@ export default function AtividadesFolhaModal({ isOpen, onClose, planejamentoDocu
         });
 
         const tempoField = etapaFiltro ? ETAPA_TEMPO_MAP[etapaFiltro] : null;
+        const fatorDificuldade = Number(docRecord.fator_dificuldade) || 1;
 
         const result = allActivities.map(ativ => {
           const plan = planByAtiv[String(ativ.id)];
           const executor = plan?.executor_principal ? executorMap?.[plan.executor_principal] : null;
-          const tempoPlanejado = (tempoField && ativ[tempoField])
-            ? Number(ativ[tempoField])
-            : (plan?.tempo_planejado || ativ.tempo || 0);
+          let tempoPlanejado;
+          if (plan) {
+            tempoPlanejado = plan.tempo_planejado || 0;
+          } else {
+            const tempoBase = (tempoField && ativ[tempoField]) ? Number(ativ[tempoField]) : (ativ.tempo || 0);
+            tempoPlanejado = tempoBase * fatorDificuldade;
+          }
 
           return {
             key: String(ativ.id),
