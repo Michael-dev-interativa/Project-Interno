@@ -63,8 +63,8 @@ export default function AtividadesFolhaModal({ isOpen, onClose, planejamentoDocu
         let docRecord = plano.documento || {};
         if (docId) {
           try {
-            const docs = await Documento.filter({ id: docId });
-            if (docs && docs.length > 0) docRecord = { ...docRecord, ...docs[0] };
+            const fetched = await Documento.get(docId);
+            if (fetched) docRecord = { ...docRecord, ...fetched };
           } catch (_) {}
         }
 
