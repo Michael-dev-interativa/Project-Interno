@@ -309,7 +309,9 @@ export default function ActivityItemCalendar({
         }
       }
 
-      setFolhaAtividades(result);
+      const etapaFiltro = plano.etapa;
+      const filtered = etapaFiltro ? result.filter(a => a.etapa === etapaFiltro) : result;
+      setFolhaAtividades(filtered);
     } catch {
       setFolhaAtividades([]);
     } finally {
