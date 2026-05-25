@@ -1491,7 +1491,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
           typeof plano.horas_executadas_por_dia === 'object' &&
           Object.keys(plano.horas_executadas_por_dia).length > 0;
 
-        if (realStatus === 'concluido') {
+        if (realStatus === 'concluido' || realStatus === 'concluido_com_atraso') {
           // Atividade concluída - SEMPRE mostrar nos dias planejados para não "sumir" do calendário
           if (plano.horas_por_dia && typeof plano.horas_por_dia === 'object') {
             Object.keys(plano.horas_por_dia).forEach(dayKey => {
