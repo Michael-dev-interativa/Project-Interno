@@ -3,8 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
-import { Atividade, PlanejamentoAtividade } from '@/entities/all';
-import { base44 } from '@/api/base44Client';
+import { Atividade, Documento, PlanejamentoAtividade } from '@/entities/all';
 
 const ETAPA_TEMPO_MAP = {
   'Concepção': 'tempo_concepcao',
@@ -58,24 +57,33 @@ export default function AtividadesFolhaModal({ isOpen, onClose, planejamentoDocu
       try {
         const docId = String(plano.documento_id || '');
         const etapaFiltro = plano.etapa || null;
-        const doc = plano.documento || {};
 
-        const subdisciplinas = Array.isArray(doc.subdisciplinas) && doc.subdisciplinas.length > 0
-          ? doc.subdisciplinas
-          : doc.subdisciplina ? [doc.subdisciplina] : [];
-        const disciplinas = Array.isArray(doc.disciplinas) && doc.disciplinas.length > 0
-          ? doc.disciplinas
-          : doc.disciplina ? [doc.disciplina] : [];
+        // Fetch the actual Documento record to get subdisciplinas/disciplinas
+        // (plano.documento embedded object may not have these fields)
+        let docRecord = plano.documento || {};
+        if (docId) {
+          try {
+            const docs = await Documento.filter({ id: docId });
+            if (docs && docs.length > 0) docRecord = { ...docRecord, ...docs[0] };
+          } catch (_) {}
+        }
 
-        // Fetch catalog activities matching subdisciplina (generic, no empreendimento_id)
-        let catalogActivities = [];
+        const subdisciplinas = Array.isArray(docRecord.subdisciplinas) && docRecord.subdisciplinas.length > 0
+          ? docRecord.subdisciplinas
+          : docRecord.subdisciplina ? [docRecord.subdisciplina] : [];
+        const disciplinas = Array.isArray(docRecord.disciplinas) && docRecord.disciplinas.length > 0
+          ? docRecord.disciplinas
+          : docRecord.disciplina ? [docRecord.disciplina] : [];
+
+        // Fetch catalog activities matching subdisciplina + etapa (generic, no empreendimento_id)
+        let allActivities = [];
         if (subdisciplinas.length > 0) {
           try {
             const query = subdisciplinas.length === 1
               ? { subdisciplina: subdisciplinas[0] }
               : { subdisciplina: { $in: subdisciplinas } };
             const data = await Atividade.filter(query);
-            catalogActivities = (data || []).filter(a =>
+            allActivities = (data || []).filter(a =>
               !a.empreendimento_id &&
               a.tempo !== -999 &&
               (!etapaFiltro || a.etapa === etapaFiltro) &&
@@ -84,28 +92,8 @@ export default function AtividadesFolhaModal({ isOpen, onClose, planejamentoDocu
           } catch (_) {}
         }
 
-        // Fetch project-specific activities linked to this document
-        let projectActivities = [];
-        if (docId) {
-          try {
-            const data = await base44.entities.AtividadesEmpreendimento.filter({ documento_id: docId });
-            projectActivities = (data || []).filter(a =>
-              a.tempo !== -999 &&
-              (!etapaFiltro || a.etapa === etapaFiltro)
-            );
-          } catch (_) {}
-        }
-
-        // Merge without duplicates (project-specific takes priority)
-        const idsSeen = new Set();
-        const allActivities = [...projectActivities, ...catalogActivities].filter(a => {
-          if (idsSeen.has(a.id)) return false;
-          idsSeen.add(a.id);
-          return true;
-        });
-
         if (allActivities.length === 0) {
-          setDebugInfo({ docId, etapaFiltro, subdisciplinas, disciplinas });
+          setDebugInfo({ docId, etapaFiltro, subdisciplinas, disciplinas, docNome: docRecord.numero || docRecord.arquivo });
           setRows([]);
           return;
         }
