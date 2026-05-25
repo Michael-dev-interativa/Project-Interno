@@ -10,7 +10,7 @@ import { User, Trash2, RefreshCw, Play, ListMusic, PlusCircle, Loader2, Edit2, X
 import { ActivityTimerContext } from '../contexts/ActivityTimerContext';
 import FinalizarAtividadeButton from './FinalizarAtividadeButton';
 import { formatHoras } from '../utils/formatHours';
-import { Execucao, PlanejamentoAtividade, PlanejamentoDocumento, AtividadesEmpreendimento } from '@/entities/all';
+import { Atividade, Documento, Execucao, PlanejamentoAtividade, PlanejamentoDocumento, AtividadesEmpreendimento } from '@/entities/all';
 import { retryWithBackoff } from '../utils/apiUtils';
 import { distribuirHorasPorDias, isActivityOverdue } from '../utils/DateCalculator';
 import { format } from 'date-fns';
@@ -258,8 +258,50 @@ export default function ActivityItemCalendar({
     setIsLoadingFolha(true);
     setShowFolhaModal(true);
     try {
-      const data = await AtividadesEmpreendimento.filter({ documento_id: plano.documento_id });
-      setFolhaAtividades(Array.isArray(data) ? data : []);
+      const docId = String(plano.documento_id);
+      const empId = plano.empreendimento_id;
+
+      const vinculadaAoDoc = (a) => {
+        const temSingular = a.documento_id != null && String(a.documento_id) === docId;
+        const temArray = Array.isArray(a.documento_ids) && a.documento_ids.some(id => String(id) === docId);
+        return temSingular || temArray;
+      };
+
+      const [empAtvs, projAtvs, docObj] = await Promise.all([
+        AtividadesEmpreendimento.filter({ empreendimento_id: empId }).catch(() => []),
+        empId ? Atividade.filter({ empreendimento_id: empId }).catch(() => []) : Promise.resolve([]),
+        Documento.get(plano.documento_id).catch(() => null),
+      ]);
+
+      const subdisciplinasDoc = docObj?.subdisciplinas || [];
+      const disciplinasDoc = docObj?.disciplinas?.length > 0 ? docObj.disciplinas : [docObj?.disciplina].filter(Boolean);
+
+      const seen = new Set();
+      const result = [];
+      const addIfNew = (a) => {
+        if (!a?.id || seen.has(String(a.id)) || a.tempo === -999) return;
+        seen.add(String(a.id));
+        result.push(a);
+      };
+
+      // atividades_empreendimento com link explícito ao documento
+      (empAtvs || []).filter(a => vinculadaAoDoc(a)).forEach(addIfNew);
+
+      // atividades do projeto com link explícito ao documento
+      (projAtvs || []).filter(a => vinculadaAoDoc(a)).forEach(addIfNew);
+
+      // atividades do projeto sem link explícito, mas com subdisciplina compatível
+      if (subdisciplinasDoc.length > 0) {
+        (projAtvs || []).filter(a => {
+          if (!a.empreendimento_id || a.id_atividade || a.tempo === -999) return false;
+          if (a.documento_id != null || (Array.isArray(a.documento_ids) && a.documento_ids.length > 0)) return false;
+          const subMatch = subdisciplinasDoc.includes(a.subdisciplina);
+          const disMatch = disciplinasDoc.length === 0 || disciplinasDoc.includes(a.disciplina);
+          return subMatch && disMatch;
+        }).forEach(addIfNew);
+      }
+
+      setFolhaAtividades(result);
     } catch {
       setFolhaAtividades([]);
     } finally {
