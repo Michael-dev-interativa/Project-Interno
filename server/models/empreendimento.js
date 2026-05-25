@@ -64,7 +64,11 @@ async function ensureEmpreendimentoColumns() {
     ADD COLUMN IF NOT EXISTS foto_url TEXT,
     ADD COLUMN IF NOT EXISTS etapas JSONB,
     ADD COLUMN IF NOT EXISTS disciplinas_checklist JSONB,
-    ADD COLUMN IF NOT EXISTS tipo_empreendimento VARCHAR(100)
+    ADD COLUMN IF NOT EXISTS tipo_empreendimento VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS tecnico_responsavel VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS data_entrega DATE,
+    ADD COLUMN IF NOT EXISTS periodo_inicio VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS periodo_fim VARCHAR(20)
   `);
   empreendimentoColumnsCache = null;
 }
@@ -93,6 +97,10 @@ async function createEmpreendimento(fields = {}) {
     etapas,
     disciplinas_checklist,
     tipo_empreendimento,
+    tecnico_responsavel,
+    data_entrega,
+    periodo_inicio,
+    periodo_fim,
   } = fields;
 
   const dbColumns = await getEmpreendimentoColumns();
@@ -107,6 +115,10 @@ async function createEmpreendimento(fields = {}) {
     etapas: jsonStringOrNull(normalizeEtapasInput(etapas)),
     disciplinas_checklist: jsonStringOrNull(Array.isArray(disciplinas_checklist) ? disciplinas_checklist : []),
     tipo_empreendimento: tipo_empreendimento || null,
+    tecnico_responsavel: tecnico_responsavel || null,
+    data_entrega: data_entrega || null,
+    periodo_inicio: periodo_inicio || null,
+    periodo_fim: periodo_fim || null,
   };
 
   const entries = Object.entries(payload).filter(([key]) => dbColumns.has(key));
@@ -150,7 +162,8 @@ function jsonStringOrNull(v) {
 
 async function updateEmpreendimento(id, fields = {}) {
   const allowedColumns = new Set([
-    'nome', 'descricao', 'cliente', 'endereco', 'num_proposta', 'status', 'foto_url', 'etapas', 'disciplinas_checklist', 'tipo_empreendimento'
+    'nome', 'descricao', 'cliente', 'endereco', 'num_proposta', 'status', 'foto_url', 'etapas', 'disciplinas_checklist', 'tipo_empreendimento',
+    'tecnico_responsavel', 'data_entrega', 'periodo_inicio', 'periodo_fim',
   ]);
   const jsonColumns = new Set(['etapas', 'disciplinas_checklist']);
 

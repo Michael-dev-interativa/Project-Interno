@@ -67,6 +67,10 @@ export default function EmpreendimentoForm({ empreendimento, onSubmit, onClose, 
     ],
     disciplinas_checklist: empreendimento?.disciplinas_checklist || [],
     tipo_empreendimento: empreendimento?.tipo_empreendimento || '',
+    tecnico_responsavel: empreendimento?.tecnico_responsavel || '',
+    data_entrega: empreendimento?.data_entrega || '',
+    periodo_inicio: empreendimento?.periodo_inicio || '',
+    periodo_fim: empreendimento?.periodo_fim || '',
   });
   
   const [etapasEditaveis, setEtapasEditaveis] = useState(() => {
@@ -211,6 +215,47 @@ export default function EmpreendimentoForm({ empreendimento, onSubmit, onClose, 
                   onChange={(e) => handleInputChange("num_proposta", e.target.value)}
                   placeholder="Ex: PP24-1071-R3"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="tecnico_responsavel">Técnico Responsável</Label>
+                <Input
+                  id="tecnico_responsavel"
+                  value={formData.tecnico_responsavel}
+                  onChange={(e) => handleInputChange("tecnico_responsavel", e.target.value)}
+                  placeholder="Nome do técnico responsável"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="data_entrega">Data de Entrega</Label>
+                <Input
+                  id="data_entrega"
+                  type="date"
+                  value={formData.data_entrega}
+                  onChange={(e) => handleInputChange("data_entrega", e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="periodo_inicio">Período Início (MM/AAAA)</Label>
+                  <Input
+                    id="periodo_inicio"
+                    value={formData.periodo_inicio}
+                    onChange={(e) => handleInputChange("periodo_inicio", e.target.value)}
+                    placeholder="Ex: 01/2026"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="periodo_fim">Período Fim (MM/AAAA)</Label>
+                  <Input
+                    id="periodo_fim"
+                    value={formData.periodo_fim}
+                    onChange={(e) => handleInputChange("periodo_fim", e.target.value)}
+                    placeholder="Ex: 12/2026"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">

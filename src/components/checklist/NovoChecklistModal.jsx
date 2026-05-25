@@ -36,12 +36,12 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
   const [formData, setFormData] = useState({
     tipo: tipoInicial,
     empreendimento_id: defaultEmpreendimentoId || '',
-    tecnico_responsavel: '',
-    numero_os: '',
-    cliente: '',
-    data_entrega: '',
-    periodos_inicio: '',
-    periodos_fim: ''
+    tecnico_responsavel: empreendimentoInicial?.tecnico_responsavel || '',
+    numero_os: empreendimentoInicial?.num_proposta || '',
+    cliente: empreendimentoInicial?.cliente || '',
+    data_entrega: empreendimentoInicial?.data_entrega || '',
+    periodos_inicio: empreendimentoInicial?.periodo_inicio || '',
+    periodos_fim: empreendimentoInicial?.periodo_fim || '',
   });
 
   const empreendimentoSelecionado = empreendimentos?.find(e => e.id === formData.empreendimento_id);
@@ -54,7 +54,17 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
     const disciplinas = emp?.disciplinas_checklist?.length ? emp.disciplinas_checklist : TODAS_DISCIPLINAS;
     const tipoAtual = formData.tipo;
     const novoTipo = disciplinas.includes(tipoAtual) ? tipoAtual : disciplinas[0] || '';
-    setFormData(prev => ({ ...prev, empreendimento_id: value, tipo: novoTipo }));
+    setFormData(prev => ({
+      ...prev,
+      empreendimento_id: value,
+      tipo: novoTipo,
+      cliente: emp?.cliente || prev.cliente,
+      numero_os: emp?.num_proposta || prev.numero_os,
+      tecnico_responsavel: emp?.tecnico_responsavel || prev.tecnico_responsavel,
+      data_entrega: emp?.data_entrega || prev.data_entrega,
+      periodos_inicio: emp?.periodo_inicio || prev.periodos_inicio,
+      periodos_fim: emp?.periodo_fim || prev.periodos_fim,
+    }));
   };
 
   const generatePeriodos = (inicio, fim) => {
