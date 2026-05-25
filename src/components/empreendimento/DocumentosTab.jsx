@@ -828,6 +828,15 @@ export default function DocumentosTab({
     return map;
   }, [filteredDocumentos, atividadesFiltradas]);
 
+  const handleRemoveExecutor = useCallback(async (doc) => {
+    try {
+      await Documento.update(doc.id, { executor_principal: null });
+      handleLocalUpdate({ ...doc, executor_principal: null });
+    } catch (e) {
+      console.error('Erro ao remover executor:', e);
+    }
+  }, [handleLocalUpdate]);
+
   const sharedProps = {
     localDocumentos,
     localPlanejamentos,
@@ -843,6 +852,7 @@ export default function DocumentosTab({
     pavimentos,
     handleEditAtividade,
     atividadesEmpCache,
+    handleRemoveExecutor,
   };
 
   // (MemoDocumentoItem é definido fora do componente, abaixo)

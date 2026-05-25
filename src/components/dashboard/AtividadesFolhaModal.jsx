@@ -75,19 +75,18 @@ export default function AtividadesFolhaModal({ isOpen, onClose, planejamentoDocu
           ? docRecord.disciplinas
           : docRecord.disciplina ? [docRecord.disciplina] : [];
 
-        // Fetch catalog activities matching subdisciplina + etapa (generic, no empreendimento_id)
+        // Replicar lógica do DocumentoItem: Atividade.list() + filtro client-side
+        // (Atividade.filter server-side não garante filtro por subdisciplina corretamente)
         let allActivities = [];
-        if (subdisciplinas.length > 0) {
+        if (subdisciplinas.length > 0 && disciplinas.length > 0) {
           try {
-            const query = subdisciplinas.length === 1
-              ? { subdisciplina: subdisciplinas[0] }
-              : { subdisciplina: { $in: subdisciplinas } };
-            const data = await Atividade.filter(query);
-            allActivities = (data || []).filter(a =>
+            const todasAtividades = await Atividade.list();
+            allActivities = todasAtividades.filter(a =>
               !a.empreendimento_id &&
               a.tempo !== -999 &&
               (!etapaFiltro || a.etapa === etapaFiltro) &&
-              (disciplinas.length === 0 || disciplinas.includes(a.disciplina))
+              disciplinas.includes(a.disciplina) &&
+              subdisciplinas.includes(a.subdisciplina)
             );
           } catch (_) {}
         }
