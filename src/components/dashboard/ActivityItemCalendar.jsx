@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Clock, Play, Trash2, RefreshCw, Edit2, Loader2, List } from "lucide-react";
+import { Clock, Play, Trash2, RefreshCw, Edit2, Loader2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ActivityTimerContext } from '../contexts/ActivityTimerContext';
 import { PlanejamentoAtividade, Execucao, PlanejamentoDocumento, Documento } from '@/entities/all';
@@ -262,7 +262,15 @@ export default function CalendarioActivityItem({ plano, dayKey, onDelete, onUpda
             <p className="font-medium text-gray-800 leading-tight truncate" title={displayName}>{displayName}</p>
             <div className="flex flex-wrap gap-1 mt-1">
               {plano.isQuickActivity && (<Badge variant="outline" className="px-1 py-0.5 text-xs bg-gray-100 text-gray-600 border-gray-300">Execução Rápida</Badge>)}
-              {plano.tipo_planejamento === 'documento' && (<Badge variant="outline" className="px-1 py-0.5 text-xs bg-blue-100 text-blue-600 border-blue-300">Planejamento Doc.</Badge>)}
+              {plano.tipo_planejamento === 'documento' && (
+                <button
+                  onClick={() => setShowAtividadesFolhaModal(true)}
+                  className="px-1 py-0.5 text-xs bg-blue-100 text-blue-600 border border-blue-300 rounded hover:bg-blue-200 transition-colors cursor-pointer"
+                  title="Ver atividades detalhadas desta folha"
+                >
+                  Planejamento Doc.
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -298,15 +306,6 @@ export default function CalendarioActivityItem({ plano, dayKey, onDelete, onUpda
             {canEditDelete && (
               <button onClick={handleOpenEditDescricao} className="p-1.5 rounded-md border border-gray-300 hover:bg-gray-100 transition-colors">
                 <Edit2 className="w-3.5 h-3.5 text-gray-600" />
-              </button>
-            )}
-            {plano.tipo_planejamento === 'documento' && plano.documento_id && (
-              <button
-                onClick={() => setShowAtividadesFolhaModal(true)}
-                className="p-1.5 rounded-md border border-blue-300 bg-blue-50 hover:bg-blue-100 transition-colors"
-                title="Ver atividades detalhadas desta folha"
-              >
-                <List className="w-3.5 h-3.5 text-blue-600" />
               </button>
             )}
           </div>
