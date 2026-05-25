@@ -484,11 +484,10 @@ export default function ActivityItemCalendar({
                   <Badge variant="outline" className="ml-2 px-1 py-0.5 text-xs bg-blue-100 text-blue-600">Planejamento Doc.</Badge>
                   <button
                     onClick={handleVerAtividadesFolha}
-                    className="ml-1 inline-flex items-center gap-0.5 px-1 py-0.5 text-xs rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200"
+                    className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200"
                     title="Ver atividades detalhadas da folha"
                   >
                     <Eye className="w-3 h-3" />
-                    <span>Detalhes</span>
                   </button>
                 </>
               )}
