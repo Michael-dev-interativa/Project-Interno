@@ -511,7 +511,11 @@ export default function NovoPlanejamentoModal({
     try {
       const tempoTotal = Number(tempoPlanejadoVal);
       const allSelectedExecutors = formData.executores;
-      const planejamentosExistentes = await PlanejamentoAtividade.filter({ executor_principal: { '$in': allSelectedExecutors } });
+      const [planosAtiv, planosDoc] = await Promise.all([
+        PlanejamentoAtividade.filter({ executor_principal: { '$in': allSelectedExecutors } }).catch(() => []),
+        PlanejamentoDocumento.filter({ executor_principal: { '$in': allSelectedExecutors } }).catch(() => []),
+      ]);
+      const planejamentosExistentes = [...(planosAtiv || []), ...(planosDoc || [])];
 
       const cargaPorExecutor = {};
       allSelectedExecutors.forEach(email => { cargaPorExecutor[email] = {}; });
@@ -616,7 +620,11 @@ export default function NovoPlanejamentoModal({
 
       setGenerationStatus({ message: `Buscando carga de trabalho para ${usuariosParaPlanejar[0].nome || usuariosParaPlanejar[0].email}...`, error: false });
       const emailsDosUsuarios = usuariosParaPlanejar.map(u => u.email);
-      const planejamentosExistentes = await retryWithBackoff(() => PlanejamentoAtividade.filter({ executor_principal: { '$in': emailsDosUsuarios } }), 3, 1500);
+      const [batchAtiv, batchDoc] = await Promise.all([
+        retryWithBackoff(() => PlanejamentoAtividade.filter({ executor_principal: { '$in': emailsDosUsuarios } }), 3, 1500).catch(() => []),
+        retryWithBackoff(() => PlanejamentoDocumento.filter({ executor_principal: { '$in': emailsDosUsuarios } }), 3, 1500).catch(() => []),
+      ]);
+      const planejamentosExistentes = [...(batchAtiv || []), ...(batchDoc || [])];
 
       const cargaPorExecutor = {};
       emailsDosUsuarios.forEach(email => { cargaPorExecutor[email] = {}; });

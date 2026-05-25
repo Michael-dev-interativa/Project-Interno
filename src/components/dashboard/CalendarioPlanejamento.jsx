@@ -1090,7 +1090,11 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
       if (atividadeParaMover.isLegacyExecution) throw new Error("Execuções antigas não podem ser reprogramadas.");
       if (atividadeParaMover.status === 'concluido' || atividadeParaMover.status === 'concluido_com_atraso') throw new Error("Atividades concluídas não podem ser reprogramadas.");
       const entidadePlanejamento = atividadeParaMover.tipo_planejamento === 'documento' ? PlanejamentoDocumento : PlanejamentoAtividade;
-      const planejamentosDoExecutor = (await retryWithBackoff(() => entidadePlanejamento.filter({ executor_principal: executorEmail }), 3, 1000, 'reprogram')).filter(p => p.status !== 'concluido' && !p.isLegacyExecution);
+      const [reprogAtiv, reprogDoc] = await Promise.all([
+        retryWithBackoff(() => PlanejamentoAtividade.filter({ executor_principal: executorEmail }), 3, 1000, 'reprogram-ativ').catch(() => []),
+        retryWithBackoff(() => PlanejamentoDocumento.filter({ executor_principal: executorEmail }), 3, 1000, 'reprogram-doc').catch(() => []),
+      ]);
+      const planejamentosDoExecutor = [...(reprogAtiv || []), ...(reprogDoc || [])].filter(p => p.status !== 'concluido' && !p.isLegacyExecution);
       const cargaDiariaExistente = {};
       planejamentosDoExecutor.forEach(p => {
         if (normalizeActivityId(p.id) !== normalizedActivityId && p.horas_por_dia) {

@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { PlanejamentoAtividade } from '@/entities/all';
+import { PlanejamentoAtividade, PlanejamentoDocumento } from '@/entities/all';
 import { Loader2, Calendar as CalendarIcon, FileText } from 'lucide-react';
 import { retryWithBackoff } from '../utils/apiUtils';
 import { format, parseISO, isValid } from 'date-fns';
@@ -46,19 +46,22 @@ export default function PlanejamentoFolhaUnicaModal({
 
   const calcularDistribuicao = async (executorEmail, horas, startDate) => {
     try {
-      const planejamentosExistentes = await retryWithBackoff(
-        () => PlanejamentoAtividade.filter({
-          executor_principal: executorEmail,
-          status: { $ne: 'concluido' },
-        }),
-        3, 1000, 'buscarCargaExecutor'
-      );
+      const [planosAtividade, planosDocumento] = await Promise.all([
+        retryWithBackoff(
+          () => PlanejamentoAtividade.filter({ executor_principal: executorEmail, status: { $ne: 'concluido' } }),
+          3, 1000, 'buscarCargaAtividade'
+        ).catch(() => []),
+        retryWithBackoff(
+          () => PlanejamentoDocumento.filter({ executor_principal: executorEmail, status: { $ne: 'concluido' } }),
+          3, 1000, 'buscarCargaDocumento'
+        ).catch(() => []),
+      ]);
 
       const cargaDiaria = {};
       const hoje = new Date();
       const hojeMidnight = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
 
-      (planejamentosExistentes || []).forEach(plano => {
+      [...(planosAtividade || []), ...(planosDocumento || [])].forEach(plano => {
         if (plano.horas_por_dia && typeof plano.horas_por_dia === 'object') {
           Object.entries(plano.horas_por_dia).forEach(([data, h]) => {
             const dataObj = parseISO(data);
