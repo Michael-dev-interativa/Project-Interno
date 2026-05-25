@@ -19,7 +19,7 @@ export default function ReplanejamentoPreviewModal({ isOpen, onClose, proposedCh
 
     // NOVO: Calcular total de horas
     const totalHoras = useMemo(() => {
-        return proposedChanges.reduce((acc, change) => acc + (change.tempo_planejado || 0), 0);
+        return proposedChanges.reduce((acc, change) => acc + (Number(change.tempo_planejado) || 0), 0);
     }, [proposedChanges]);
 
     return (
@@ -60,7 +60,7 @@ export default function ReplanejamentoPreviewModal({ isOpen, onClose, proposedCh
                                     <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{change.executor_principal}</td>
                                     {/* NOVA CÉLULA */}
                                     <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-700 font-medium">
-                                        {change.tempo_planejado ? `${change.tempo_planejado.toFixed(1)}h` : 'N/A'}
+                                        {change.tempo_planejado ? `${Number(change.tempo_planejado).toFixed(1)}h` : 'N/A'}
                                     </td>
                                     <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(change.inicio_planejado)}</td>
                                     <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(change.termino_planejado)}</td>

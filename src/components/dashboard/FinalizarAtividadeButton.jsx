@@ -96,7 +96,7 @@ export default function FinalizarAtividadeButton({ plano, displayName, onSuccess
       }
 
       // Mensagem de sucesso aprimorada
-      let mensagem = `✅ Atividade finalizada com sucesso!\n\n📊 Resumo:\n• Tempo executado: ${tempoTotalExecutado.toFixed(1)}h\n• Tempo planejado: ${plano.tempo_planejado.toFixed(1)}h\n• Horas liberadas: ${horasLiberadas.toFixed(1)}h`;
+      let mensagem = `✅ Atividade finalizada com sucesso!\n\n📊 Resumo:\n• Tempo executado: ${Number(tempoTotalExecutado).toFixed(1)}h\n• Tempo planejado: ${Number(plano.tempo_planejado).toFixed(1)}h\n• Horas liberadas: ${Number(horasLiberadas).toFixed(1)}h`;
       
       if (atividadesMovidas.length > 0) {
         mensagem += `\n\n🚀 Realocação Automática:\n✓ ${atividadesMovidas.length} atividade(s) antecipada(s) automaticamente:`;

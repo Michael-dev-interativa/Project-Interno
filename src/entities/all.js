@@ -202,6 +202,7 @@ export const DataCadastro = createEntity('data_cadastro');
 // Compatibilidade: algumas páginas importam `AtividadesDoProjeto`
 // que representa uma visão/filtragem das atividades por empreendimento.
 export const AtividadesDoProjeto = createEntity('atividades');
+export const AtividadesEmpreendimento = createEntity('atividades_empreendimento');
 
 // Default export for compatibility
 export default {

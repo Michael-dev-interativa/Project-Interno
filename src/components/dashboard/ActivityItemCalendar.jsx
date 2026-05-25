@@ -6,11 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { User, Trash2, RefreshCw, Play, ListMusic, PlusCircle, Loader2, Edit2, X, Check } from "lucide-react";
+import { User, Trash2, RefreshCw, Play, ListMusic, PlusCircle, Loader2, Edit2, X, Check, Eye } from "lucide-react";
 import { ActivityTimerContext } from '../contexts/ActivityTimerContext';
 import FinalizarAtividadeButton from './FinalizarAtividadeButton';
 import { formatHoras } from '../utils/formatHours';
-import { Execucao, PlanejamentoAtividade, PlanejamentoDocumento } from '@/entities/all';
+import { Execucao, PlanejamentoAtividade, PlanejamentoDocumento, AtividadesEmpreendimento } from '@/entities/all';
 import { retryWithBackoff } from '../utils/apiUtils';
 import { distribuirHorasPorDias, isActivityOverdue } from '../utils/DateCalculator';
 import { format } from 'date-fns';
@@ -56,6 +56,9 @@ export default function ActivityItemCalendar({
   const [adjustedTime, setAdjustedTime] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({});
+  const [showFolhaModal, setShowFolhaModal] = useState(false);
+  const [folhaAtividades, setFolhaAtividades] = useState([]);
+  const [isLoadingFolha, setIsLoadingFolha] = useState(false);
 
   const realStatus = useMemo(() => {
     if (plano.status === 'concluido_com_atraso') return 'concluido_com_atraso';
@@ -104,8 +107,8 @@ export default function ActivityItemCalendar({
   }, [plano]);
   
   const subdisciplina = plano.atividade?.subdisciplina;
-  const tempoExecutado = plano.tempo_executado || 0;
-  const tempoPlanejado = plano.tempo_planejado || 0;
+  const tempoExecutado = Number(plano.tempo_executado) || 0;
+  const tempoPlanejado = Number(plano.tempo_planejado) || 0;
   const planoExecutor = plano.executor_principal ? executorMap[plano.executor_principal] : null;
   
   // Horas específicas deste dia
@@ -246,6 +249,21 @@ export default function ActivityItemCalendar({
       if (onDelete) onDelete();
     } catch {
       alert("Erro ao ajustar tempo.");
+    }
+  };
+
+  const handleVerAtividadesFolha = async (e) => {
+    e.stopPropagation();
+    if (!plano.documento_id) return;
+    setIsLoadingFolha(true);
+    setShowFolhaModal(true);
+    try {
+      const data = await AtividadesEmpreendimento.filter({ documento_id: plano.documento_id });
+      setFolhaAtividades(Array.isArray(data) ? data : []);
+    } catch {
+      setFolhaAtividades([]);
+    } finally {
+      setIsLoadingFolha(false);
     }
   };
 
@@ -410,7 +428,17 @@ export default function ActivityItemCalendar({
                 <Badge variant="outline" className="ml-2 px-1 py-0.5 text-xs bg-gray-100 text-gray-600">Execução Rápida</Badge>
               )}
               {plano.tipo_planejamento === 'documento' && (
-                <Badge variant="outline" className="ml-2 px-1 py-0.5 text-xs bg-blue-100 text-blue-600">Planejamento Doc.</Badge>
+                <>
+                  <Badge variant="outline" className="ml-2 px-1 py-0.5 text-xs bg-blue-100 text-blue-600">Planejamento Doc.</Badge>
+                  <button
+                    onClick={handleVerAtividadesFolha}
+                    className="ml-1 inline-flex items-center gap-0.5 px-1 py-0.5 text-xs rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200"
+                    title="Ver atividades detalhadas da folha"
+                  >
+                    <Eye className="w-3 h-3" />
+                    <span>Detalhes</span>
+                  </button>
+                </>
               )}
             </p>
             {plano.empreendimento?.nome && (
@@ -645,6 +673,60 @@ export default function ActivityItemCalendar({
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowTimeAdjustModal(false)}>Cancelar</Button>
             <Button onClick={handleAdjustTime} className="bg-blue-600 hover:bg-blue-700">Ajustar e Finalizar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showFolhaModal} onOpenChange={setShowFolhaModal}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Atividades da Folha</DialogTitle>
+            <p className="text-sm text-gray-500 mt-1">{displayName}</p>
+          </DialogHeader>
+          <div className="py-2">
+            {isLoadingFolha ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-indigo-500 mr-2" />
+                <span className="text-sm text-gray-500">Carregando atividades...</span>
+              </div>
+            ) : folhaAtividades.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">Nenhuma atividade cadastrada para esta folha.</p>
+            ) : (
+              <div className="space-y-1">
+                {folhaAtividades.map((atv) => {
+                  const statusMap = {
+                    concluida: { label: 'Concluída', color: 'bg-green-100 text-green-700' },
+                    'Concluída': { label: 'Concluída', color: 'bg-green-100 text-green-700' },
+                    planejada: { label: 'Planejada', color: 'bg-blue-100 text-blue-700' },
+                    'Planejada': { label: 'Planejada', color: 'bg-blue-100 text-blue-700' },
+                    nao_planejada: { label: 'Não Planejada', color: 'bg-gray-100 text-gray-600' },
+                  };
+                  const st = statusMap[atv.status_planejamento] || { label: atv.status_planejamento || '—', color: 'bg-gray-100 text-gray-600' };
+                  return (
+                    <div key={atv.id} className="flex items-start justify-between gap-2 px-3 py-2 rounded border border-gray-100 bg-white hover:bg-gray-50 text-xs">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-800 break-words">{atv.atividade || '—'}</p>
+                        {atv.subdisciplina && (
+                          <p className="text-blue-600 mt-0.5">{atv.subdisciplina}</p>
+                        )}
+                        {atv.etapa && (
+                          <p className="text-gray-500 mt-0.5">Etapa: {atv.etapa}</p>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {atv.tempo != null && (
+                          <span className="font-mono text-gray-700">{Number(atv.tempo).toFixed(1)}h</span>
+                        )}
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${st.color}`}>{st.label}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowFolhaModal(false)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
