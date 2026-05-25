@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
-import { PlanejamentoAtividade } from '@/entities/all';
+import { Analitico, Atividade } from '@/entities/all';
 
 const STATUS_LABELS = {
   nao_iniciado: 'Não Iniciado',
@@ -25,10 +25,11 @@ const STATUS_COLORS = {
   atrasado_em_andamento: 'bg-red-100 text-red-700 border-red-200',
   pausado: 'bg-yellow-100 text-yellow-700 border-yellow-200',
   nao_iniciado: 'bg-gray-100 text-gray-600 border-gray-200',
+  nao_planejado: 'bg-purple-50 text-purple-600 border-purple-200',
 };
 
 export default function AtividadesFolhaModal({ isOpen, onClose, planejamentoDocumento: plano, executorMap, allPlanejamentos }) {
-  const [atividades, setAtividades] = useState([]);
+  const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -37,34 +38,63 @@ export default function AtividadesFolhaModal({ isOpen, onClose, planejamentoDocu
     const load = async () => {
       setIsLoading(true);
       try {
+        const documentoId = String(plano.documento_id || '');
         const etapaFiltro = plano.etapa;
-        const documentoId = plano.documento_id;
-        const result = [];
-        const seen = new Set();
 
-        const add = (items) => {
-          if (!Array.isArray(items)) return;
-          items.forEach(a => {
-            if (!seen.has(a.id)) { seen.add(a.id); result.push(a); }
-          });
-        };
+        // 1. Fetch all Analitico records for this document
+        const analiticos = await Analitico.filter({ documento_id: documentoId });
 
-        // From allPlanejamentos already loaded in memory
-        if (allPlanejamentos?.length) {
-          add(allPlanejamentos.filter(p =>
-            p.tipo_planejamento !== 'documento' && documentoId && p.documento_id === documentoId
-          ));
-        }
+        // 2. Filter by stage
+        const filtrados = etapaFiltro
+          ? analiticos.filter(a => a.etapa === etapaFiltro)
+          : analiticos;
 
-        // From API by documento_id
-        if (documentoId) {
+        if (filtrados.length === 0) { setRows([]); return; }
+
+        // 3. Resolve activity names from Atividade entity (bulk)
+        const atividadeIds = [...new Set(filtrados.map(a => a.atividade_id).filter(Boolean))];
+        let atividadesMap = {};
+        if (atividadeIds.length > 0) {
           try {
-            add(await PlanejamentoAtividade.filter({ documento_id: documentoId }));
+            const atividadesData = await Atividade.filter({ id: { $in: atividadeIds } });
+            atividadesData.forEach(a => { atividadesMap[String(a.id)] = a; });
           } catch (_) {}
         }
 
-        const filtered = etapaFiltro ? result.filter(a => a.etapa === etapaFiltro) : result;
-        setAtividades(filtered);
+        // 4. Cross with allPlanejamentos to get planning status per analitico
+        const analiticoIdSet = new Set(filtrados.map(a => String(a.id)));
+        const planejamentosDoDoc = (allPlanejamentos || []).filter(p =>
+          p.tipo_planejamento !== 'documento' &&
+          p.analitico_id && analiticoIdSet.has(String(p.analitico_id))
+        );
+
+        // Build map: analitico_id → best planejamento (prefer em_andamento > nao_iniciado > concluido)
+        const planMap = {};
+        planejamentosDoDoc.forEach(p => {
+          const key = String(p.analitico_id);
+          if (!planMap[key]) { planMap[key] = p; return; }
+          // prefer active over finished
+          const priority = { em_andamento: 3, nao_iniciado: 2, concluido: 1, concluido_com_atraso: 0 };
+          if ((priority[p.status] ?? -1) > (priority[planMap[key].status] ?? -1)) planMap[key] = p;
+        });
+
+        // 5. Build display rows
+        const result = filtrados.map(analitico => {
+          const ativ = atividadesMap[String(analitico.atividade_id)];
+          const plan = planMap[String(analitico.id)];
+          const executor = plan?.executor_principal ? executorMap?.[plan.executor_principal] : null;
+          return {
+            key: analitico.id,
+            nome: ativ?.atividade || analitico.descritivo || `Atividade #${analitico.atividade_id}`,
+            subdisciplina: ativ?.subdisciplina || null,
+            tempoPlanejado: analitico.tempo_real || 0,
+            tempoExecutado: plan ? (Number(plan.tempo_executado) || 0) : null,
+            status: plan ? (plan.status || 'nao_iniciado') : 'nao_planejado',
+            executor,
+          };
+        });
+
+        setRows(result);
       } finally {
         setIsLoading(false);
       }
@@ -93,45 +123,39 @@ export default function AtividadesFolhaModal({ isOpen, onClose, planejamentoDocu
               <Loader2 className="w-5 h-5 animate-spin text-gray-400 mr-2" />
               <span className="text-gray-500 text-sm">Carregando atividades...</span>
             </div>
-          ) : atividades.length === 0 ? (
+          ) : rows.length === 0 ? (
             <div className="text-center py-10 text-gray-500 text-sm">
               Nenhuma atividade encontrada para esta folha na etapa <strong>{etapa}</strong>.
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs text-gray-400 mb-2">{atividades.length} atividade(s) encontrada(s)</p>
-              {atividades.map((atividade) => {
-                const status = atividade.status || 'nao_iniciado';
-                const executor = executorMap?.[atividade.executor_principal];
-                const nome = atividade.atividade?.atividade || atividade.descritivo || atividade.titulo || 'Atividade';
-
-                return (
-                  <div key={atividade.id} className="p-3 border border-gray-200 rounded-lg bg-white">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm text-gray-800 truncate" title={nome}>{nome}</p>
-                        {atividade.subdisciplina && (
-                          <p className="text-xs text-blue-600 mt-0.5">{atividade.subdisciplina}</p>
+              <p className="text-xs text-gray-400 mb-2">{rows.length} atividade(s) encontrada(s)</p>
+              {rows.map((row) => (
+                <div key={row.key} className="p-3 border border-gray-200 rounded-lg bg-white">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm text-gray-800 truncate" title={row.nome}>{row.nome}</p>
+                      {row.subdisciplina && (
+                        <p className="text-xs text-blue-600 mt-0.5">{row.subdisciplina}</p>
+                      )}
+                      <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-gray-500">
+                        {row.tempoPlanejado > 0 && (
+                          <span>Planejado: <strong>{Number(row.tempoPlanejado).toFixed(1)}h</strong></span>
                         )}
-                        <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-gray-500">
-                          {atividade.tempo_planejado != null && (
-                            <span>Planejado: <strong>{Number(atividade.tempo_planejado).toFixed(1)}h</strong></span>
-                          )}
-                          {Number(atividade.tempo_executado) > 0 && (
-                            <span>Executado: <strong>{Number(atividade.tempo_executado).toFixed(1)}h</strong></span>
-                          )}
-                          {executor && (
-                            <span>Executor: <strong>{executor.nome || executor.email}</strong></span>
-                          )}
-                        </div>
+                        {row.tempoExecutado !== null && row.tempoExecutado > 0 && (
+                          <span>Executado: <strong>{Number(row.tempoExecutado).toFixed(1)}h</strong></span>
+                        )}
+                        {row.executor && (
+                          <span>Executor: <strong>{row.executor.nome || row.executor.email}</strong></span>
+                        )}
                       </div>
-                      <Badge className={`text-xs shrink-0 border ${STATUS_COLORS[status] || STATUS_COLORS.nao_iniciado}`}>
-                        {STATUS_LABELS[status] || status}
-                      </Badge>
                     </div>
+                    <Badge className={`text-xs shrink-0 border ${STATUS_COLORS[row.status] || STATUS_COLORS.nao_iniciado}`}>
+                      {STATUS_LABELS[row.status] || row.status}
+                    </Badge>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           )}
         </div>
