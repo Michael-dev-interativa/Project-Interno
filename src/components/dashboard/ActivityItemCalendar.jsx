@@ -267,9 +267,9 @@ export default function ActivityItemCalendar({
         return temSingular || temArray;
       };
 
-      const [empAtvs, projAtvs, docObj] = await Promise.all([
+      const [empAtvs, allAtvs, docObj] = await Promise.all([
         AtividadesEmpreendimento.filter({ empreendimento_id: empId }).catch(() => []),
-        empId ? Atividade.filter({ empreendimento_id: empId }).catch(() => []) : Promise.resolve([]),
+        Atividade.list().catch(() => []),
         Documento.get(plano.documento_id).catch(() => null),
       ]);
 
@@ -287,18 +287,26 @@ export default function ActivityItemCalendar({
       // atividades_empreendimento com link explícito ao documento
       (empAtvs || []).filter(a => vinculadaAoDoc(a)).forEach(addIfNew);
 
-      // atividades do projeto com link explícito ao documento
-      (projAtvs || []).filter(a => vinculadaAoDoc(a)).forEach(addIfNew);
+      // atividades do projeto (empreendimento_id) com link explícito ao documento
+      (allAtvs || []).filter(a =>
+        a.empreendimento_id && String(a.empreendimento_id) === String(empId) && vinculadaAoDoc(a)
+      ).forEach(addIfNew);
 
-      // atividades do projeto sem link explícito, mas com subdisciplina compatível
       if (subdisciplinasDoc.length > 0) {
-        (projAtvs || []).filter(a => {
-          if (!a.empreendimento_id || a.id_atividade || a.tempo === -999) return false;
+        // atividades do projeto sem link explícito mas com subdisciplina compatível
+        (allAtvs || []).filter(a => {
+          if (!a.empreendimento_id || String(a.empreendimento_id) !== String(empId) || a.id_atividade || a.tempo === -999) return false;
           if (a.documento_id != null || (Array.isArray(a.documento_ids) && a.documento_ids.length > 0)) return false;
-          const subMatch = subdisciplinasDoc.includes(a.subdisciplina);
-          const disMatch = disciplinasDoc.length === 0 || disciplinasDoc.includes(a.disciplina);
-          return subMatch && disMatch;
+          return subdisciplinasDoc.includes(a.subdisciplina) && (disciplinasDoc.length === 0 || disciplinasDoc.includes(a.disciplina));
         }).forEach(addIfNew);
+
+        // atividades genéricas do catálogo matching disciplina/subdisciplina
+        if (disciplinasDoc.length > 0) {
+          (allAtvs || []).filter(a => {
+            if (a.empreendimento_id || a.tempo === -999) return false;
+            return disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina);
+          }).forEach(addIfNew);
+        }
       }
 
       setFolhaAtividades(result);
