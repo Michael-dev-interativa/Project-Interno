@@ -2934,9 +2934,10 @@ const PORT = Number(process.env.PORT || 4000);
     await pool.query("ALTER TABLE planejamento_atividades ADD COLUMN IF NOT EXISTS termino_real DATE;");
     await pool.query("ALTER TABLE planejamento_atividades ADD COLUMN IF NOT EXISTS is_quick_activity BOOLEAN DEFAULT false;");
     await pool.query("ALTER TABLE planejamento_atividades ADD COLUMN IF NOT EXISTS documento_id INTEGER REFERENCES documentos(id) ON DELETE SET NULL;");
+    await pool.query("ALTER TABLE planejamento_atividades ADD COLUMN IF NOT EXISTS etapa VARCHAR(255);");
     await pool.query("ALTER TABLE planejamento_documentos ADD COLUMN IF NOT EXISTS inicio_real DATE;");
     await pool.query("ALTER TABLE planejamento_documentos ADD COLUMN IF NOT EXISTS termino_real DATE;");
-    console.log('✅ ensured inicio_real/termino_real on planejamento tables');
+    console.log('✅ ensured inicio_real/termino_real/etapa on planejamento tables');
   } catch (err) {
     console.warn('⚠️ Could not ensure real date columns for planejamento tables:', err.message || err);
   }
