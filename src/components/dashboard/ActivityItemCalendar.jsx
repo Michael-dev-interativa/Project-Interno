@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useMemo, useContext } from 'react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,35 +7,15 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { User, Trash2, RefreshCw, Play, ListMusic, PlusCircle, Loader2, Edit2, X, Check, Eye } from "lucide-react";
+import { User, Trash2, RefreshCw, Play, ListMusic, PlusCircle, Loader2, Edit2, X, Check } from "lucide-react";
 import { ActivityTimerContext } from '../contexts/ActivityTimerContext';
 import FinalizarAtividadeButton from './FinalizarAtividadeButton';
 import { formatHoras } from '../utils/formatHours';
-import { Atividade, Documento, Execucao, PlanejamentoAtividade, PlanejamentoDocumento, AtividadesEmpreendimento } from '@/entities/all';
+import { Execucao, PlanejamentoAtividade, PlanejamentoDocumento } from '@/entities/all';
 import { retryWithBackoff } from '../utils/apiUtils';
 import { distribuirHorasPorDias, isActivityOverdue } from '../utils/DateCalculator';
 import { format } from 'date-fns';
 
-// Import calculateActivityStatus from parent
-const calculateActivityStatus = (plano, allPlanejamentos = []) => {
-  if (plano.isLegacyExecution) {
-    return plano.status;
-  }
-
-  if (plano.status === 'concluido') {
-    return 'concluido';
-  }
-
-  // Import isActivityOverdue logic here or pass as prop
-  // For simplicity, using basic check
-  const isOverdue = false; // Placeholder - you'd need to import the actual function
-
-  if (plano.status === 'atrasado' || isOverdue) {
-    return 'atrasado';
-  }
-
-  return plano.status || 'nao_iniciado';
-};
 
 export default function ActivityItemCalendar({ 
   plano, 
@@ -56,9 +37,6 @@ export default function ActivityItemCalendar({
   const [adjustedTime, setAdjustedTime] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({});
-  const [showFolhaModal, setShowFolhaModal] = useState(false);
-  const [folhaAtividades, setFolhaAtividades] = useState([]);
-  const [isLoadingFolha, setIsLoadingFolha] = useState(false);
 
   const realStatus = useMemo(() => {
     if (plano.status === 'concluido_com_atraso') return 'concluido_com_atraso';
@@ -237,85 +215,12 @@ export default function ActivityItemCalendar({
         3, 1000, 'adjustTime'
       );
 
-      // Verificar se foi salvo corretamente
-      const atividadeAtualizada = await retryWithBackoff(
-        () => entityToUpdate.get(plano.id),
-        3, 1000, 'verificarAjuste'
-      );
-
       setShowTimeAdjustModal(false);
       setAdjustedTime('');
 
       if (onDelete) onDelete();
     } catch {
       alert("Erro ao ajustar tempo.");
-    }
-  };
-
-  const handleVerAtividadesFolha = async (e) => {
-    e.stopPropagation();
-    if (!plano.documento_id) return;
-    setIsLoadingFolha(true);
-    setShowFolhaModal(true);
-    try {
-      const docId = String(plano.documento_id);
-      const empId = plano.empreendimento_id;
-
-      const vinculadaAoDoc = (a) => {
-        const temSingular = a.documento_id != null && String(a.documento_id) === docId;
-        const temArray = Array.isArray(a.documento_ids) && a.documento_ids.some(id => String(id) === docId);
-        return temSingular || temArray;
-      };
-
-      const [empAtvs, allAtvs, docObj] = await Promise.all([
-        AtividadesEmpreendimento.filter({ empreendimento_id: empId }).catch(() => []),
-        Atividade.list().catch(() => []),
-        Documento.get(plano.documento_id).catch(() => null),
-      ]);
-
-      const subdisciplinasDoc = docObj?.subdisciplinas || [];
-      const disciplinasDoc = docObj?.disciplinas?.length > 0 ? docObj.disciplinas : [docObj?.disciplina].filter(Boolean);
-
-      const seen = new Set();
-      const result = [];
-      const addIfNew = (a) => {
-        if (!a?.id || seen.has(String(a.id)) || a.tempo === -999) return;
-        seen.add(String(a.id));
-        result.push(a);
-      };
-
-      // atividades_empreendimento com link explícito ao documento
-      (empAtvs || []).filter(a => vinculadaAoDoc(a)).forEach(addIfNew);
-
-      // atividades do projeto (empreendimento_id) com link explícito ao documento
-      (allAtvs || []).filter(a =>
-        a.empreendimento_id && String(a.empreendimento_id) === String(empId) && vinculadaAoDoc(a)
-      ).forEach(addIfNew);
-
-      if (subdisciplinasDoc.length > 0) {
-        // atividades do projeto sem link explícito mas com subdisciplina compatível
-        (allAtvs || []).filter(a => {
-          if (!a.empreendimento_id || String(a.empreendimento_id) !== String(empId) || a.id_atividade || a.tempo === -999) return false;
-          if (a.documento_id != null || (Array.isArray(a.documento_ids) && a.documento_ids.length > 0)) return false;
-          return subdisciplinasDoc.includes(a.subdisciplina) && (disciplinasDoc.length === 0 || disciplinasDoc.includes(a.disciplina));
-        }).forEach(addIfNew);
-
-        // atividades genéricas do catálogo matching disciplina/subdisciplina
-        if (disciplinasDoc.length > 0) {
-          (allAtvs || []).filter(a => {
-            if (a.empreendimento_id || a.tempo === -999) return false;
-            return disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina);
-          }).forEach(addIfNew);
-        }
-      }
-
-      const etapaFiltro = plano.etapa;
-      const filtered = etapaFiltro ? result.filter(a => a.etapa === etapaFiltro) : result;
-      setFolhaAtividades(filtered);
-    } catch {
-      setFolhaAtividades([]);
-    } finally {
-      setIsLoadingFolha(false);
     }
   };
 
@@ -332,10 +237,6 @@ export default function ActivityItemCalendar({
     if (user.role === 'admin') return true;
     const perfilsComPermissao = ['gestao', 'lider', 'coordenador', 'direcao'];
     return user.perfil && perfilsComPermissao.includes(user.perfil);
-  };
-
-  const shouldShowAdjustButton = () => {
-    return user && (user.role === 'admin' || user.perfil === 'coordenador') && !plano.isLegacyExecution && !isConcluded;
   };
 
   const shouldShowFinalizarButton = () => {
@@ -480,16 +381,7 @@ export default function ActivityItemCalendar({
                 <Badge variant="outline" className="ml-2 px-1 py-0.5 text-xs bg-gray-100 text-gray-600">Execução Rápida</Badge>
               )}
               {plano.tipo_planejamento === 'documento' && (
-                <>
-                  <Badge variant="outline" className="ml-2 px-1 py-0.5 text-xs bg-blue-100 text-blue-600">Planejamento Doc.</Badge>
-                  <button
-                    onClick={handleVerAtividadesFolha}
-                    className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200"
-                    title="Ver atividades detalhadas da folha"
-                  >
-                    <Eye className="w-3 h-3" />
-                  </button>
-                </>
+                <Badge variant="outline" className="ml-2 px-1 py-0.5 text-xs bg-blue-100 text-blue-600">Planejamento Doc.</Badge>
               )}
             </p>
             {plano.empreendimento?.nome && (
@@ -626,12 +518,6 @@ export default function ActivityItemCalendar({
           </div>
         )}
 
-        {plano.observacao && (
-          <p className="text-gray-500 italic text-xs mt-1 break-words border-l-2 border-gray-300 pl-2">
-            {plano.observacao}
-          </p>
-        )}
-
         <div className="flex gap-1 mt-2">
           {/* Cenário 3: Concluída no prazo — verde com ✓ */}
           {realStatus === 'concluido' && (
@@ -724,60 +610,6 @@ export default function ActivityItemCalendar({
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowTimeAdjustModal(false)}>Cancelar</Button>
             <Button onClick={handleAdjustTime} className="bg-blue-600 hover:bg-blue-700">Ajustar e Finalizar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showFolhaModal} onOpenChange={setShowFolhaModal}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Atividades da Folha</DialogTitle>
-            <p className="text-sm text-gray-500 mt-1">{displayName}</p>
-          </DialogHeader>
-          <div className="py-2">
-            {isLoadingFolha ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-indigo-500 mr-2" />
-                <span className="text-sm text-gray-500">Carregando atividades...</span>
-              </div>
-            ) : folhaAtividades.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">Nenhuma atividade cadastrada para esta folha.</p>
-            ) : (
-              <div className="space-y-1">
-                {folhaAtividades.map((atv) => {
-                  const statusMap = {
-                    concluida: { label: 'Concluída', color: 'bg-green-100 text-green-700' },
-                    'Concluída': { label: 'Concluída', color: 'bg-green-100 text-green-700' },
-                    planejada: { label: 'Planejada', color: 'bg-blue-100 text-blue-700' },
-                    'Planejada': { label: 'Planejada', color: 'bg-blue-100 text-blue-700' },
-                    nao_planejada: { label: 'Não Planejada', color: 'bg-gray-100 text-gray-600' },
-                  };
-                  const st = statusMap[atv.status_planejamento] || { label: atv.status_planejamento || '—', color: 'bg-gray-100 text-gray-600' };
-                  return (
-                    <div key={atv.id} className="flex items-start justify-between gap-2 px-3 py-2 rounded border border-gray-100 bg-white hover:bg-gray-50 text-xs">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-800 break-words">{atv.atividade || '—'}</p>
-                        {atv.subdisciplina && (
-                          <p className="text-blue-600 mt-0.5">{atv.subdisciplina}</p>
-                        )}
-                        {atv.etapa && (
-                          <p className="text-gray-500 mt-0.5">Etapa: {atv.etapa}</p>
-                        )}
-                      </div>
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        {atv.tempo != null && (
-                          <span className="font-mono text-gray-700">{Number(atv.tempo).toFixed(1)}h</span>
-                        )}
-                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${st.color}`}>{st.label}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowFolhaModal(false)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
