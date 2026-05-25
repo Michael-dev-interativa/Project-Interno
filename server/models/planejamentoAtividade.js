@@ -3,6 +3,18 @@ const { pool } = require('../db/pool');
 const NUMERIC_FIELDS = new Set(['atividade_id', 'empreendimento_id', 'documento_id', 'executor_id', 'tempo_planejado', 'tempo_executado']);
 const JSONB_FIELDS = new Set(['executores', 'horas_por_dia', 'horas_executadas_por_dia']);
 
+// Whitelist de colunas válidas — campos fora da lista são ignorados silenciosamente
+// para evitar erro 500 quando o frontend envia campos que ainda não existem na tabela.
+const VALID_COLUMNS = new Set([
+  'titulo', 'descricao', 'atividade_id', 'empreendimento_id', 'documento_id',
+  'executor_principal', 'executores', 'executor_id',
+  'inicio_previsto', 'fim_previsto', 'inicio_planejado', 'inicio_real',
+  'termino_planejado', 'termino_real',
+  'tempo_planejado', 'tempo_executado',
+  'horas_por_dia', 'horas_executadas_por_dia',
+  'status', 'is_quick_activity', 'etapa',
+]);
+
 // Frontend uses 'descritivo'; DB column is 'titulo'. Expose both so all callers work.
 function mapRow(row) {
   if (!row) return row;
@@ -70,7 +82,7 @@ async function updatePlanejamento(id, fields = {}) {
     fields = { titulo: fields.titulo ?? descritivo, ...rest };
   }
 
-  const keys = Object.keys(fields);
+  const keys = Object.keys(fields).filter(k => VALID_COLUMNS.has(k));
   if (!keys.length) return getPlanejamentoById(id);
 
   const sets = keys.map((k, i) =>
