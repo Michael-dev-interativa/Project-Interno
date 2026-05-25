@@ -1139,7 +1139,7 @@ export default function CalendarioPlanejamento({ usuarios, disciplinas, onRefres
         const plano = dayActivities.find(a => String(a.id) === id);
         if (!plano || plano.isLegacyExecution) return;
         const entity = plano.tipo_planejamento === 'documento' ? PlanejamentoDocumento : PlanejamentoAtividade;
-        entity.update(id, { ordem: idx }).catch(() => {});
+        entity.update(id, { ordem: idx + 1 }).catch(() => {});
       });
       return;
     }
