@@ -3,7 +3,18 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
-import { Analitico, Atividade, PlanejamentoAtividade } from '@/entities/all';
+import { Atividade, PlanejamentoAtividade } from '@/entities/all';
+import { base44 } from '@/api/base44Client';
+
+const ETAPA_TEMPO_MAP = {
+  'Concepção': 'tempo_concepcao',
+  'Planejamento': 'tempo_planejamento',
+  'Estudo Preliminar': 'tempo_estudo_preliminar',
+  'Ante-Projeto': 'tempo_ante_projeto',
+  'Projeto Básico': 'tempo_projeto_basico',
+  'Projeto Executivo': 'tempo_projeto_executivo',
+  'Liberado para Obra': 'tempo_liberado_obra',
+};
 
 const STATUS_LABELS = {
   nao_iniciado: 'Não Iniciado',
@@ -14,6 +25,8 @@ const STATUS_LABELS = {
   atrasado_nao_iniciado: 'Atrasado (Não Iniciado)',
   atrasado_em_andamento: 'Atrasado (Em Andamento)',
   pausado: 'Pausado',
+  planejado: 'Planejada',
+  nao_planejado: 'Não Planejada',
 };
 
 const STATUS_COLORS = {
@@ -25,12 +38,13 @@ const STATUS_COLORS = {
   atrasado_em_andamento: 'bg-red-100 text-red-700 border-red-200',
   pausado: 'bg-yellow-100 text-yellow-700 border-yellow-200',
   nao_iniciado: 'bg-gray-100 text-gray-600 border-gray-200',
+  planejado: 'bg-blue-50 text-blue-600 border-blue-200',
   nao_planejado: 'bg-purple-50 text-purple-600 border-purple-200',
 };
 
 const PLAN_PRIORITY = { em_andamento: 3, nao_iniciado: 2, atrasado: 2, concluido: 1, concluido_com_atraso: 0 };
 
-export default function AtividadesFolhaModal({ isOpen, onClose, planejamentoDocumento: plano, executorMap, allPlanejamentos }) {
+export default function AtividadesFolhaModal({ isOpen, onClose, planejamentoDocumento: plano, executorMap }) {
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [debugInfo, setDebugInfo] = useState(null);
@@ -44,138 +58,91 @@ export default function AtividadesFolhaModal({ isOpen, onClose, planejamentoDocu
       try {
         const docId = String(plano.documento_id || '');
         const etapaFiltro = plano.etapa || null;
+        const doc = plano.documento || {};
 
-        // Strategy 1: use PlanejamentoAtividade.list() (cached from CalendarioPlanejamento)
-        // This is already in memory from when the calendar loaded.
-        const allPlanos = await PlanejamentoAtividade.list();
-        const planosDoDoc = allPlanos.filter(p => String(p.documento_id) === docId);
+        const subdisciplinas = Array.isArray(doc.subdisciplinas) && doc.subdisciplinas.length > 0
+          ? doc.subdisciplinas
+          : doc.subdisciplina ? [doc.subdisciplina] : [];
+        const disciplinas = Array.isArray(doc.disciplinas) && doc.disciplinas.length > 0
+          ? doc.disciplinas
+          : doc.disciplina ? [doc.disciplina] : [];
 
-        if (planosDoDoc.length > 0) {
-          // Fetch the Analitico records referenced by these plans (to get etapa + tempo_real)
-          const analiticoIds = [...new Set(planosDoDoc.map(p => p.analitico_id).filter(Boolean).map(String))];
-          let analiticoMap = {};
-          if (analiticoIds.length > 0) {
-            try {
-              const analiticos = await Analitico.filter({ id: { $in: analiticoIds } });
-              analiticos.forEach(a => { analiticoMap[String(a.id)] = a; });
-            } catch (_) {}
-          }
-
-          // Filter by etapa (compare against the Analitico's etapa)
-          const filtrados = etapaFiltro
-            ? planosDoDoc.filter(p => {
-                const a = analiticoMap[String(p.analitico_id)];
-                // If Analitico not found or has no etapa, fallback to plan's own etapa field
-                const etapaReal = a?.etapa || p.etapa || null;
-                return etapaReal === etapaFiltro;
-              })
-            : planosDoDoc;
-
-          if (filtrados.length === 0) {
-            // Debug: show what etapas were found
-            const etapasEncontradas = [...new Set(
-              planosDoDoc.map(p => analiticoMap[String(p.analitico_id)]?.etapa || p.etapa || '(sem etapa)'))
-            ];
-            setDebugInfo({ docId, etapaFiltro, totalPlanos: planosDoDoc.length, etapasEncontradas });
-            setRows([]);
-            return;
-          }
-
-          // Bulk-fetch atividade names
-          const atividadeIds = [...new Set(filtrados.map(p => p.atividade_id).filter(Boolean).map(String))];
-          let atividadesMap = {};
-          if (atividadeIds.length > 0) {
-            try {
-              const atividadesData = await Atividade.filter({ id: { $in: atividadeIds } });
-              atividadesData.forEach(a => { atividadesMap[String(a.id)] = a; });
-            } catch (_) {}
-          }
-
-          // Group by analitico_id, pick best status plan per analitico
-          const bestPlanByAnalitico = {};
-          filtrados.forEach(p => {
-            const key = p.analitico_id ? String(p.analitico_id) : `plan-${p.id}`;
-            if (!bestPlanByAnalitico[key]) { bestPlanByAnalitico[key] = p; return; }
-            const prev = bestPlanByAnalitico[key];
-            if ((PLAN_PRIORITY[p.status] ?? -1) > (PLAN_PRIORITY[prev.status] ?? -1)) {
-              bestPlanByAnalitico[key] = p;
-            }
-          });
-
-          const result = Object.values(bestPlanByAnalitico).map(plan => {
-            const ativ = atividadesMap[String(plan.atividade_id)];
-            const analitico = analiticoMap[String(plan.analitico_id)];
-            const executor = plan.executor_principal ? executorMap?.[plan.executor_principal] : null;
-            return {
-              key: String(plan.id),
-              nome: ativ?.atividade || plan.descritivo || analitico?.descritivo || `Atividade #${plan.atividade_id}`,
-              subdisciplina: ativ?.subdisciplina || null,
-              tempoPlanejado: analitico?.tempo_real || plan.tempo_planejado || 0,
-              tempoExecutado: plan.tempo_executado != null ? Number(plan.tempo_executado) : null,
-              status: plan.status || 'nao_iniciado',
-              executor,
-            };
-          });
-
-          setRows(result);
-          return;
+        // Fetch catalog activities matching subdisciplina (generic, no empreendimento_id)
+        let catalogActivities = [];
+        if (subdisciplinas.length > 0) {
+          try {
+            const query = subdisciplinas.length === 1
+              ? { subdisciplina: subdisciplinas[0] }
+              : { subdisciplina: { $in: subdisciplinas } };
+            const data = await Atividade.filter(query);
+            catalogActivities = (data || []).filter(a =>
+              !a.empreendimento_id &&
+              a.tempo !== -999 &&
+              (!etapaFiltro || a.etapa === etapaFiltro) &&
+              (disciplinas.length === 0 || disciplinas.includes(a.disciplina))
+            );
+          } catch (_) {}
         }
 
-        // Strategy 2: fallback — fetch Analitico directly by documento_id
+        // Fetch project-specific activities linked to this document
+        let projectActivities = [];
         if (docId) {
-          const analiticos = await Analitico.filter({ documento_id: docId });
-          const filtrados = etapaFiltro
-            ? analiticos.filter(a => a.etapa === etapaFiltro)
-            : analiticos;
+          try {
+            const data = await base44.entities.AtividadesEmpreendimento.filter({ documento_id: docId });
+            projectActivities = (data || []).filter(a =>
+              a.tempo !== -999 &&
+              (!etapaFiltro || a.etapa === etapaFiltro)
+            );
+          } catch (_) {}
+        }
 
-          if (filtrados.length === 0) {
-            setDebugInfo({ docId, etapaFiltro, totalAnaliticos: analiticos.length, strategy: 'analitico' });
-            setRows([]);
-            return;
-          }
+        // Merge without duplicates (project-specific takes priority)
+        const idsSeen = new Set();
+        const allActivities = [...projectActivities, ...catalogActivities].filter(a => {
+          if (idsSeen.has(a.id)) return false;
+          idsSeen.add(a.id);
+          return true;
+        });
 
-          const atividadeIds = [...new Set(filtrados.map(a => a.atividade_id).filter(Boolean))];
-          let atividadesMap = {};
-          if (atividadeIds.length > 0) {
-            try {
-              const atividadesData = await Atividade.filter({ id: { $in: atividadeIds } });
-              atividadesData.forEach(a => { atividadesMap[String(a.id)] = a; });
-            } catch (_) {}
-          }
-
-          // Cross with allPlanejamentos for status
-          const analiticoIdSet = new Set(filtrados.map(a => String(a.id)));
-          const planosVinculados = (allPlanejamentos || []).filter(p =>
-            p.tipo_planejamento !== 'documento' && p.analitico_id && analiticoIdSet.has(String(p.analitico_id))
-          );
-          const planMap = {};
-          planosVinculados.forEach(p => {
-            const key = String(p.analitico_id);
-            if (!planMap[key]) { planMap[key] = p; return; }
-            if ((PLAN_PRIORITY[p.status] ?? -1) > (PLAN_PRIORITY[planMap[key].status] ?? -1)) planMap[key] = p;
-          });
-
-          const result = filtrados.map(analitico => {
-            const ativ = atividadesMap[String(analitico.atividade_id)];
-            const plan = planMap[String(analitico.id)];
-            const executor = plan?.executor_principal ? executorMap?.[plan.executor_principal] : null;
-            return {
-              key: String(analitico.id),
-              nome: ativ?.atividade || analitico.descritivo || `Atividade #${analitico.atividade_id}`,
-              subdisciplina: ativ?.subdisciplina || null,
-              tempoPlanejado: analitico.tempo_real || 0,
-              tempoExecutado: plan ? (Number(plan.tempo_executado) || 0) : null,
-              status: plan ? (plan.status || 'nao_iniciado') : 'nao_planejado',
-              executor,
-            };
-          });
-
-          setRows(result);
+        if (allActivities.length === 0) {
+          setDebugInfo({ docId, etapaFiltro, subdisciplinas, disciplinas });
+          setRows([]);
           return;
         }
 
-        setDebugInfo({ docId, etapaFiltro, msg: 'documento_id ausente no planejamento' });
-        setRows([]);
+        // Get activity-level plan status from cached PlanejamentoAtividade
+        const allPlanos = await PlanejamentoAtividade.list();
+        const planosDoDoc = docId ? allPlanos.filter(p => String(p.documento_id) === docId) : [];
+
+        const planByAtiv = {};
+        planosDoDoc.forEach(p => {
+          if (!p.atividade_id) return;
+          const key = String(p.atividade_id);
+          if (!planByAtiv[key]) { planByAtiv[key] = p; return; }
+          if ((PLAN_PRIORITY[p.status] ?? -1) > (PLAN_PRIORITY[planByAtiv[key].status] ?? -1)) planByAtiv[key] = p;
+        });
+
+        const tempoField = etapaFiltro ? ETAPA_TEMPO_MAP[etapaFiltro] : null;
+
+        const result = allActivities.map(ativ => {
+          const plan = planByAtiv[String(ativ.id)];
+          const executor = plan?.executor_principal ? executorMap?.[plan.executor_principal] : null;
+          const tempoPlanejado = (tempoField && ativ[tempoField])
+            ? Number(ativ[tempoField])
+            : (plan?.tempo_planejado || ativ.tempo || 0);
+
+          return {
+            key: String(ativ.id),
+            nome: ativ.atividade || ativ.descritivo || `Atividade #${ativ.id}`,
+            subdisciplina: ativ.subdisciplina || null,
+            tempoPlanejado,
+            tempoExecutado: plan?.tempo_executado != null ? Number(plan.tempo_executado) : null,
+            status: plan ? (plan.status || 'nao_iniciado') : 'planejado',
+            executor,
+          };
+        });
+
+        setRows(result);
       } finally {
         setIsLoading(false);
       }
@@ -211,16 +178,8 @@ export default function AtividadesFolhaModal({ isOpen, onClose, planejamentoDocu
                 <div className="text-left bg-gray-50 border border-gray-200 rounded p-3 text-xs text-gray-500 space-y-1">
                   <p><strong>Documento ID:</strong> {debugInfo.docId || '(vazio)'}</p>
                   <p><strong>Etapa buscada:</strong> {debugInfo.etapaFiltro || '(nenhuma)'}</p>
-                  {debugInfo.totalPlanos !== undefined && (
-                    <p><strong>Planejamentos do documento:</strong> {debugInfo.totalPlanos}</p>
-                  )}
-                  {debugInfo.etapasEncontradas && (
-                    <p><strong>Etapas encontradas:</strong> {debugInfo.etapasEncontradas.join(', ')}</p>
-                  )}
-                  {debugInfo.totalAnaliticos !== undefined && (
-                    <p><strong>Analíticos do documento:</strong> {debugInfo.totalAnaliticos}</p>
-                  )}
-                  {debugInfo.msg && <p><strong>Info:</strong> {debugInfo.msg}</p>}
+                  <p><strong>Subdisciplinas:</strong> {(debugInfo.subdisciplinas || []).join(', ') || '(nenhuma)'}</p>
+                  <p><strong>Disciplinas:</strong> {(debugInfo.disciplinas || []).join(', ') || '(nenhuma)'}</p>
                 </div>
               )}
             </div>
