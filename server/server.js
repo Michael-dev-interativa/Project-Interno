@@ -974,10 +974,12 @@ app.get('/api/planejamentos/medias', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT atividade_id,
-              ROUND(AVG(tempo_executado)::numeric, 1) AS media,
+              ROUND(AVG(COALESCE(NULLIF(tempo_executado, 0), tempo_planejado))::numeric, 1) AS media,
               COUNT(*) AS total
        FROM planejamento_atividades
-       WHERE atividade_id IS NOT NULL AND tempo_executado IS NOT NULL AND tempo_executado > 0
+       WHERE atividade_id IS NOT NULL
+         AND status IN ('concluido', 'concluido_com_atraso')
+         AND COALESCE(NULLIF(tempo_executado, 0), tempo_planejado) > 0
        GROUP BY atividade_id`
     );
     res.json(result.rows.map(r => ({ ...r, media: Number(r.media), total: Number(r.total) })));
@@ -991,9 +993,11 @@ app.get('/api/planejamentos/media-por-atividade/:atividade_id', async (req, res)
     const atividadeId = Number(req.params.atividade_id);
     if (!Number.isFinite(atividadeId)) return res.status(400).json({ error: 'Invalid atividade_id' });
     const result = await pool.query(
-      `SELECT ROUND(AVG(tempo_executado)::numeric, 1) AS media, COUNT(*) AS total
+      `SELECT ROUND(AVG(COALESCE(NULLIF(tempo_executado, 0), tempo_planejado))::numeric, 1) AS media, COUNT(*) AS total
        FROM planejamento_atividades
-       WHERE atividade_id = $1 AND tempo_executado IS NOT NULL AND tempo_executado > 0`,
+       WHERE atividade_id = $1
+         AND status IN ('concluido', 'concluido_com_atraso')
+         AND COALESCE(NULLIF(tempo_executado, 0), tempo_planejado) > 0`,
       [atividadeId]
     );
     const { media, total } = result.rows[0];
@@ -1173,10 +1177,11 @@ app.get('/api/planejamento_documentos/medias', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT documento_id, etapa,
-              ROUND(AVG(tempo_executado)::numeric, 1) AS media,
+              ROUND(AVG(COALESCE(NULLIF(tempo_executado, 0), tempo_planejado))::numeric, 1) AS media,
               COUNT(*) AS total
        FROM planejamento_documentos
-       WHERE tempo_executado IS NOT NULL AND tempo_executado > 0
+       WHERE status IN ('concluido', 'concluido_com_atraso')
+         AND COALESCE(NULLIF(tempo_executado, 0), tempo_planejado) > 0
        GROUP BY documento_id, etapa`
     );
     res.json(result.rows.map(r => ({ ...r, media: Number(r.media), total: Number(r.total) })));
@@ -1192,14 +1197,18 @@ app.get('/api/planejamento_documentos/media-por-documento/:documento_id', async 
     const { etapa } = req.query;
     let query, params;
     if (etapa) {
-      query = `SELECT ROUND(AVG(tempo_executado)::numeric, 1) AS media, COUNT(*) AS total
+      query = `SELECT ROUND(AVG(COALESCE(NULLIF(tempo_executado, 0), tempo_planejado))::numeric, 1) AS media, COUNT(*) AS total
                FROM planejamento_documentos
-               WHERE documento_id = $1 AND etapa = $2 AND tempo_executado IS NOT NULL AND tempo_executado > 0`;
+               WHERE documento_id = $1 AND etapa = $2
+                 AND status IN ('concluido', 'concluido_com_atraso')
+                 AND COALESCE(NULLIF(tempo_executado, 0), tempo_planejado) > 0`;
       params = [documentoId, etapa];
     } else {
-      query = `SELECT ROUND(AVG(tempo_executado)::numeric, 1) AS media, COUNT(*) AS total
+      query = `SELECT ROUND(AVG(COALESCE(NULLIF(tempo_executado, 0), tempo_planejado))::numeric, 1) AS media, COUNT(*) AS total
                FROM planejamento_documentos
-               WHERE documento_id = $1 AND tempo_executado IS NOT NULL AND tempo_executado > 0`;
+               WHERE documento_id = $1
+                 AND status IN ('concluido', 'concluido_com_atraso')
+                 AND COALESCE(NULLIF(tempo_executado, 0), tempo_planejado) > 0`;
       params = [documentoId];
     }
     const result = await pool.query(query, params);
