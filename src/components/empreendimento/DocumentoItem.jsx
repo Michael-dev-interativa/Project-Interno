@@ -95,7 +95,7 @@ export default function DocumentoItem({
 
   const atividadesDisponiveis = useMemo(() => {
     const subdisciplinasDoc = doc.subdisciplinas || [];
-    const disciplinaDoc = doc.disciplina;
+    const disciplinaDoc = doc.disciplina || (Array.isArray(doc.disciplinas) && doc.disciplinas.length > 0 ? doc.disciplinas[0] : null);
 
     const etapaOverrides = new Map();
     const tempoOverrides = new Map();
@@ -832,7 +832,7 @@ export default function DocumentoItem({
                       <Check className="w-4 h-4 mr-2" />Concluir {selectedAtividades.length} Selecionada(s)
                     </Button>
                   )}
-                  <Button size="sm" onClick={() => handleEditAtividade({ empreendimento_id: empreendimento.id, documento_id: doc.id, documento_ids: [doc.id], disciplina: doc.disciplina, subdisciplinas: doc.subdisciplinas || [] })} className="bg-blue-600 hover:bg-blue-700 text-white">
+                  <Button size="sm" onClick={() => handleEditAtividade({ empreendimento_id: empreendimento.id, documento_id: doc.id, documento_ids: [doc.id], disciplina: doc.disciplina || (Array.isArray(doc.disciplinas) && doc.disciplinas[0]) || '', subdisciplinas: doc.subdisciplinas || [] })} className="bg-blue-600 hover:bg-blue-700 text-white">
                     <Plus className="w-4 h-4 mr-2" />Nova Atividade
                   </Button>
                 </div>
@@ -903,7 +903,7 @@ export default function DocumentoItem({
                     <div className="flex flex-col items-center gap-2">
                       <FileText className="w-16 h-16 text-gray-300" />
                       <p>Nenhuma atividade encontrada para esta disciplina/subdisciplinas</p>
-                      <p className="text-xs">Disciplina: {doc.disciplina} | Subdisciplinas: {(doc.subdisciplinas || []).join(', ') || 'Nenhuma'}</p>
+                      <p className="text-xs">Disciplina: {doc.disciplina || (Array.isArray(doc.disciplinas) ? doc.disciplinas[0] : '') || ''} | Subdisciplinas: {(doc.subdisciplinas || []).join(', ') || 'Nenhuma'}</p>
                     </div>
                   </div>
                 )}
