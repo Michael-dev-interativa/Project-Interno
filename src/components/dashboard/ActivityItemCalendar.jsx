@@ -143,15 +143,8 @@ export default function CalendarioActivityItem({ plano, dayKey, onDelete, onUpda
     try {
       if (plano.isLegacyExecution) { alert("Não é possível ajustar execuções antigas."); return; }
       const entityToUpdate = plano.tipo_planejamento === 'documento' ? PlanejamentoDocumento : PlanejamentoAtividade;
-      const diasPlanejados = Object.keys(plano.horas_por_dia || {});
-      const novasHorasPorDia = {};
-      if (diasPlanejados.length > 0) {
-        const hpd = timeValue / diasPlanejados.length;
-        diasPlanejados.forEach(d => { novasHorasPorDia[d] = hpd; });
-      } else {
-        novasHorasPorDia[format(new Date(), 'yyyy-MM-dd')] = timeValue;
-      }
       const dataConclusal = completionDate || format(new Date(), 'yyyy-MM-dd');
+      const novasHorasPorDia = { [dataConclusal]: timeValue };
       const terminoPlanejado = plano.termino_ajustado || plano.termino_planejado;
       const statusFinal = terminoPlanejado && dataConclusal > terminoPlanejado ? 'concluido_com_atraso' : 'concluido';
       await retryWithBackoff(() => entityToUpdate.update(plano.id, { tempo_executado: timeValue, horas_executadas_por_dia: novasHorasPorDia, status: statusFinal, termino_real: dataConclusal }), 3, 1000, 'adjustTime');
