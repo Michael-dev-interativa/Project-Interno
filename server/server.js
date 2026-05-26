@@ -1153,6 +1153,47 @@ app.get('/api/planejamento_documentos', async (req, res) => {
   }
 });
 
+app.get('/api/planejamento_documentos/medias', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT documento_id, etapa,
+              ROUND(AVG(tempo_executado)::numeric, 1) AS media,
+              COUNT(*) AS total
+       FROM planejamento_documentos
+       WHERE tempo_executado IS NOT NULL AND tempo_executado > 0
+       GROUP BY documento_id, etapa`
+    );
+    res.json(result.rows.map(r => ({ ...r, media: Number(r.media), total: Number(r.total) })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/planejamento_documentos/media-por-documento/:documento_id', async (req, res) => {
+  try {
+    const documentoId = Number(req.params.documento_id);
+    if (!Number.isFinite(documentoId)) return res.status(400).json({ error: 'Invalid documento_id' });
+    const { etapa } = req.query;
+    let query, params;
+    if (etapa) {
+      query = `SELECT ROUND(AVG(tempo_executado)::numeric, 1) AS media, COUNT(*) AS total
+               FROM planejamento_documentos
+               WHERE documento_id = $1 AND etapa = $2 AND tempo_executado IS NOT NULL AND tempo_executado > 0`;
+      params = [documentoId, etapa];
+    } else {
+      query = `SELECT ROUND(AVG(tempo_executado)::numeric, 1) AS media, COUNT(*) AS total
+               FROM planejamento_documentos
+               WHERE documento_id = $1 AND tempo_executado IS NOT NULL AND tempo_executado > 0`;
+      params = [documentoId];
+    }
+    const result = await pool.query(query, params);
+    const { media, total } = result.rows[0];
+    res.json({ media: media ? Number(media) : null, total: Number(total), etapa: etapa || null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/planejamento_documentos', async (req, res) => {
   try {
     const payload = req.body;

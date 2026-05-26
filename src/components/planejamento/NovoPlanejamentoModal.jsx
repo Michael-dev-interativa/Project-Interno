@@ -49,6 +49,7 @@ export default function NovoPlanejamentoModal({
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedActivityId, setSelectedActivityId] = useState("");
   const [mediaHistorica, setMediaHistorica] = useState(null);
+  const [mediaHistoricaDoc, setMediaHistoricaDoc] = useState(null);
   const [isRecorrente, setIsRecorrente] = useState(false);
   const [recorrencia, setRecorrencia] = useState({ tipo: 'semanal', repeticoes: 4 });
   const [activityFilters, setActivityFilters] = useState({ search: "", disciplina: "all" });
@@ -412,6 +413,17 @@ export default function NovoPlanejamentoModal({
       }));
     }
   }, [etapaDocumento, documentoSelecionado, documentos, planningMode, isLoadingDocumentos]); // **CORREÇÃO**: Adicionada dependência isLoadingDocumentos
+
+  useEffect(() => {
+    if (!documentoSelecionado) { setMediaHistoricaDoc(null); return; }
+    const url = etapaDocumento
+      ? `${getApiOrigin()}/api/planejamento_documentos/media-por-documento/${documentoSelecionado}?etapa=${encodeURIComponent(etapaDocumento)}`
+      : `${getApiOrigin()}/api/planejamento_documentos/media-por-documento/${documentoSelecionado}`;
+    fetch(url)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { setMediaHistoricaDoc(data && data.total > 0 ? data : null); })
+      .catch(() => {});
+  }, [documentoSelecionado, etapaDocumento]);
 
   // --- Lógicas de Submissão ---
 
@@ -1277,6 +1289,21 @@ export default function NovoPlanejamentoModal({
                     <p className="text-xs text-red-600">
                       ⚠️ Nenhum tempo cadastrado para a etapa "{etapaDocumento}" neste documento. Por favor, insira manualmente.
                     </p>
+                  )}
+                  {mediaHistoricaDoc && (
+                    <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+                      <BrainCircuit className="w-3 h-3 shrink-0" />
+                      <span>
+                        Média histórica{mediaHistoricaDoc.etapa ? ` (${mediaHistoricaDoc.etapa})` : ''}: <strong>{mediaHistoricaDoc.media}h</strong> ({mediaHistoricaDoc.total} {mediaHistoricaDoc.total === 1 ? 'execução' : 'execuções'})
+                      </span>
+                      <button
+                        type="button"
+                        className="ml-auto text-blue-600 underline hover:text-blue-800 font-medium"
+                        onClick={() => setDocumentoFormData(prev => ({ ...prev, tempo_planejado: String(mediaHistoricaDoc.media) }))}
+                      >
+                        Usar
+                      </button>
+                    </div>
                   )}
                 </div>
 

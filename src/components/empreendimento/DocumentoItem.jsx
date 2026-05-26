@@ -63,6 +63,7 @@ function DocumentoItem({
   handleRemoveExecutor,
   registerLoadingSetter,
   sortedDocOptionsList,
+  mediasDocumentos = [],
 }) {
   const [isLoading, setIsLoading] = useState(false);
   const [predecessoraFocused, setPredecessoraFocused] = useState(false);
@@ -493,6 +494,20 @@ function DocumentoItem({
     : doc.tempo_total;
   const tempoPre = Number(doc.tempo_pre) || 0;
 
+  const mediaDoc = useMemo(() => {
+    if (!mediasDocumentos.length) return null;
+    // Prefer match with current etapa; fall back to any etapa for this doc
+    const comEtapa = etapaParaPlanejamento
+      ? mediasDocumentos.find(m => m.documento_id === doc.id && m.etapa === etapaParaPlanejamento)
+      : null;
+    if (comEtapa) return comEtapa;
+    const semEtapa = mediasDocumentos.filter(m => m.documento_id === doc.id);
+    if (!semEtapa.length) return null;
+    const totalExec = semEtapa.reduce((s, m) => s + Number(m.total), 0);
+    const mediaGeral = semEtapa.reduce((s, m) => s + Number(m.media) * Number(m.total), 0) / totalExec;
+    return { media: Math.round(mediaGeral * 10) / 10, total: totalExec, etapa: null };
+  }, [mediasDocumentos, doc.id, etapaParaPlanejamento]);
+
   const handleRecalcularHoras = async () => {
     setIsRecalculating(true);
     try {
@@ -628,6 +643,11 @@ function DocumentoItem({
             <td className="p-3 text-sm whitespace-nowrap">
               {tempoExibido != null ? formatHoras(tempoExibido) : '—'}
               {tempoPre > 0 && <span className="text-purple-600 ml-1 text-xs">(+{tempoPre}h PRE)</span>}
+              {mediaDoc && (
+                <div className="text-xs text-blue-600 mt-0.5" title={`Média de ${mediaDoc.total} execução${mediaDoc.total === 1 ? '' : 'ões'}${mediaDoc.etapa ? ` na etapa ${mediaDoc.etapa}` : ''}`}>
+                  ⌀ {mediaDoc.media}h
+                </div>
+              )}
             </td>
 
             <td className="p-3 w-[130px]">

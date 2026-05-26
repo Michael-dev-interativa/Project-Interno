@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, useContext } from 'react';
 import { ActivityTimerContext } from '@/components/contexts/ActivityTimerContext';
 import { Documento, Disciplina, Atividade, Execucao, Usuario, PlanejamentoAtividade, PlanejamentoDocumento, DataCadastro } from "@/entities/all";
-import { base44 } from '@/api/base44Client';
+import { base44, getApiOrigin } from '@/api/base44Client';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -77,6 +77,7 @@ export default function DocumentosTab({
   const [localPlanejamentos, setLocalPlanejamentos] = useState(planejamentos);
   const [executorPreSelecionado, setExecutorPreSelecionado] = useState(null);
   const [cargaDiariaCache, setCargaDiariaCache] = useState({});
+  const [mediasDocumentos, setMediasDocumentos] = useState([]);
   const [disciplinasMinimizadas, setDisciplinasMinimizadas] = useState(() => {
     // Inicializar todas as disciplinas como colapsadas para não renderizar todos os itens de uma vez
     const inicial = {};
@@ -127,6 +128,14 @@ export default function DocumentosTab({
       .then(res => setAtividadesEmpCache(res || []))
       .catch(() => {});
   }, [empreendimento?.id]);
+
+  // Carregar médias históricas de todos os documentos UMA VEZ
+  useEffect(() => {
+    fetch(`${getApiOrigin()}/api/planejamento_documentos/medias`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setMediasDocumentos(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
 
   const handleLocalUpdate = useCallback((updatedItemOrArray) => {
     setLocalDocumentos(prevDocs => {
@@ -992,6 +1001,7 @@ export default function DocumentosTab({
                                 empreendimento={empreendimento}
                                 onUpdate={onUpdate}
                                 readOnly={readOnly}
+                                mediasDocumentos={mediasDocumentos}
                                 {...sharedProps}
                               />
                             ))}
