@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -57,21 +58,23 @@ export default function DocumentoForm({
         disciplinas: doc.disciplinas || (doc.disciplina ? [doc.disciplina] : []),
         subdisciplinas: doc.subdisciplinas || [],
         escala: doc.escala || "",
-        fator_dificuldade: parseFloat(doc.fator_dificuldade) || 1,
-        tempo_total: parseFloat(doc.tempo_total) || 0,
-        tempo_estudo_preliminar: parseFloat(doc.tempo_estudo_preliminar) || 0,
-        tempo_ante_projeto: parseFloat(doc.tempo_ante_projeto) || 0,
-        tempo_projeto_basico: parseFloat(doc.tempo_projeto_basico) || 0,
-        tempo_projeto_executivo: parseFloat(doc.tempo_projeto_executivo) || 0,
-        tempo_liberado_obra: parseFloat(doc.tempo_liberado_obra) || 0,
-        tempo_concepcao: parseFloat(doc.tempo_concepcao) || 0,
-        tempo_planejamento: parseFloat(doc.tempo_planejamento) || 0
+        fator_dificuldade: doc.fator_dificuldade || 1,
+        tempo_total: doc.tempo_total || 0,
+        tempo_estudo_preliminar: doc.tempo_estudo_preliminar || 0,
+        tempo_ante_projeto: doc.tempo_ante_projeto || 0,
+        tempo_projeto_basico: doc.tempo_projeto_basico || 0,
+        tempo_projeto_executivo: doc.tempo_projeto_executivo || 0,
+        tempo_liberado_obra: doc.tempo_liberado_obra || 0,
+        tempo_concepcao: doc.tempo_concepcao || 0,
+        tempo_planejamento: doc.tempo_planejamento || 0
       });
     }
   }, [doc]);
 
   // Logs para debug
   useEffect(() => {
+    console.log("📋 [DocumentoForm] Pavimentos recebidos:", pavimentos);
+    console.log("📋 [DocumentoForm] Quantidade de pavimentos:", pavimentos?.length || 0);
   }, [pavimentos]);
 
   // Mapear etapa do catálogo para etapa do empreendimento
@@ -139,6 +142,9 @@ export default function DocumentoForm({
     const pavimento = (pavimentos || []).find(p => p.id === formData.pavimento_id);
     const areaPavimento = pavimento ? Number(pavimento.area) : null;
 
+    console.log(`\n📊 [DocumentoForm] Calculando tempos para documento ${doc?.id || 'NOVO'}...`);
+    console.log(`   Disciplinas: ${formData.disciplinas.join(', ')}`);
+    console.log(`   Subdisciplinas: ${formData.subdisciplinas.join(', ')}`);
 
     // **CORRIGIDO**: Separar exclusões globais de exclusões específicas de documentos
     const atividadesRelacionadas = allAtividades.filter(ativ => {
@@ -174,10 +180,12 @@ export default function DocumentoForm({
       );
 
       if (exclusoes.length > 0) {
+        console.log(`   🔍 Verificando exclusões para atividade "${ativ.atividade}" (ID: ${ativ.id}):`);
         
         // Verificar se existe exclusão GLOBAL (sem documento_id)
         const exclusaoGlobal = exclusoes.find(exc => !exc.documento_id);
         if (exclusaoGlobal) {
+          console.log(`      ❌ Exclusão GLOBAL encontrada - excluindo de TODOS os documentos`);
           return false; // Excluir de TODOS os documentos
         }
 
@@ -185,22 +193,27 @@ export default function DocumentoForm({
         if (doc?.id) {
           const exclusaoEspecifica = exclusoes.find(exc => exc.documento_id === doc.id);
           if (exclusaoEspecifica) {
+            console.log(`      ❌ Exclusão ESPECÍFICA do documento "${doc.numero}" encontrada`);
             return false; // Excluir APENAS deste documento
           }
         }
 
         // Se não for exclusão global nem específica deste doc, incluir a atividade
+        console.log(`      ✅ Exclusões existem mas NÃO afetam este documento`);
         const exclusoesDeOutrosDocs = exclusoes.filter(exc => exc.documento_id && exc.documento_id !== doc?.id);
         if (exclusoesDeOutrosDocs.length > 0) {
+          console.log(`      ℹ️ ${exclusoesDeOutrosDocs.length} exclusão(ões) de outros documentos ignoradas`);
         }
       }
 
       // Verificar conclusões (mesma lógica que exclusões, mas para tempo 0)
       if (conclusoes.length > 0 && doc?.id) {
+        console.log(`   🔍 Verificando conclusões para atividade "${ativ.atividade}" (ID: ${ativ.id}):`);
         
         // Se existe conclusão específica deste documento, INCLUIR no cálculo mas com tempo 0
         const conclusaoEspecifica = conclusoes.find(conc => conc.documento_id === doc.id);
         if (conclusaoEspecifica) {
+          console.log(`      ✅ Conclusão ESPECÍFICA do documento "${doc.numero}" encontrada - atividade será incluída com tempo 0`);
           // A atividade será incluída, mas o tempoOverridesMap já tem o tempo 0 para ela (não precisa fazer nada aqui)
         }
       }
@@ -208,6 +221,7 @@ export default function DocumentoForm({
       return true; // Include generic activity if it matches criteria and is not excluded
     });
 
+    console.log(`   ✅ Total de atividades disponíveis: ${atividadesRelacionadas.length}`);
 
     const fatorDificuldade = parseFloat(formData.fator_dificuldade) || 1;
 
@@ -236,6 +250,7 @@ export default function DocumentoForm({
          );
 
          if (conclusaoEspecifica) {
+           console.log(`   ⭕ Atividade "${ativ.atividade}" (ID: ${ativ.id}) concluída neste documento - PULANDO do cálculo de tempo`);
            return; // Pular para próxima iteração - não calcular tempo
          }
 
@@ -250,6 +265,7 @@ export default function DocumentoForm({
          );
 
          if (exclusaoEspecifica) {
+           console.log(`   ❌ Atividade "${ativ.atividade}" (ID: ${ativ.id}) excluída deste documento - PULANDO do cálculo de tempo`);
            return; // Pular para próxima iteração - não calcular tempo
          }
        }
@@ -260,16 +276,20 @@ export default function DocumentoForm({
       // TERCEIRO: Aplicar override de tempo se existir e não for -999 (já filtrado na criação do mapa)
       if (tempoOverridesMap.has(ativ.id)) {
         tempoBase = parseFloat(tempoOverridesMap.get(ativ.id)) || 0;
+        console.log(`   📝 Atividade "${ativ.atividade}" tem override de tempo: ${tempoBase}h`);
       }
       
+      console.log(`   🔍 Atividade "${ativ.atividade}": tempoBase=${tempoBase}h, área=${areaPavimento}m², fator=${fatorDificuldade}`);
       
       // QUARTO: Calcular tempo final
       // CORRIGIDO: O tempo base JÁ É EM HORAS TOTAIS, NÃO h/m²
       // Apenas multiplicar pelo fator de dificuldade
       const tempoCalculado = tempoBase * fatorDificuldade;
 
+      console.log(`   ✅ Atividade "${ativ.atividade}": ${tempoCalculado.toFixed(2)}h (SEM multiplicar pela área)`);
       
       if (areaPavimento && areaPavimento > 0) {
+        console.log(`   ⚠️ AVISO: Área ${areaPavimento}m² NÃO foi multiplicada - tempo base já é total`);
       }
 
       // MODIFICADO: Usar etapa com override se existir
@@ -314,6 +334,8 @@ export default function DocumentoForm({
       tempos[key] = Number(tempos[key].toFixed(2));
     });
 
+    console.log(`   📊 Tempos calculados:`, tempos);
+    console.log('');
 
     return tempos;
   }, [formData.disciplinas, formData.subdisciplinas, formData.fator_dificuldade, formData.pavimento_id, allAtividades, pavimentos, etapaOverridesMap, tempoOverridesMap, empreendimentoId, doc]);
@@ -362,6 +384,20 @@ export default function DocumentoForm({
 
     setIsSaving(true);
     try {
+      console.log('💾 [DocumentoForm] Iniciando salvamento com tempos:', {
+        tempo_projeto_basico: formData.tempo_projeto_basico,
+        tempo_liberado_obra: formData.tempo_liberado_obra,
+        todos_tempos: {
+          tempo_concepcao: formData.tempo_concepcao,
+          tempo_planejamento: formData.tempo_planejamento,
+          tempo_estudo_preliminar: formData.tempo_estudo_preliminar,
+          tempo_ante_projeto: formData.tempo_ante_projeto,
+          tempo_projeto_basico: formData.tempo_projeto_basico,
+          tempo_projeto_executivo: formData.tempo_projeto_executivo,
+          tempo_liberado_obra: formData.tempo_liberado_obra,
+          tempo_total: formData.tempo_total
+        }
+      });
 
       const docData = {
         numero: formData.numero.trim(),
@@ -384,6 +420,7 @@ export default function DocumentoForm({
         tempo_liberado_obra: Number(formData.tempo_liberado_obra) || 0
       };
 
+      console.log('📤 [DocumentoForm] Enviando para o banco:', docData);
 
       let savedDoc;
       const oldFatorDificuldade = doc?.fator_dificuldade;
@@ -391,9 +428,11 @@ export default function DocumentoForm({
       
       if (doc) {
         savedDoc = await retryWithBackoff(() => Documento.update(doc.id, docData), 3, 500, 'updateDocumento');
+        console.log('✅ [DocumentoForm] Documento atualizado:', savedDoc);
         
         // Se o fator de dificuldade mudou, atualizar planejamentos relacionados
         if (oldFatorDificuldade && oldFatorDificuldade !== newFatorDificuldade) {
+          console.log(`🔄 Fator de dificuldade mudou de ${oldFatorDificuldade} para ${newFatorDificuldade}, atualizando planejamentos...`);
           
           try {
             const { PlanejamentoAtividade } = await import('@/entities/all');
@@ -407,12 +446,14 @@ export default function DocumentoForm({
               3, 500, 'getPlanejamentosParaRecalcular'
             );
             
+            console.log(`   📊 Encontrados ${planejamentosDoc.length} planejamentos para recalcular`);
             
             // Recalcular tempo de cada planejamento
             const multiplicador = newFatorDificuldade / oldFatorDificuldade;
             
             for (const plano of planejamentosDoc) {
               const novoTempo = plano.tempo_planejado * multiplicador;
+              console.log(`   🔢 Planejamento ${plano.id}: ${plano.tempo_planejado}h → ${novoTempo.toFixed(2)}h`);
               
               await retryWithBackoff(
                 () => PlanejamentoAtividade.update(plano.id, {
@@ -422,6 +463,7 @@ export default function DocumentoForm({
               );
             }
             
+            console.log(`   ✅ ${planejamentosDoc.length} planejamentos atualizados com sucesso`);
           } catch (error) {
             console.error('❌ Erro ao atualizar planejamentos:', error);
             // Não bloquear o salvamento do documento por erro nos planejamentos
@@ -429,6 +471,7 @@ export default function DocumentoForm({
         }
       } else {
         savedDoc = await retryWithBackoff(() => Documento.create(docData), 3, 500, 'createDocumento');
+        console.log('✅ [DocumentoForm] Documento criado:', savedDoc);
         
         // Registrar atividades em AtividadesEmpreendimento quando documento é criado
         try {
@@ -443,6 +486,7 @@ export default function DocumentoForm({
             return disciplinaMatch && subdisciplinaMatch;
           });
           
+          console.log(`📋 Registrando ${atividadesParaRegistrar.length} atividades em AtividadesEmpreendimento...`);
           
           // Padrões de atividades que se repetem
           const atividadesPorFolha = [
@@ -483,6 +527,7 @@ export default function DocumentoForm({
                   }),
                   3, 500, `createAtividadeEmp-${ativ.id}-${savedDoc.id}`
                 );
+                console.log(`   ✅ Atividade por folha registrada: ${nomeAtividade} (etapa: ${etapaMapeada})`);
               } else {
                 // Atividade normal - registrar uma vez
                 await retryWithBackoff(
@@ -504,13 +549,20 @@ export default function DocumentoForm({
                 );
               }
             } catch (error) {
+              console.warn(`⚠️ Erro ao registrar atividade ${ativ.atividade}:`, error);
             }
           }
           
+          console.log(`✅ Atividades registradas em AtividadesEmpreendimento`);
         } catch (error) {
+          console.warn(`⚠️ Erro ao registrar atividades no empreendimento:`, error);
         }
       }
 
+      console.log('🎉 [DocumentoForm] Salvamento bem-sucedido! Verificando campos:', {
+        tempo_projeto_basico: savedDoc.tempo_projeto_basico,
+        tempo_liberado_obra: savedDoc.tempo_liberado_obra
+      });
 
       onSave(savedDoc);
     } catch (error) {

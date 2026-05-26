@@ -83,7 +83,7 @@ export default function DocumentosTab({
     // Inicializar todas as disciplinas como colapsadas para não renderizar todos os itens de uma vez
     const inicial = {};
     documentos.forEach(doc => {
-      const d = doc.disciplina || (Array.isArray(doc.disciplinas) && doc.disciplinas.length > 0 ? doc.disciplinas[0] : null) || 'Sem Disciplina';
+      const d = doc.disciplina || 'Sem Disciplina';
       inicial[d] = true;
     });
     return inicial;
@@ -122,15 +122,7 @@ export default function DocumentosTab({
   useEffect(() => { setLocalDocumentos(documentos); }, [documentos]);
   useEffect(() => { setLocalPlanejamentos(planejamentos); }, [planejamentos]);
 
-  // Carregar AtividadesEmpreendimento UMA VEZ para o empreendimento inteiro
-  useEffect(() => {
-    if (!empreendimento?.id) return;
-    base44.entities.AtividadesEmpreendimento.filter({ empreendimento_id: empreendimento.id })
-      .then(res => setAtividadesEmpCache(res || []))
-      .catch(() => {});
-  }, [empreendimento?.id]);
-
-  // Carregar médias históricas de todos os documentos e atividades UMA VEZ
+  // Carregar médias históricas de documentos e atividades UMA VEZ
   useEffect(() => {
     fetch(`${getApiOrigin()}/api/planejamento_documentos/medias`)
       .then(r => r.ok ? r.json() : [])
@@ -141,6 +133,14 @@ export default function DocumentosTab({
       .then(data => setMediasAtividades(Array.isArray(data) ? data : []))
       .catch(() => {});
   }, []);
+
+  // Carregar AtividadesEmpreendimento UMA VEZ para o empreendimento inteiro
+  useEffect(() => {
+    if (!empreendimento?.id) return;
+    base44.entities.AtividadesEmpreendimento.filter({ empreendimento_id: empreendimento.id })
+      .then(res => setAtividadesEmpCache(res || []))
+      .catch(() => {});
+  }, [empreendimento?.id]);
 
   const handleLocalUpdate = useCallback((updatedItemOrArray) => {
     setLocalDocumentos(prevDocs => {
@@ -305,28 +305,15 @@ export default function DocumentosTab({
     try {
       const subdisciplinasDoc = documento.subdisciplinas || [];
       const disciplinaDoc = documento.disciplina;
-      const disciplinasDoc = documento.disciplinas?.length > 0 ? documento.disciplinas : [disciplinaDoc].filter(Boolean);
       const fatorDificuldade = documento.fator_dificuldade || 1;
 
-      // Helper: verifica vínculo com o documento (singular ou array)
-      const vinculadaAoDocumento = (ativ) =>
-        String(ativ.documento_id) === String(documento.id) ||
-        (Array.isArray(ativ.documento_ids) && ativ.documento_ids.some(id => String(id) === String(documento.id)));
-
-      // Mesclar allAtividades com atividadesEmpCache para cobrir ambas as fontes
-      const idsJaIncluidos = new Set(allAtividades.map(a => a.id));
-      const todasAtividades = [
-        ...allAtividades,
-        ...(atividadesEmpCache || []).filter(a => !idsJaIncluidos.has(a.id))
-      ];
-
       // Usar apenas atividades deste empreendimento + genéricas (pre-filtrado)
-      const atividadesEmpAuto = todasAtividades.filter(a => !a.empreendimento_id || String(a.empreendimento_id) === String(empreendimento.id));
+      const atividadesEmpAuto = allAtividades.filter(a => !a.empreendimento_id || a.empreendimento_id === empreendimento.id);
 
       const etapaOverrides = new Map();
       const tempoOverrides = new Map();
       atividadesEmpAuto.forEach(ativ => {
-        if (String(ativ.empreendimento_id) === String(empreendimento.id) && ativ.id_atividade && ativ.tempo !== -999) {
+        if (ativ.empreendimento_id === empreendimento.id && ativ.id_atividade && ativ.tempo !== -999) {
           etapaOverrides.set(ativ.id_atividade, ativ.etapa);
           etapaOverrides.set(ativ.id, ativ.etapa);
           tempoOverrides.set(ativ.id_atividade, ativ.tempo);
@@ -337,7 +324,7 @@ export default function DocumentosTab({
       // IDs de atividades genéricas que têm override específico nesta folha (evitar dupla contagem)
       const idsComOverrideEspecifico = new Set();
       atividadesEmpAuto.forEach(ativ => {
-        if (String(ativ.empreendimento_id) === String(empreendimento.id) && vinculadaAoDocumento(ativ) && ativ.id_atividade && ativ.tempo !== -999) {
+        if (ativ.empreendimento_id === empreendimento.id && ativ.documento_id === documento.id && ativ.id_atividade && ativ.tempo !== -999) {
           idsComOverrideEspecifico.add(ativ.id_atividade);
         }
       });
@@ -345,18 +332,10 @@ export default function DocumentosTab({
       let atividadesGerais = atividadesEmpAuto.filter(ativ => {
         if (!ativ.empreendimento_id) {
           if (idsComOverrideEspecifico.has(ativ.id)) return false;
-          return disciplinasDoc.includes(ativ.disciplina) && Array.isArray(subdisciplinasDoc) && subdisciplinasDoc.includes(ativ.subdisciplina);
+          return ativ.disciplina === disciplinaDoc && Array.isArray(subdisciplinasDoc) && subdisciplinasDoc.includes(ativ.subdisciplina);
         }
-        if (String(ativ.empreendimento_id) === String(empreendimento.id) && ativ.tempo !== -999 && ativ.tempo !== 0) {
-          if (vinculadaAoDocumento(ativ)) return true;
-          // Atividades do projeto sem link explícito a documento mas com subdisciplina compatível
-          // (equivalente a atividadesProjetoMatch em DocumentoItem)
-          const semLinkDoc = !ativ.documento_id && !(Array.isArray(ativ.documento_ids) && ativ.documento_ids.length > 0);
-          if (semLinkDoc && !ativ.id_atividade && Array.isArray(subdisciplinasDoc) && subdisciplinasDoc.length > 0) {
-            const subMatch = subdisciplinasDoc.includes(ativ.subdisciplina);
-            const disMatch = disciplinasDoc.length === 0 || disciplinasDoc.includes(ativ.disciplina);
-            return subMatch && disMatch;
-          }
+        if (ativ.empreendimento_id === empreendimento.id && ativ.documento_id === documento.id && ativ.tempo !== -999 && ativ.tempo !== 0) {
+          return true;
         }
         return false;
       });
@@ -364,9 +343,9 @@ export default function DocumentosTab({
       const atividadesExcluidasGlobal = new Set();
       const atividadesExcluidasPorDoc = new Set();
       atividadesEmpAuto.forEach(ativ => {
-        if (String(ativ.empreendimento_id) === String(empreendimento.id) && ativ.tempo === -999 && ativ.id_atividade) {
-          if (vinculadaAoDocumento(ativ)) atividadesExcluidasPorDoc.add(ativ.id_atividade);
-          else if (!ativ.documento_id && !(Array.isArray(ativ.documento_ids) && ativ.documento_ids.length > 0)) atividadesExcluidasGlobal.add(ativ.id_atividade);
+        if (ativ.empreendimento_id === empreendimento.id && ativ.tempo === -999 && ativ.id_atividade) {
+          if (ativ.documento_id === documento.id) atividadesExcluidasPorDoc.add(ativ.id_atividade);
+          else if (!ativ.documento_id) atividadesExcluidasGlobal.add(ativ.id_atividade);
         }
       });
 
@@ -482,7 +461,7 @@ export default function DocumentosTab({
     } finally {
       setLoadingDocs(prev => ({ ...prev, [documento.id]: false }));
     }
-  }, [allAtividades, atividadesEmpCache, empreendimento, handleLocalUpdate, localPlanejamentos, setLocalPlanejamentos, getCargaDiariaExecutor, handleCascadingUpdate, localDocumentos]);
+  }, [allAtividades, empreendimento, handleLocalUpdate, localPlanejamentos, setLocalPlanejamentos, getCargaDiariaExecutor, handleCascadingUpdate, localDocumentos]);
 
   const handleSuccess = async () => { onUpdate(); setShowForm(false); setEditingDocumento(null); setCargaDiariaCache({}); };
 
@@ -695,8 +674,8 @@ export default function DocumentosTab({
     setExecutorPreSelecionado(null);
   }, [empreendimento.id, handleCloseDocEtapaModal]);
 
-  const toggleRow = useCallback((id) => {
-    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleRow = useCallback((docId) => {
+    setExpandedRows(prev => ({ ...prev, [docId]: !prev[docId] }));
   }, []);
 
   const handlePredecessoraChange = useCallback(async (documentoId, predecessoraId) => {
@@ -788,7 +767,7 @@ export default function DocumentosTab({
   const documentosPorDisciplina = useMemo(() => {
     const grupos = {};
     filteredDocumentos.forEach(doc => {
-      const disciplina = doc.disciplina || (Array.isArray(doc.disciplinas) && doc.disciplinas.length > 0 ? doc.disciplinas[0] : null) || 'Sem Disciplina';
+      const disciplina = doc.disciplina || 'Sem Disciplina';
       if (!grupos[disciplina]) grupos[disciplina] = [];
       grupos[disciplina].push(doc);
     });
@@ -818,39 +797,6 @@ export default function DocumentosTab({
     return allAtividades.filter(a => !a.empreendimento_id || a.empreendimento_id === empreendimento.id);
   }, [allAtividades, empreendimento.id]);
 
-  const hasActivitiesMap = useMemo(() => {
-    const map = {};
-    filteredDocumentos.forEach(doc => {
-      const directLink = atividadesFiltradas.some(a => {
-        if (a.tempo === -999) return false;
-        const singular = String(a.documento_id) === String(doc.id);
-        const inArray = Array.isArray(a.documento_ids) && a.documento_ids.some(id => String(id) === String(doc.id));
-        return singular || inArray;
-      });
-      if (directLink) { map[doc.id] = true; return; }
-      const disciplinasDoc = Array.isArray(doc.disciplinas) && doc.disciplinas.length > 0 ? doc.disciplinas : [doc.disciplina].filter(Boolean);
-      const subdisciplinasDoc = Array.isArray(doc.subdisciplinas) ? doc.subdisciplinas : [];
-      if (disciplinasDoc.length > 0 && subdisciplinasDoc.length > 0) {
-        map[doc.id] = atividadesFiltradas.some(a =>
-          !a.empreendimento_id && a.tempo !== -999 &&
-          disciplinasDoc.includes(a.disciplina) && subdisciplinasDoc.includes(a.subdisciplina)
-        );
-      } else {
-        map[doc.id] = false;
-      }
-    });
-    return map;
-  }, [filteredDocumentos, atividadesFiltradas]);
-
-  const handleRemoveExecutor = useCallback(async (doc) => {
-    try {
-      await Documento.update(doc.id, { executor_principal: null });
-      handleLocalUpdate({ ...doc, executor_principal: null });
-    } catch (e) {
-      console.error('Erro ao remover executor:', e);
-    }
-  }, [handleLocalUpdate]);
-
   const sharedProps = {
     localDocumentos,
     localPlanejamentos,
@@ -866,7 +812,6 @@ export default function DocumentosTab({
     pavimentos,
     handleEditAtividade,
     atividadesEmpCache,
-    handleRemoveExecutor,
   };
 
   // (MemoDocumentoItem é definido fora do componente, abaixo)
@@ -992,8 +937,6 @@ export default function DocumentosTab({
                               <MemoDocumentoItem
                                 key={doc.id}
                                 doc={doc}
-                                isExpanded={!!expandedRows[doc.id]}
-                                hasActivities={!!hasActivitiesMap[doc.id]}
                                 planejamentos={localPlanejamentos}
                                 allAtividades={atividadesFiltradas}
                                 handleEdit={handleEdit}
