@@ -496,12 +496,12 @@ function DocumentoItem({
 
   const mediaDoc = useMemo(() => {
     if (!mediasDocumentos.length) return null;
-    // Prefer match with current etapa; fall back to any etapa for this doc
+    const docIdNum = Number(doc.id);
     const comEtapa = etapaParaPlanejamento
-      ? mediasDocumentos.find(m => m.documento_id === doc.id && m.etapa === etapaParaPlanejamento)
+      ? mediasDocumentos.find(m => Number(m.documento_id) === docIdNum && m.etapa === etapaParaPlanejamento)
       : null;
     if (comEtapa) return comEtapa;
-    const semEtapa = mediasDocumentos.filter(m => m.documento_id === doc.id);
+    const semEtapa = mediasDocumentos.filter(m => Number(m.documento_id) === docIdNum);
     if (!semEtapa.length) return null;
     const totalExec = semEtapa.reduce((s, m) => s + Number(m.total), 0);
     const mediaGeral = semEtapa.reduce((s, m) => s + Number(m.media) * Number(m.total), 0) / totalExec;
@@ -644,9 +644,12 @@ function DocumentoItem({
               {tempoExibido != null ? formatHoras(tempoExibido) : '—'}
               {tempoPre > 0 && <span className="text-purple-600 ml-1 text-xs">(+{tempoPre}h PRE)</span>}
               {mediaDoc && (
-                <div className="text-xs text-blue-600 mt-0.5" title={`Média de ${mediaDoc.total} execução${mediaDoc.total === 1 ? '' : 'ões'}${mediaDoc.etapa ? ` na etapa ${mediaDoc.etapa}` : ''}`}>
+                <span
+                  className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 text-xs font-medium"
+                  title={`Média histórica de ${mediaDoc.total} execução${mediaDoc.total === 1 ? '' : 'ões'}${mediaDoc.etapa ? ` na etapa ${mediaDoc.etapa}` : ''}`}
+                >
                   ⌀ {mediaDoc.media}h
-                </div>
+                </span>
               )}
             </td>
 
