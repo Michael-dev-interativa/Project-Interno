@@ -64,6 +64,7 @@ function DocumentoItem({
   registerLoadingSetter,
   sortedDocOptionsList,
   mediasDocumentos = [],
+  mediasAtividades = [],
 }) {
   const [isLoading, setIsLoading] = useState(false);
   const [predecessoraFocused, setPredecessoraFocused] = useState(false);
@@ -808,6 +809,17 @@ function DocumentoItem({
                             <div className={`text-sm font-medium ${isConcluido ? 'line-through text-gray-400' : 'text-gray-700'}`}>
                               {ativ.tempo ? formatHoras(ativ.tempo) : '—'}
                             </div>
+                            {(() => {
+                              const mediaAtiv = mediasAtividades.find(m => Number(m.atividade_id) === Number(ativ.id));
+                              return mediaAtiv ? (
+                                <span
+                                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 text-xs font-medium"
+                                  title={`Média histórica de ${mediaAtiv.total} execução${mediaAtiv.total === 1 ? '' : 'ões'}`}
+                                >
+                                  ⌀ {mediaAtiv.media}h
+                                </span>
+                              ) : null;
+                            })()}
                             {isConcluido && (
                               <div className="text-xs text-gray-400">{isConcluidoByExecutor ? 'Concluída pelo executor' : 'Concluída manualmente'}</div>
                             )}

@@ -78,6 +78,7 @@ export default function DocumentosTab({
   const [executorPreSelecionado, setExecutorPreSelecionado] = useState(null);
   const [cargaDiariaCache, setCargaDiariaCache] = useState({});
   const [mediasDocumentos, setMediasDocumentos] = useState([]);
+  const [mediasAtividades, setMediasAtividades] = useState([]);
   const [disciplinasMinimizadas, setDisciplinasMinimizadas] = useState(() => {
     // Inicializar todas as disciplinas como colapsadas para não renderizar todos os itens de uma vez
     const inicial = {};
@@ -129,11 +130,15 @@ export default function DocumentosTab({
       .catch(() => {});
   }, [empreendimento?.id]);
 
-  // Carregar médias históricas de todos os documentos UMA VEZ
+  // Carregar médias históricas de todos os documentos e atividades UMA VEZ
   useEffect(() => {
     fetch(`${getApiOrigin()}/api/planejamento_documentos/medias`)
       .then(r => r.ok ? r.json() : [])
       .then(data => setMediasDocumentos(Array.isArray(data) ? data : []))
+      .catch(() => {});
+    fetch(`${getApiOrigin()}/api/planejamentos/medias`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setMediasAtividades(Array.isArray(data) ? data : []))
       .catch(() => {});
   }, []);
 
@@ -1002,6 +1007,7 @@ export default function DocumentosTab({
                                 onUpdate={onUpdate}
                                 readOnly={readOnly}
                                 mediasDocumentos={mediasDocumentos}
+                                mediasAtividades={mediasAtividades}
                                 {...sharedProps}
                               />
                             ))}

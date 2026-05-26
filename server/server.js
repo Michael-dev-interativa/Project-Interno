@@ -970,6 +970,22 @@ app.get('/api/planejamentos', async (req, res) => {
   }
 });
 
+app.get('/api/planejamentos/medias', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT atividade_id,
+              ROUND(AVG(tempo_executado)::numeric, 1) AS media,
+              COUNT(*) AS total
+       FROM planejamento_atividades
+       WHERE atividade_id IS NOT NULL AND tempo_executado IS NOT NULL AND tempo_executado > 0
+       GROUP BY atividade_id`
+    );
+    res.json(result.rows.map(r => ({ ...r, media: Number(r.media), total: Number(r.total) })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/planejamentos/media-por-atividade/:atividade_id', async (req, res) => {
   try {
     const atividadeId = Number(req.params.atividade_id);
