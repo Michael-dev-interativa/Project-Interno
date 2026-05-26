@@ -686,7 +686,7 @@ export default function DocumentoItem({
                 <span className="text-xs text-gray-500 w-12">Início:</span>
                 <Input
                   type="date"
-                  value={doc.inicio_planejado || ''}
+                  value={doc.inicio_planejado ? doc.inicio_planejado.split('T')[0] : ''}
                   onChange={(e) => handleDataInicioChange(doc.id, e.target.value || null)}
                   disabled={isDocLoading}
                   className="h-6 text-xs px-1 w-32"
