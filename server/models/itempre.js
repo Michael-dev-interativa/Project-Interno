@@ -4,6 +4,7 @@ const ALLOWED_ITEMPRE_COLUMNS = new Set([
   'empreendimento_id', 'item', 'data', 'de', 'descritiva', 'localizacao', 'assunto',
   'comentario', 'disciplina', 'status', 'resposta', 'imagens', 'tempo_atendimento',
   'planejamento_executor', 'planejamento_executor_nome', 'documentos_vinculados',
+  'checklist_item_id', 'checklist_doc_id',
 ]);
 
 function serializeJsonb(v) {
@@ -17,8 +18,9 @@ function serializeJsonb(v) {
 async function createItem(data) {
   const q = `INSERT INTO itempre (
     empreendimento_id, item, data, de, descritiva, localizacao, assunto, comentario, disciplina, status, resposta, imagens,
-    tempo_atendimento, planejamento_executor, planejamento_executor_nome, documentos_vinculados
-  ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`;
+    tempo_atendimento, planejamento_executor, planejamento_executor_nome, documentos_vinculados,
+    checklist_item_id, checklist_doc_id
+  ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`;
 
   const vals = [
     data.empreendimento_id || null,
@@ -37,6 +39,8 @@ async function createItem(data) {
     data.planejamento_executor || null,
     data.planejamento_executor_nome || null,
     serializeJsonb(data.documentos_vinculados ?? []),
+    data.checklist_item_id || null,
+    data.checklist_doc_id || null,
   ];
 
   const res = await pool.query(q, vals);
@@ -54,6 +58,14 @@ async function listItems(filter = {}, limit = 200) {
   if (filter.item) {
     parts.push(`item = $${idx++}`);
     vals.push(filter.item);
+  }
+  if (filter.checklist_item_id) {
+    parts.push(`checklist_item_id = $${idx++}`);
+    vals.push(filter.checklist_item_id);
+  }
+  if (filter.checklist_doc_id) {
+    parts.push(`checklist_doc_id = $${idx++}`);
+    vals.push(filter.checklist_doc_id);
   }
   const where = parts.length ? `WHERE ${parts.join(' AND ')}` : '';
   const q = `SELECT * FROM itempre ${where} ORDER BY id DESC LIMIT $${idx}`;

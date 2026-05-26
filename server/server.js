@@ -727,6 +727,16 @@ app.get('/api/checklist_items', async (req, res) => {
   }
 });
 
+app.get('/api/checklist_items/:id', async (req, res) => {
+  try {
+    const rows = await pool.query('SELECT * FROM checklist_items WHERE id = $1', [req.params.id]);
+    if (!rows.rows[0]) return res.status(404).json({ error: 'Not found' });
+    res.json(rows.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/checklist_items', async (req, res) => {
   try {
     const payload = { ...(req.body || {}) };
@@ -1883,6 +1893,8 @@ app.get('/api/itempre', async (req, res) => {
     const limit = parseInt(req.query.limit || '500', 10);
     const filter = {};
     if (req.query.empreendimento_id) filter.empreendimento_id = req.query.empreendimento_id;
+    if (req.query.checklist_item_id) filter.checklist_item_id = req.query.checklist_item_id;
+    if (req.query.checklist_doc_id) filter.checklist_doc_id = req.query.checklist_doc_id;
     const rows = await itempreModel.listItems(filter, limit);
     res.json(rows);
   } catch (err) {

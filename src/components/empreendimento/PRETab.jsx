@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Plus, Printer, Save, FileText, Loader2, X, ZoomIn, CalendarPlus, FileUp, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ItemPRE, Disciplina, Usuario, PlanejamentoAtividade, Documento } from "@/entities/all";
+import { ItemPRE, Disciplina, Usuario, PlanejamentoAtividade, Documento, ChecklistItem } from "@/entities/all";
 import { format } from "date-fns";
 import { retryWithBackoff } from "@/components/utils/apiUtils";
 import { base44 } from "@/api/base44Client";
@@ -306,7 +306,29 @@ export default function PRETab({ empreendimento, readOnly = false, onAfterSave }
 
   const handleUpdateItem = useCallback((id, field, value) => {
     dirtyItemIds.current.add(String(id));
-    setItems(prev => prev.map(item => 
+    if (field === 'status') {
+      const preItem = itemsRef.current.find(i => i.id === id);
+      if (preItem?.checklist_item_id && preItem?.checklist_doc_id) {
+        if (value === 'Concluído') {
+          ChecklistItem.get(preItem.checklist_item_id)
+            .then(clItem => {
+              if (!clItem) return;
+              const merged = { ...(clItem.status_por_periodo || {}), [preItem.checklist_doc_id]: 'Atendido' };
+              return ChecklistItem.update(preItem.checklist_item_id, { status_por_periodo: merged });
+            })
+            .catch(err => console.error('Erro ao sincronizar checklist a partir da PRE:', err));
+        } else if (value === 'Em andamento' || value === 'Pendente') {
+          ChecklistItem.get(preItem.checklist_item_id)
+            .then(clItem => {
+              if (!clItem) return;
+              const merged = { ...(clItem.status_por_periodo || {}), [preItem.checklist_doc_id]: 'Pendente' };
+              return ChecklistItem.update(preItem.checklist_item_id, { status_por_periodo: merged });
+            })
+            .catch(err => console.error('Erro ao sincronizar checklist a partir da PRE:', err));
+        }
+      }
+    }
+    setItems(prev => prev.map(item =>
       item.id === id ? { ...item, [field]: value } : item
     ));
   }, []);

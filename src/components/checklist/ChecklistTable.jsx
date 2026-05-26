@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import { ItemPRE } from '@/entities/all';
+import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +29,8 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
   const [optimisticStatus, setOptimisticStatus] = useState({});
   // Tracks the latest saved status_por_periodo per item to avoid stale-closure overwrites
   const liveStatusRef = useRef({});
+  // Maps `${itemId}_${docId}` → PRE item id for items linked to PRE
+  const preItemsMapRef = useRef({});
   useEffect(() => {
     items.forEach(item => {
       if (!liveStatusRef.current[item.id]) {
@@ -102,12 +106,66 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
     }
   };
 
+  const syncPreFromChecklist = (item, docId, novoStatus, prevStatus) => {
+    const mapKey = `${item.id}_${docId}`;
+    if (novoStatus === 'Pendente') {
+      const preId = preItemsMapRef.current[mapKey];
+      if (preId) {
+        ItemPRE.update(preId, { status: 'Em andamento' }).catch(() => {});
+        return;
+      }
+      ItemPRE.filter({ checklist_item_id: item.id, checklist_doc_id: String(docId) })
+        .then(existing => {
+          if (existing && existing.length > 0) {
+            preItemsMapRef.current[mapKey] = existing[0].id;
+            ItemPRE.update(existing[0].id, { status: 'Em andamento' }).catch(() => {});
+          } else {
+            const doc = documentos.find(d => d.id === docId);
+            return ItemPRE.create({
+              empreendimento_id: checklist?.empreendimento_id,
+              item: item.numero_item,
+              data: format(new Date(), 'yyyy-MM-dd'),
+              de: doc ? (doc.numero || doc.arquivo || String(docId)) : String(docId),
+              descritiva: checklist?.tipo || '',
+              assunto: item.descricao,
+              localizacao: item.secao || secao,
+              status: 'Em andamento',
+              checklist_item_id: item.id,
+              checklist_doc_id: String(docId),
+              documentos_vinculados: doc ? [doc.id] : [],
+            }).then(created => {
+              if (created?.id) preItemsMapRef.current[mapKey] = created.id;
+            });
+          }
+        })
+        .catch(err => console.error('Erro ao criar item PRE:', err));
+    } else if (prevStatus === 'Pendente') {
+      const resolvePreId = () => {
+        const preId = preItemsMapRef.current[mapKey];
+        if (preId) return Promise.resolve(preId);
+        return ItemPRE.filter({ checklist_item_id: item.id, checklist_doc_id: String(docId) })
+          .then(existing => {
+            if (existing && existing.length > 0) {
+              preItemsMapRef.current[mapKey] = existing[0].id;
+              return existing[0].id;
+            }
+            return null;
+          });
+      };
+      resolvePreId()
+        .then(preId => { if (preId) return ItemPRE.update(preId, { status: 'Concluído' }); })
+        .catch(err => console.error('Erro ao atualizar item PRE:', err));
+    }
+  };
+
   const handleStatusChange = (item, periodo, novoStatus) => {
     const key = `${item.id}_${periodo}`;
     // Ensure ref is initialized for this item
     if (!liveStatusRef.current[item.id]) {
       liveStatusRef.current[item.id] = { ...(item.status_por_periodo || {}) };
     }
+    // Read prevStatus AFTER initialization but BEFORE updating ref
+    const prevStatus = liveStatusRef.current[item.id][periodo] ?? '';
     // Update ref immediately so subsequent calls within the same render cycle see the latest value
     liveStatusRef.current[item.id] = { ...liveStatusRef.current[item.id], [periodo]: novoStatus };
     const statusAtualizado = { ...liveStatusRef.current[item.id] };
@@ -116,6 +174,7 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
 
     base44.entities.ChecklistItem.update(item.id, { status_por_periodo: statusAtualizado })
       .then(() => {
+        syncPreFromChecklist(item, periodo, novoStatus, prevStatus);
         onUpdate();
       })
       .catch(error => {

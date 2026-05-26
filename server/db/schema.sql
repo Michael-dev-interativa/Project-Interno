@@ -475,10 +475,13 @@ ALTER TABLE itempre ADD COLUMN IF NOT EXISTS tempo_atendimento NUMERIC(8,2);
 ALTER TABLE itempre ADD COLUMN IF NOT EXISTS planejamento_executor VARCHAR(255);
 ALTER TABLE itempre ADD COLUMN IF NOT EXISTS planejamento_executor_nome VARCHAR(255);
 ALTER TABLE itempre ADD COLUMN IF NOT EXISTS documentos_vinculados JSONB DEFAULT '[]';
+ALTER TABLE itempre ADD COLUMN IF NOT EXISTS checklist_item_id INTEGER REFERENCES checklist_items(id) ON DELETE SET NULL;
+ALTER TABLE itempre ADD COLUMN IF NOT EXISTS checklist_doc_id VARCHAR(255);
 
 ALTER TABLE documentos ADD COLUMN IF NOT EXISTS tempo_pre NUMERIC(8,2) DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS itempre_empreendimento_idx ON itempre(empreendimento_id);
+CREATE INDEX IF NOT EXISTS itempre_checklist_item_idx ON itempre(checklist_item_id);
 
 -- Controle OS: colunas explícitas conforme schema do frontend
 CREATE TABLE IF NOT EXISTS controle_os (
