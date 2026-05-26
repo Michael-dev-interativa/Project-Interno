@@ -111,6 +111,7 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
 
       await criarChecklistParaDisciplina({
         tipo: formData.tipo,
+        tipo_empreendimento: empreendimentoSelecionado?.tipo_empreendimento || null,
         empreendimento_id: formData.empreendimento_id || null,
         cliente: formData.cliente,
         tecnico_responsavel: formData.tecnico_responsavel,
