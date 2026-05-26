@@ -18,6 +18,7 @@ import { agruparAtividadesPorEtapa } from '../utils/AtividadeOrdering';
 import { motion } from 'framer-motion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { retryWithBackoff } from '../utils/apiUtils';
+import { getApiOrigin } from '@/api/base44Client';
 
 export default function NovoPlanejamentoModal({
   isOpen,
@@ -47,6 +48,7 @@ export default function NovoPlanejamentoModal({
   });
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedActivityId, setSelectedActivityId] = useState("");
+  const [mediaHistorica, setMediaHistorica] = useState(null);
   const [isRecorrente, setIsRecorrente] = useState(false);
   const [recorrencia, setRecorrencia] = useState({ tipo: 'semanal', repeticoes: 4 });
   const [activityFilters, setActivityFilters] = useState({ search: "", disciplina: "all" });
@@ -415,6 +417,7 @@ export default function NovoPlanejamentoModal({
 
   const handleActivityChange = (activityId) => {
     setSelectedActivityId(activityId);
+    setMediaHistorica(null);
     if (activityId) {
       const activity = atividades.find(a => a.id === activityId);
       if (activity) {
@@ -433,6 +436,10 @@ export default function NovoPlanejamentoModal({
           setHasTempo(true);
         }
       }
+      fetch(`${getApiOrigin()}/api/planejamentos/media-por-atividade/${activityId}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data && data.total > 0) setMediaHistorica(data); })
+        .catch(() => {});
     } else {
       setFormData(prev => ({ ...prev, descritivo: "", tempo_planejado: "" }));
       if (descritivoRef.current) descritivoRef.current.value = "";
@@ -939,7 +946,28 @@ export default function NovoPlanejamentoModal({
                 </div>
               )}
               
-              <div className="space-y-2"><Label className="flex items-center gap-2"><Clock className="w-4 h-4" />Tempo Planejado (horas) *</Label><Input ref={tempoPlanejadoRef} type="number" step="0.1" defaultValue={formData.tempo_planejado} onChange={(e) => { const filled = e.target.value.length > 0; if (filled !== hasTempo) setHasTempo(filled); }} onBlur={(e) => setFormData(prev => ({ ...prev, tempo_planejado: e.target.value }))} placeholder="Ex: 8.5"/></div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2"><Clock className="w-4 h-4" />Tempo Planejado (horas) *</Label>
+                <Input ref={tempoPlanejadoRef} type="number" step="0.1" defaultValue={formData.tempo_planejado} onChange={(e) => { const filled = e.target.value.length > 0; if (filled !== hasTempo) setHasTempo(filled); }} onBlur={(e) => setFormData(prev => ({ ...prev, tempo_planejado: e.target.value }))} placeholder="Ex: 8.5"/>
+                {mediaHistorica && (
+                  <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+                    <BrainCircuit className="w-3 h-3 shrink-0" />
+                    <span>Média histórica: <strong>{mediaHistorica.media}h</strong> ({mediaHistorica.total} {mediaHistorica.total === 1 ? 'execução' : 'execuções'})</span>
+                    <button
+                      type="button"
+                      className="ml-auto text-blue-600 underline hover:text-blue-800 font-medium"
+                      onClick={() => {
+                        const v = String(mediaHistorica.media);
+                        if (tempoPlanejadoRef.current) tempoPlanejadoRef.current.value = v;
+                        setFormData(prev => ({ ...prev, tempo_planejado: v }));
+                        setHasTempo(true);
+                      }}
+                    >
+                      Usar
+                    </button>
+                  </div>
+                )}
+              </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

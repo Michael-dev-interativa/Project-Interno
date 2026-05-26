@@ -11,6 +11,7 @@ const { appId, serverUrl, token, functionsVersion } = appParams;
 // If Base44 config is present, create real client. Otherwise provide a
 // lightweight fallback to avoid runtime requests to `null` URLs during dev.
 let base44;
+let _resolvedApiOrigin = null;
 if (appId && serverUrl) {
   base44 = createClient({
     appId,
@@ -24,7 +25,8 @@ if (appId && serverUrl) {
   const PROD_BACKEND = 'https://project-interno-rati.onrender.com';
   const _isLocalhost = typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  const apiOrigin = _isLocalhost ? 'http://localhost:4000' : PROD_BACKEND;
+  _resolvedApiOrigin = _isLocalhost ? 'http://localhost:4000' : PROD_BACKEND;
+  const apiOrigin = _resolvedApiOrigin;
   const LOCAL_AUTH_TOKEN_KEY = 'project_auth_token';
   const LOCAL_AUTH_USER_KEY = 'project_auth_user';
 
@@ -245,3 +247,4 @@ if (appId && serverUrl) {
 }
 
 export { base44 };
+export const getApiOrigin = () => _resolvedApiOrigin || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:4000' : 'https://project-interno-rati.onrender.com');
