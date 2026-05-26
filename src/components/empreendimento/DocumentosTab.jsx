@@ -767,7 +767,7 @@ export default function DocumentosTab({
   const documentosPorDisciplina = useMemo(() => {
     const grupos = {};
     filteredDocumentos.forEach(doc => {
-      const disciplina = doc.disciplina || 'Sem Disciplina';
+      const disciplina = doc.disciplina || (Array.isArray(doc.disciplinas) && doc.disciplinas.length > 0 ? doc.disciplinas[0] : null) || 'Sem Disciplina';
       if (!grupos[disciplina]) grupos[disciplina] = [];
       grupos[disciplina].push(doc);
     });
