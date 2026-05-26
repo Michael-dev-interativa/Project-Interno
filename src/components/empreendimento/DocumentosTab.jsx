@@ -83,7 +83,7 @@ export default function DocumentosTab({
     // Inicializar todas as disciplinas como colapsadas para não renderizar todos os itens de uma vez
     const inicial = {};
     documentos.forEach(doc => {
-      const d = doc.disciplina || 'Sem Disciplina';
+      const d = doc.disciplina || (Array.isArray(doc.disciplinas) && doc.disciplinas[0]) || 'Sem Disciplina';
       inicial[d] = true;
     });
     return inicial;
@@ -304,7 +304,7 @@ export default function DocumentosTab({
 
     try {
       const subdisciplinasDoc = documento.subdisciplinas || [];
-      const disciplinaDoc = documento.disciplina;
+      const disciplinaDoc = documento.disciplina || (Array.isArray(documento.disciplinas) && documento.disciplinas.length > 0 ? documento.disciplinas[0] : null);
       const fatorDificuldade = documento.fator_dificuldade || 1;
 
       // Usar apenas atividades deste empreendimento + genéricas (pre-filtrado)

@@ -32,7 +32,8 @@ export default function GestaoTab({ empreendimento, documentos, planejamentos, a
     // Extrair disciplinas únicas dos documentos
     const disciplinasSet = new Set();
     documentos.forEach(doc => {
-      if (doc.disciplina) disciplinasSet.add(doc.disciplina);
+      const discNome = doc.disciplina || (Array.isArray(doc.disciplinas) && doc.disciplinas[0]) || null;
+      if (discNome) disciplinasSet.add(discNome);
     });
     const disciplinas = Array.from(disciplinasSet).sort();
 
@@ -59,7 +60,7 @@ export default function GestaoTab({ empreendimento, documentos, planejamentos, a
 
     // Para cada documento, calcular horas totais do catálogo e planejamentos efetivos
     documentos.forEach(doc => {
-      const disciplinaDoc = doc.disciplina;
+      const disciplinaDoc = doc.disciplina || (Array.isArray(doc.disciplinas) && doc.disciplinas[0]) || null;
       const subdisciplinasDoc = doc.subdisciplinas || [];
       const fatorDificuldade = doc.fator_dificuldade || 1;
       
