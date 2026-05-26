@@ -24,6 +24,7 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
   const [isDeleting, setIsDeleting] = useState(false);
   const [editingSecao, setEditingSecao] = useState(false);
   const [novoNomeSecao, setNovoNomeSecao] = useState(secao);
+  const [optimisticStatus, setOptimisticStatus] = useState({});
   const [formData, setFormData] = useState({
     numero_item: '',
     descricao: '',
@@ -92,20 +93,18 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
     }
   };
 
-  const handleStatusChange = async (item, periodo, novoStatus) => {
-    try {
-      const statusAtualizado = {
-        ...(item.status_por_periodo || {}),
-        [periodo]: novoStatus
-      };
-      await base44.entities.ChecklistItem.update(item.id, {
-        status_por_periodo: statusAtualizado
+  const handleStatusChange = (item, periodo, novoStatus) => {
+    const key = `${item.id}_${periodo}`;
+    setOptimisticStatus(prev => ({ ...prev, [key]: novoStatus }));
+    const statusAtualizado = {
+      ...(item.status_por_periodo || {}),
+      [periodo]: novoStatus,
+    };
+    base44.entities.ChecklistItem.update(item.id, { status_por_periodo: statusAtualizado })
+      .catch(error => {
+        console.error('Erro ao atualizar status:', error);
+        setOptimisticStatus(prev => { const next = { ...prev }; delete next[key]; return next; });
       });
-      onUpdate();
-    } catch (error) {
-      console.error('Erro ao atualizar status:', error);
-      alert('Erro ao atualizar status');
-    }
   };
 
   const handleDeleteSecao = async () => {
@@ -335,14 +334,16 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
                       {item.tempo || '-'}
                     </TableCell>
                     {documentosVisiveis.map((doc) => {
-                      const status = item.status_por_periodo?.[doc.id] || '-';
+                      const key = `${item.id}_${doc.id}`;
+                      const status = optimisticStatus[key] ?? item.status_por_periodo?.[doc.id] ?? '-';
+                      const displayStatus = status || '-';
                       return (
                         <TableCell
                           key={doc.id}
-                          className={`border ${STATUS_COLORS[status]} p-0`}
+                          className={`border ${STATUS_COLORS[displayStatus]} p-0`}
                         >
                           <Select
-                            value={status}
+                            value={displayStatus}
                             onValueChange={(value) => handleStatusChange(item, doc.id, value === '-' ? '' : value)}
                           >
                             <SelectTrigger className="h-7 text-xs border-0 bg-transparent rounded-none">
