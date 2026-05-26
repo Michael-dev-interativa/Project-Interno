@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,15 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
   const [editingSecao, setEditingSecao] = useState(false);
   const [novoNomeSecao, setNovoNomeSecao] = useState(secao);
   const [optimisticStatus, setOptimisticStatus] = useState({});
+  // Tracks the latest saved status_por_periodo per item to avoid stale-closure overwrites
+  const liveStatusRef = useRef({});
+  useEffect(() => {
+    items.forEach(item => {
+      if (!liveStatusRef.current[item.id]) {
+        liveStatusRef.current[item.id] = { ...(item.status_por_periodo || {}) };
+      }
+    });
+  }, [items]);
   const [formData, setFormData] = useState({
     numero_item: '',
     descricao: '',
@@ -95,14 +104,21 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
 
   const handleStatusChange = (item, periodo, novoStatus) => {
     const key = `${item.id}_${periodo}`;
+    // Ensure ref is initialized for this item
+    if (!liveStatusRef.current[item.id]) {
+      liveStatusRef.current[item.id] = { ...(item.status_por_periodo || {}) };
+    }
+    // Update ref immediately so subsequent calls within the same render cycle see the latest value
+    liveStatusRef.current[item.id] = { ...liveStatusRef.current[item.id], [periodo]: novoStatus };
+    const statusAtualizado = { ...liveStatusRef.current[item.id] };
+
     setOptimisticStatus(prev => ({ ...prev, [key]: novoStatus }));
-    const statusAtualizado = {
-      ...(item.status_por_periodo || {}),
-      [periodo]: novoStatus,
-    };
+
     base44.entities.ChecklistItem.update(item.id, { status_por_periodo: statusAtualizado })
       .catch(error => {
         console.error('Erro ao atualizar status:', error);
+        // Revert ref and optimistic state on failure
+        liveStatusRef.current[item.id][periodo] = item.status_por_periodo?.[periodo] ?? '';
         setOptimisticStatus(prev => { const next = { ...prev }; delete next[key]; return next; });
       });
   };
