@@ -115,9 +115,11 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
     setOptimisticStatus(prev => ({ ...prev, [key]: novoStatus }));
 
     base44.entities.ChecklistItem.update(item.id, { status_por_periodo: statusAtualizado })
+      .then(() => {
+        onUpdate();
+      })
       .catch(error => {
         console.error('Erro ao atualizar status:', error);
-        // Revert ref and optimistic state on failure
         liveStatusRef.current[item.id][periodo] = item.status_por_periodo?.[periodo] ?? '';
         setOptimisticStatus(prev => { const next = { ...prev }; delete next[key]; return next; });
       });
