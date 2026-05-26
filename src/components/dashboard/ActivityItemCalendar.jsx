@@ -39,7 +39,15 @@ const calculateActivityStatus = (plano, allPlanejamentos = []) => {
   if (plano.isLegacyExecution) return plano.status;
   if (plano.status === 'concluido_com_atraso') return 'concluido_com_atraso';
   if (plano.status === 'concluido') return 'concluido';
-  return plano.status || 'nao_iniciado';
+  const status = plano.status || 'nao_iniciado';
+  if (status !== 'concluido' && status !== 'concluido_com_atraso') {
+    const termino = plano.termino_ajustado || plano.termino_planejado;
+    if (termino) {
+      const hoje = format(new Date(), 'yyyy-MM-dd');
+      if (hoje > termino) return 'atrasado';
+    }
+  }
+  return status;
 };
 
 export default function CalendarioActivityItem({ plano, dayKey, onDelete, onUpdate, executorMap, allPlanejamentos, provided, isDragging, isReprogramando, isSelected, onToggleSelect, hasSelections, orderIndex }) {
@@ -50,6 +58,7 @@ export default function CalendarioActivityItem({ plano, dayKey, onDelete, onUpda
   const [isDeleting, setIsDeleting] = useState(false);
   const [showTimeAdjustModal, setShowTimeAdjustModal] = useState(false);
   const [adjustedTime, setAdjustedTime] = useState('');
+  const [completionDate, setCompletionDate] = useState('');
   const [showEditDescricaoModal, setShowEditDescricaoModal] = useState(false);
   const [editForm, setEditForm] = useState({});
   const [isEditLoading, setIsEditLoading] = useState(false);
@@ -142,12 +151,13 @@ export default function CalendarioActivityItem({ plano, dayKey, onDelete, onUpda
       } else {
         novasHorasPorDia[format(new Date(), 'yyyy-MM-dd')] = timeValue;
       }
-      const hoje = format(new Date(), 'yyyy-MM-dd');
+      const dataConclusal = completionDate || format(new Date(), 'yyyy-MM-dd');
       const terminoPlanejado = plano.termino_ajustado || plano.termino_planejado;
-      const statusFinal = terminoPlanejado && hoje > terminoPlanejado ? 'concluido_com_atraso' : 'concluido';
-      await retryWithBackoff(() => entityToUpdate.update(plano.id, { tempo_executado: timeValue, horas_executadas_por_dia: novasHorasPorDia, status: statusFinal, termino_real: hoje }), 3, 1000, 'adjustTime');
+      const statusFinal = terminoPlanejado && dataConclusal > terminoPlanejado ? 'concluido_com_atraso' : 'concluido';
+      await retryWithBackoff(() => entityToUpdate.update(plano.id, { tempo_executado: timeValue, horas_executadas_por_dia: novasHorasPorDia, status: statusFinal, termino_real: dataConclusal }), 3, 1000, 'adjustTime');
       setShowTimeAdjustModal(false);
       setAdjustedTime('');
+      setCompletionDate('');
       if (onDelete) onDelete({ id: plano.id, status: statusFinal, tempo_executado: timeValue, horas_executadas_por_dia: novasHorasPorDia });
     } catch (error) {
       alert("Erro ao ajustar tempo.");
@@ -311,7 +321,7 @@ export default function CalendarioActivityItem({ plano, dayKey, onDelete, onUpda
           </div>
           <div className="flex items-center gap-2">
             {shouldShowAdjustButton() ? (
-              <button onClick={() => { setAdjustedTime(tempoExecutado.toString()); setShowTimeAdjustModal(true); }} className="font-mono text-blue-600 hover:text-blue-800 hover:underline cursor-pointer">
+              <button onClick={() => { setAdjustedTime(tempoExecutado.toString()); setCompletionDate(format(new Date(), 'yyyy-MM-dd')); setShowTimeAdjustModal(true); }} className="font-mono text-blue-600 hover:text-blue-800 hover:underline cursor-pointer">
                 <span className="font-semibold text-sm">{formatHours(horasAlocadasDia)}/{formatHours(horasExecutadasNoDia)}h{(plano.horas_por_dia && Object.keys(plano.horas_por_dia).length > 1 && Object.keys(plano.horas_por_dia).sort().indexOf(dayKey) < Object.keys(plano.horas_por_dia).length - 1) ? ' ...' : ''}</span>
               </button>
             ) : (
@@ -333,7 +343,17 @@ export default function CalendarioActivityItem({ plano, dayKey, onDelete, onUpda
               <Label htmlFor="adjustedTime">Novo Tempo (horas)</Label>
               <Input id="adjustedTime" type="number" step="0.1" min="0" value={adjustedTime} onChange={(e) => setAdjustedTime(e.target.value)} placeholder="Ex: 2.5" />
             </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3"><p className="text-blue-700 text-sm">A atividade será marcada como <strong>concluída</strong>.</p></div>
+            <div className="space-y-2">
+              <Label htmlFor="completionDate">Data de Conclusão</Label>
+              <Input id="completionDate" type="date" value={completionDate} onChange={(e) => setCompletionDate(e.target.value)} />
+            </div>
+            {(() => {
+              const terminoPlanejado = plano.termino_ajustado || plano.termino_planejado;
+              const comAtraso = terminoPlanejado && completionDate && completionDate > terminoPlanejado;
+              return comAtraso
+                ? <div className="bg-red-50 border border-red-200 rounded-lg p-3"><p className="text-red-700 text-sm">A atividade será marcada como <strong>concluída com atraso</strong>.</p></div>
+                : <div className="bg-blue-50 border border-blue-200 rounded-lg p-3"><p className="text-blue-700 text-sm">A atividade será marcada como <strong>concluída</strong>.</p></div>;
+            })()}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowTimeAdjustModal(false)}>Cancelar</Button>
