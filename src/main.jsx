@@ -5,6 +5,11 @@ import '@/index.css'
 import { registerSW } from 'virtual:pwa-register'
 import { startOnlineSyncListener } from '@/lib/offline-sync'
 
+// Chunk de deploy antigo: recarrega uma vez para pegar o index.html novo
+window.addEventListener('vite:preloadError', () => {
+  window.location.reload();
+});
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   // <React.StrictMode>
   <App />
