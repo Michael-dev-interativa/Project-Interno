@@ -1366,7 +1366,7 @@ export const ITEMS_SISTEMAS_RESIDENCIAL = [
 ];
 
 // ─── MAP: disciplina + tipo_empreendimento → template ────────────────────────
-const TEMPLATES_DISCIPLINA = {
+export const TEMPLATES_DISCIPLINA = {
   'Elétrica': {
     'Comercial': ITEMS_ELETRICA_COMERCIAL,
     'Galpão Logístico': ITEMS_ELETRICA_GALPAO,
@@ -1395,6 +1395,11 @@ const TEMPLATES_DISCIPLINA = {
     'Residencial': ITEMS_SPDA_RESIDENCIAL,
   },
 };
+
+export function getTemplatePorDisciplina(tipo, tipo_empreendimento) {
+  if (!tipo_empreendimento) return null;
+  return TEMPLATES_DISCIPLINA[tipo]?.[tipo_empreendimento] || null;
+}
 
 export async function criarChecklistParaDisciplina({
   tipo,

@@ -11,6 +11,7 @@ import {
   ITEMS_BASES_E_FOLHAS,
   ITEMS_COMPATIBILIZACAO,
   criarChecklistParaDisciplina,
+  getTemplatePorDisciplina,
 } from '@/lib/checklistTemplates';
 
 const TODAS_DISCIPLINAS = [
@@ -95,6 +96,13 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
   const isBasesEFolhas = formData.tipo === 'Planejamento - BASES E FOLHAS';
   const isInicioDeProjeto = formData.tipo === 'Planejamento - INÍCIO DE PROJETO';
   const isTemplatePlanejamento = isCompatibilizacao || isBasesEFolhas || isInicioDeProjeto;
+
+  const templateDisciplina = !isTemplatePlanejamento
+    ? getTemplatePorDisciplina(formData.tipo, empreendimentoSelecionado?.tipo_empreendimento)
+    : null;
+  const secoesDoTemplate = templateDisciplina
+    ? [...new Set(templateDisciplina.map(i => i.secao).filter(Boolean))]
+    : null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -237,18 +245,36 @@ export default function NovoChecklistModal({ isOpen, onClose, onSuccess, empreen
 
           {isCompatibilizacao ? (
             <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
-              <strong>39 itens serão criados automaticamente</strong> na seção COMPATIBILIZAÇÃO, conforme o template padrão. Os períodos são opcionais para este tipo.
+              <strong>{ITEMS_COMPATIBILIZACAO.length} itens serão criados automaticamente</strong> na seção COMPATIBILIZAÇÃO, conforme o template padrão. Os períodos são opcionais para este tipo.
             </div>
           ) : isBasesEFolhas ? (
             <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
-              <strong>11 itens serão criados automaticamente</strong> na seção BASES E FOLHAS, conforme o template padrão. Os períodos são opcionais para este tipo.
+              <strong>{ITEMS_BASES_E_FOLHAS.length} itens serão criados automaticamente</strong> na seção BASES E FOLHAS, conforme o template padrão. Os períodos são opcionais para este tipo.
             </div>
           ) : isInicioDeProjeto ? (
             <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
-              <strong>8 itens serão criados automaticamente</strong> na seção INÍCIO DE PROJETO, conforme o template padrão. Os períodos são opcionais para este tipo.
+              <strong>{ITEMS_INICIO_DE_PROJETO.length} itens serão criados automaticamente</strong> na seção INÍCIO DE PROJETO, conforme o template padrão. Os períodos são opcionais para este tipo.
+            </div>
+          ) : templateDisciplina ? (
+            <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
+              <strong>{templateDisciplina.length} itens serão criados automaticamente</strong> conforme o template{' '}
+              <em>{formData.tipo} — {empreendimentoSelecionado.tipo_empreendimento}</em>.
+              {secoesDoTemplate.length > 0 && (
+                <>
+                  <p className="mt-2 font-medium">Seções:</p>
+                  <ul className="mt-1 ml-4 list-disc space-y-1">
+                    {secoesDoTemplate.map((secao) => (
+                      <li key={secao}>{secao}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
           ) : (
             <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
+              {empreendimentoSelecionado && !empreendimentoSelecionado.tipo_empreendimento ? (
+                <p><strong>Atenção:</strong> o empreendimento não tem "Tipo de Empreendimento" definido. Serão criadas seções genéricas.</p>
+              ) : null}
               <strong>Seções que serão criadas automaticamente:</strong>
               <ul className="mt-2 ml-4 list-disc space-y-1">
                 {SECOES_PADRAO.map((secao) => (
