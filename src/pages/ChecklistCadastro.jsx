@@ -67,13 +67,13 @@ export default function ChecklistTab({ empreendimento }) {
         try {
           await base44.entities.ChecklistItem.delete(item.id);
         } catch (err) {
-          if (!err.message?.includes('Not found')) throw err;
+          if (!err.message?.toLowerCase().includes('not found')) throw err;
         }
       }
       try {
         await base44.entities.ChecklistPlanejamento.delete(selectedChecklist.id);
       } catch (err) {
-        if (!err.message?.includes('Not found')) throw err;
+        if (!err.message?.toLowerCase().includes('not found')) throw err;
       }
       setSelectedChecklist(null);
       await queryClient.invalidateQueries({ queryKey: ['checklists', empreendimento?.id] });

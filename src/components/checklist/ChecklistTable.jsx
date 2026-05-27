@@ -97,7 +97,7 @@ export default function ChecklistTable({ secao, items, checklist, documentos = [
       await base44.entities.ChecklistItem.delete(itemId);
       onUpdate();
     } catch (error) {
-      if (error.message?.includes('Not found')) {
+      if (error.message?.toLowerCase().includes('not found')) {
         onUpdate();
       } else {
         console.error('Erro ao excluir item:', error);
